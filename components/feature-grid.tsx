@@ -11,7 +11,7 @@ const features = [
   {
     id: 'pr-arena',
     icon: Trophy,
-    title: 'Progress Tracker',
+    title: 'PR Arena',
     description:
       'Log your lifts, watch your numbers grow, and celebrate every new personal record. Small wins add up to big changes.',
     gold: true,

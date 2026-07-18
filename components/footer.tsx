@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Hexagon } from 'lucide-react'
+import { Dumbbell } from 'lucide-react'
 
 export function Footer() {
   return (
@@ -9,7 +9,7 @@ export function Footer() {
           href="/"
           className="flex items-center gap-2 transition-transform duration-300 hover:scale-105"
         >
-          <Hexagon className="size-4 text-gold" aria-hidden="true" />
+          <Dumbbell className="size-4 text-gold" aria-hidden="true" />
           <span className="font-heading text-metallic text-sm font-bold tracking-[0.25em]">
             IRONSTACK
           </span>

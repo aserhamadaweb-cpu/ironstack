@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { Hexagon } from 'lucide-react'
+import { Dumbbell } from 'lucide-react'
 
 const links = [
   { label: 'AI ASSISTANT', href: '#ai-assistant' },
-  { label: 'PROGRESS', href: '#pr-arena' },
+  { label: 'PR ARENA', href: '#pr-arena' },
   { label: 'COMMUNITY CIRCLE', href: '#community-circle' },
 ]
 
@@ -18,7 +18,7 @@ export function Navbar() {
           href="/"
           className="flex items-center gap-2 transition-transform duration-300 hover:scale-105"
         >
-          <Hexagon className="size-5 text-gold" aria-hidden="true" />
+          <Dumbbell className="size-5 text-gold" aria-hidden="true" />
           <span className="font-heading text-metallic text-lg font-bold tracking-[0.25em]">
             IRONSTACK
           </span>
