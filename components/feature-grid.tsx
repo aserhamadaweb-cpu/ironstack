@@ -2,26 +2,26 @@ import { BrainCircuit, Trophy, Users } from 'lucide-react'
 
 const features = [
   {
-    id: 'ai-concierge',
+    id: 'ai-assistant',
     icon: BrainCircuit,
-    title: 'AI Tactical Concierge',
+    title: 'AI Assistant',
     description:
-      'A custom coaching intelligence engineered around your physiology. Precision programming, recovery protocols, and real-time tactical adjustments — on demand.',
+      'Your personal training buddy. Get workout plans that fit your life, friendly recovery tips, and helpful advice whenever you need it.',
   },
   {
     id: 'pr-arena',
     icon: Trophy,
-    title: 'Elite Performance OS',
+    title: 'Progress Tracker',
     description:
-      'Every personal record tracked, verified, and immortalized. A performance operating system built to quantify dominance across every lift.',
+      'Log your lifts, watch your numbers grow, and celebrate every new personal record. Small wins add up to big changes.',
     gold: true,
   },
   {
-    id: 'iron-circle',
+    id: 'community-circle',
     icon: Users,
-    title: 'The VIP Community Circle',
+    title: 'Community Circle',
     description:
-      'A private social feed for the top percentile. Share milestones, exchange protocols, and train alongside the most disciplined athletes in the world.',
+      'A warm and welcoming space to share your journey. Cheer each other on, swap tips, and make friends who love training as much as you do.',
   },
 ]
 
@@ -29,11 +29,14 @@ export function FeatureGrid() {
   return (
     <section className="mx-auto max-w-6xl px-6 py-24 md:py-32">
       <div className="mb-16 flex flex-col items-center gap-4 text-center">
-        <p className="text-xs font-medium tracking-[0.4em] text-primary">
-          THE PLATFORM
+        <p className="fade-up text-xs font-medium tracking-[0.4em] text-primary">
+          WHAT YOU GET
         </p>
-        <h2 className="font-heading text-metallic text-balance text-3xl font-bold md:text-5xl">
-          ENGINEERED FOR EXCELLENCE
+        <h2
+          className="fade-up font-heading text-metallic text-balance text-3xl font-bold md:text-5xl"
+          style={{ animationDelay: '0.1s' }}
+        >
+          EVERYTHING YOU NEED TO GROW
         </h2>
       </div>
 
@@ -42,14 +45,14 @@ export function FeatureGrid() {
           <article
             key={feature.id}
             id={feature.id}
-            className="glass-card sheen-border fade-up flex flex-col gap-5 rounded-2xl p-8"
+            className="glass-card sheen-border fade-up card-lift group flex flex-col gap-5 rounded-2xl p-8"
             style={{ animationDelay: `${0.15 * index}s` }}
           >
             <div
-              className={`flex size-12 items-center justify-center rounded-xl border ${
+              className={`icon-bounce flex size-12 items-center justify-center rounded-xl border transition-colors duration-300 ${
                 feature.gold
-                  ? 'border-gold/40 text-gold'
-                  : 'border-silver/30 text-silver'
+                  ? 'border-gold/40 text-gold group-hover:border-gold/70'
+                  : 'border-silver/30 text-silver group-hover:border-silver/60'
               }`}
             >
               <feature.icon className="size-6" aria-hidden="true" />

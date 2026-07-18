@@ -7,9 +7,9 @@ const _spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 const _inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'IRONSTACK — The Apex of Human Performance',
+  title: 'IRONSTACK — Train Smarter, Feel Stronger',
   description:
-    'An elite social fitness and AI technology platform. Where elite strength meets intelligent engineering.',
+    'Your friendly fitness companion. Track your progress, get smart coaching tips from your AI Assistant, and share the journey with the Community Circle.',
   generator: 'v0.app',
 }
 

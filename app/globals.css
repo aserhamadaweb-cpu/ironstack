@@ -204,13 +204,110 @@
   color: transparent;
 }
 
+/* Smooth anchor scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Slow zoom on the hero background */
+@keyframes hero-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+.hero-zoom {
+  animation: hero-zoom 16s ease-in-out infinite alternate;
+}
+
+/* Navbar slides down on load */
+@keyframes nav-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-slide-down {
+  animation: nav-slide-down 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Cards lift up gently on hover */
+.card-lift {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 18px 40px -18px oklch(0 0 0 / 60%);
+}
+
+/* Icons wiggle when the card is hovered */
+@keyframes icon-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-6px);
+  }
+  70% {
+    transform: translateY(2px);
+  }
+}
+
+.group:hover .icon-bounce {
+  animation: icon-bounce 0.6s ease;
+}
+
+/* Animated underline for nav and footer links */
+.link-underline {
+  position: relative;
+}
+
+.link-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.link-underline:hover::after {
+  transform: scaleX(1);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   .sheen-border::before,
-  .cta-pulse {
+  .cta-pulse,
+  .hero-zoom,
+  .nav-slide-down,
+  .group:hover .icon-bounce {
     animation: none;
   }
   .fade-up {
     animation: none;
     opacity: 1;
+  }
+  .card-lift,
+  .link-underline::after {
+    transition: none;
   }
 }
