@@ -38,7 +38,7 @@ export function Navbar() {
         </ul>
 
         <Link
-          href="#community-circle"
+          href="/login"
           className="rounded-full border border-gold/40 px-4 py-1.5 text-xs font-semibold tracking-[0.15em] text-gold transition-all duration-300 hover:scale-105 hover:bg-gold hover:text-accent-foreground"
         >
           JOIN US

@@ -39,7 +39,7 @@ export function Hero() {
         </p>
 
         <Link
-          href="#pr-arena"
+          href="/login"
           className="cta-pulse fade-up rounded-full bg-primary px-10 py-4 text-sm font-bold tracking-[0.25em] text-primary-foreground transition-all duration-300 hover:scale-105 hover:brightness-110"
           style={{ animationDelay: '0.45s' }}
         >
