@@ -47,42 +47,51 @@
 
 :root {
   color-scheme: dark;
-  --background: oklch(0.1 0 0);
-  --foreground: oklch(0.93 0.002 260);
-  --card: oklch(0.16 0.002 260 / 55%);
-  --card-foreground: oklch(0.93 0.002 260);
-  --popover: oklch(0.14 0 0);
-  --popover-foreground: oklch(0.93 0.002 260);
-  --primary: oklch(0.6 0.24 26);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.22 0 0);
-  --secondary-foreground: oklch(0.93 0.002 260);
-  --muted: oklch(0.2 0 0);
-  --muted-foreground: oklch(0.68 0.005 260);
-  --accent: oklch(0.82 0.13 85);
-  --accent-foreground: oklch(0.12 0 0);
-  --destructive: oklch(0.6 0.24 26);
-  --border: oklch(0.85 0.01 260 / 18%);
-  --input: oklch(0.85 0.01 260 / 14%);
-  --ring: oklch(0.6 0.24 26);
-  --chart-1: oklch(0.6 0.24 26);
-  --chart-2: oklch(0.82 0.13 85);
-  --chart-3: oklch(0.85 0.01 260);
-  --chart-4: oklch(0.55 0.01 260);
-  --chart-5: oklch(0.35 0.01 260);
+  /* Base surfaces — IronStack dark system */
+  --background: #0e0e10;
+  --foreground: #f2f1ed;
+  --card: #17171a;
+  --card-foreground: #f2f1ed;
+  --popover: #17171a;
+  --popover-foreground: #f2f1ed;
+  /* Primary CTA = high-contrast off-white */
+  --primary: #f2f1ed;
+  --primary-foreground: #0e0e10;
+  --secondary: #1c1c20;
+  --secondary-foreground: #f2f1ed;
+  --muted: #1c1c20;
+  --muted-foreground: #a8a7a2;
+  --accent: #e8b54a;
+  --accent-foreground: #0e0e10;
+  /* Red reserved for errors / warnings only */
+  --destructive: #e2504a;
+  --border: #232326;
+  --input: #232326;
+  --ring: #e8b54a;
+  --chart-1: #e8b54a;
+  --chart-2: #4ea1f5;
+  --chart-3: #4ade80;
+  --chart-4: #a8a7a2;
+  --chart-5: #3a3a3e;
   --radius: 0.75rem;
-  --sidebar: oklch(0.14 0 0);
-  --sidebar-foreground: oklch(0.93 0.002 260);
-  --sidebar-primary: oklch(0.6 0.24 26);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.2 0 0);
-  --sidebar-accent-foreground: oklch(0.93 0.002 260);
-  --sidebar-border: oklch(0.85 0.01 260 / 18%);
-  --sidebar-ring: oklch(0.6 0.24 26);
-  /* IRONSTACK custom tokens */
-  --silver: oklch(0.86 0.008 260);
-  --silver-dim: oklch(0.68 0.006 260);
-  --gold: oklch(0.82 0.13 85);
+  --sidebar: #17171a;
+  --sidebar-foreground: #f2f1ed;
+  --sidebar-primary: #f2f1ed;
+  --sidebar-primary-foreground: #0e0e10;
+  --sidebar-accent: #1c1c20;
+  --sidebar-accent-foreground: #f2f1ed;
+  --sidebar-border: #232326;
+  --sidebar-ring: #e8b54a;
+
+  /* Semantic accents — small doses only (chips, badges, thin accents) */
+  --silver: #c8c7c2;
+  --silver-dim: #a8a7a2;
+  --gold: #e8b54a;
+  --gold-tint: #2a2210;
+  --blue: #4ea1f5;
+  --blue-tint: #0e2233;
+  --success: #4ade80;
+  --success-tint: #0e2617;
 }
 
 @theme inline {
@@ -91,6 +100,11 @@
   --color-silver: var(--silver);
   --color-silver-dim: var(--silver-dim);
   --color-gold: var(--gold);
+  --color-gold-tint: var(--gold-tint);
+  --color-blue: var(--blue);
+  --color-blue-tint: var(--blue-tint);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
 }
 
 @layer base {
@@ -99,13 +113,51 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image: linear-gradient(
-      180deg,
-      oklch(0.08 0 0) 0%,
-      oklch(0.11 0.003 260) 50%,
-      oklch(0.08 0 0) 100%
-    );
   }
+}
+
+/* ---- IRONSTACK semantic accent chips / badges ---- */
+.chip-amber {
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+  background: var(--gold-tint);
+  color: var(--gold);
+}
+.chip-blue {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  background: var(--blue-tint);
+  color: var(--blue);
+}
+.chip-green {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+.badge-amber {
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+  background: var(--gold-tint);
+  color: var(--gold);
+}
+.badge-blue {
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  background: var(--blue-tint);
+  color: var(--blue);
+}
+.badge-green {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-tint);
+  color: var(--success);
+}
+
+/* Thin left-edge accent for categorized cards */
+.accent-edge-amber {
+  box-shadow: inset 3px 0 0 0 var(--gold);
+}
+.accent-edge-blue {
+  box-shadow: inset 3px 0 0 0 var(--blue);
+}
+.accent-edge-green {
+  box-shadow: inset 3px 0 0 0 var(--success);
 }
 
 /* ---- IRONSTACK premium effects ---- */
@@ -122,7 +174,7 @@
 
 .sheen-border {
   position: relative;
-  border: 1px solid oklch(0.85 0.008 260 / 25%);
+  border: 1px solid color-mix(in srgb, var(--silver) 25%, transparent);
 }
 
 .sheen-border::before {
@@ -134,7 +186,7 @@
   background: linear-gradient(
     100deg,
     transparent 20%,
-    oklch(0.95 0.005 260 / 70%) 50%,
+    color-mix(in srgb, var(--foreground) 55%, transparent) 50%,
     transparent 80%
   );
   background-size: 200% 100%;
@@ -147,23 +199,23 @@
   pointer-events: none;
 }
 
-/* Glowing red pulse for the primary CTA */
-@keyframes red-pulse {
+/* Soft white pulse for primary CTAs */
+@keyframes cta-pulse {
   0%,
   100% {
     box-shadow:
-      0 0 18px 0 oklch(0.6 0.24 26 / 45%),
-      0 0 42px 0 oklch(0.6 0.24 26 / 20%);
+      0 0 16px 0 color-mix(in srgb, var(--primary) 25%, transparent),
+      0 0 36px 0 color-mix(in srgb, var(--primary) 10%, transparent);
   }
   50% {
     box-shadow:
-      0 0 30px 4px oklch(0.6 0.24 26 / 70%),
-      0 0 72px 8px oklch(0.6 0.24 26 / 32%);
+      0 0 26px 4px color-mix(in srgb, var(--primary) 40%, transparent),
+      0 0 56px 8px color-mix(in srgb, var(--primary) 16%, transparent);
   }
 }
 
 .cta-pulse {
-  animation: red-pulse 2.6s ease-in-out infinite;
+  animation: cta-pulse 2.6s ease-in-out infinite;
 }
 
 /* Fluid fade-in for content cards */
@@ -185,7 +237,7 @@
 
 /* Frosted dark glass */
 .glass-card {
-  background: oklch(0.15 0.002 260 / 55%);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
@@ -289,6 +341,155 @@ html {
 
 .link-underline:hover::after {
   transform: scaleX(1);
+}
+
+/* ---- Realistic streak flame (CSS only) ---- */
+.streak-fire {
+  width: 1.1rem;
+  height: 1.25rem;
+}
+
+.streak-fire-core,
+.streak-fire-mid,
+.streak-fire-outer {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+}
+
+.streak-fire-core {
+  z-index: 3;
+  width: 38%;
+  height: 52%;
+  background: radial-gradient(ellipse at center bottom, #fff7c2 0%, #ffe566 45%, #ffb020 100%);
+  animation: streak-flame-flicker 0.55s ease-in-out infinite alternate;
+}
+
+.streak-fire-mid {
+  z-index: 2;
+  width: 62%;
+  height: 78%;
+  background: radial-gradient(ellipse at center bottom, #ffd54a 0%, #ff8a1a 55%, #ff4d00 100%);
+  animation: streak-flame-flicker 0.7s ease-in-out infinite alternate-reverse;
+  animation-delay: 0.08s;
+}
+
+.streak-fire-outer {
+  z-index: 1;
+  width: 88%;
+  height: 100%;
+  background: radial-gradient(ellipse at center bottom, #ff9a3c 0%, #ff5a00 50%, #e11d00 100%);
+  filter: blur(0.3px);
+  animation: streak-flame-flicker 0.85s ease-in-out infinite alternate;
+  animation-delay: 0.15s;
+  opacity: 0.95;
+}
+
+.streak-fire-glow {
+  position: absolute;
+  inset: 20% -20% -10%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 120, 20, 0.55) 0%, transparent 70%);
+  filter: blur(4px);
+  animation: streak-fire-glow 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes streak-flame-flicker {
+  0% {
+    transform: translateX(-50%) scaleY(1) scaleX(1) rotate(-2deg);
+  }
+  40% {
+    transform: translateX(-48%) scaleY(1.08) scaleX(0.92) rotate(2deg);
+  }
+  100% {
+    transform: translateX(-52%) scaleY(0.94) scaleX(1.06) rotate(-3deg);
+  }
+}
+
+@keyframes streak-fire-glow {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 0.95;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-fire-core,
+  .streak-fire-mid,
+  .streak-fire-outer,
+  .streak-fire-glow {
+    animation: none;
+  }
+}
+
+/* ---- Streak flame (smooth vector, Snapchat-style) ---- */
+.streak-flame svg {
+  overflow: visible;
+}
+
+.streak-flame--active {
+  filter: drop-shadow(0 0 6px rgba(255, 140, 30, 0.55))
+    drop-shadow(0 3px 14px rgba(255, 90, 0, 0.3));
+}
+
+.streak-flame--active svg {
+  transform-origin: 50% 85%;
+  animation: streak-flame-pulse 2.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.streak-flame--active .streak-flame-mid {
+  transform-origin: 50% 90%;
+  transform-box: fill-box;
+  animation: streak-flame-inner 1.9s ease-in-out infinite;
+}
+
+.streak-flame--active .streak-flame-core {
+  transform-origin: 50% 90%;
+  transform-box: fill-box;
+  animation: streak-flame-inner 1.4s ease-in-out infinite reverse;
+}
+
+.streak-flame--inactive {
+  opacity: 0.4;
+}
+
+@keyframes streak-flame-pulse {
+  0%,
+  100% {
+    transform: scale(1) rotate(-2deg);
+  }
+  50% {
+    transform: scale(1.05) rotate(2deg);
+  }
+}
+
+@keyframes streak-flame-inner {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08) translateY(-2%);
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-flame--active,
+  .streak-flame--active svg,
+  .streak-flame--active .streak-flame-mid,
+  .streak-flame--active .streak-flame-core {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

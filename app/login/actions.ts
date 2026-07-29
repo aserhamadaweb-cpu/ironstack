@@ -21,7 +21,7 @@ export async function signUp(
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
   const displayName = String(formData.get('displayName') ?? '').trim()
-  const next = String(formData.get('next') ?? '/dashboard')
+  const next = String(formData.get('next') ?? '/dashboard/home')
 
   if (!email || !password) {
     return { error: 'Email and password are required.' }
@@ -49,9 +49,6 @@ export async function signUp(
     return { error: error.message }
   }
 
-  // Profile row is created automatically by the handle_new_user DB trigger
-  // when auth.users receives the new row.
-
   if (data.user && !data.session) {
     return {
       success:
@@ -68,7 +65,7 @@ export async function signIn(
 ): Promise<AuthState> {
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
-  const next = String(formData.get('next') ?? '/dashboard')
+  const next = String(formData.get('next') ?? '/dashboard/home')
 
   if (!email || !password) {
     return { error: 'Email and password are required.' }

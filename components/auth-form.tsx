@@ -17,7 +17,7 @@ const initialState: AuthState | null = null
 const inputClassName =
   'w-full rounded-lg border border-silver/20 bg-background/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20'
 
-export function AuthForm({ next = '/dashboard' }: { next?: string }) {
+export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
   const [mode, setMode] = useState<AuthMode>('signin')
   const action = mode === 'signin' ? signIn : signUp
   const [state, formAction, pending] = useActionState(action, initialState)
