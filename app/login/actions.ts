@@ -50,14 +50,14 @@ export async function signUp(
     return { error: error.message }
   }
 
-  if (data.user && !data.session) {
-    return {
-      success:
-        'Account created. Check your email to confirm your address, then sign in.',
-    }
+  if (data.session) {
+    await supabase.auth.signOut()
   }
 
-  redirect(next)
+  return {
+    success:
+      'Check your email to confirm your account before signing in.',
+  }
 }
 
 export async function signIn(
@@ -80,6 +80,16 @@ export async function signIn(
   })
 
   if (signInError) {
+    const lower = signInError.message.toLowerCase()
+    if (
+      signInError.code === 'email_not_confirmed' ||
+      lower.includes('email not confirmed')
+    ) {
+      return {
+        error:
+          'Please confirm your email first — check your inbox for the verification link.',
+      }
+    }
     return { error: signInError.message }
   }
 

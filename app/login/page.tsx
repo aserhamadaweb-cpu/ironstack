@@ -17,20 +17,21 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Mail,
+  Moon,
+  Sun,
 } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
-import { claimUsernameAction } from '@/lib/data/profile-actions'
+import { updateLanguagePreferenceAction } from '@/lib/data/profile-actions'
 import { suggestUsernameFromEmail } from '@/lib/profile-path'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
-import { EmailVerifyForm } from '@/components/email-verify-form'
+import { useTheme } from '@/components/theme-provider'
 import {
   clearIronstackAuthCache,
 } from '@/components/use-is-guest'
-import {
-  fetchIsEmailVerified,
-  sendVerificationCode,
-} from '@/lib/email-verification'
+import { applyLocaleToDocument, type AppLocale } from '@/lib/i18n'
+import type { ThemePreference } from '@/lib/theme'
 import {
   displayToKg,
   feetInchesToCm,
@@ -42,13 +43,26 @@ import {
 import type { ProfileGender } from '@/lib/database.types'
 
 type AuthMode = 'signin' | 'signup'
-type AuthStep = 'auth' | 'verify'
 type OAuthProvider = 'google'
+
+const RESEND_COOLDOWN_SEC = 60
+
+function isEmailNotConfirmed(error: { message: string; code?: string }) {
+  const lower = error.message.toLowerCase()
+  return (
+    error.code === 'email_not_confirmed' ||
+    lower.includes('email not confirmed')
+  )
+}
 
 function friendlyAuthError(
   message: string,
   t: ReturnType<typeof useTranslations<'auth'>>,
+  code?: string,
 ) {
+  if (isEmailNotConfirmed({ message, code })) {
+    return t('confirmEmail')
+  }
   const lower = message.toLowerCase()
   if (lower.includes('invalid login credentials')) {
     return t('invalidCredentials')
@@ -84,20 +98,14 @@ function GoogleIcon({ className }: { className?: string }) {
 
 function LoginPageContent() {
   const t = useTranslations('auth')
+  const tSettings = useTranslations('settings')
+  const locale = useLocale()
+  const { theme, setTheme } = useTheme()
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
 
   const [mode, setMode] = useState<AuthMode>('signin')
-  const [step, setStep] = useState<AuthStep>('auth')
-  const [pendingVerifyEmail, setPendingVerifyEmail] = useState('')
-  const [pendingVerifyUsername, setPendingVerifyUsername] = useState<
-    string | undefined
-  >()
-  const [verifySkipCooldown, setVerifySkipCooldown] = useState(false)
-  const [verifyInitialError, setVerifyInitialError] = useState<string | null>(
-    null,
-  )
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
@@ -119,41 +127,76 @@ function LoginPageContent() {
   const [heightFt, setHeightFt] = useState('5')
   const [heightIn, setHeightIn] = useState('10')
   const [weight, setWeight] = useState('')
+  const [signupLanguage, setSignupLanguage] = useState<AppLocale>(
+    locale === 'ar' ? 'ar' : 'en',
+  )
   const [guestLoading, setGuestLoading] = useState(false)
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false)
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState('')
+  const [resending, setResending] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
 
-  const isBusy = loading || oauthLoading !== null || guestLoading
+  const isBusy = loading || oauthLoading !== null || guestLoading || resending
 
-  function goToVerify(
-    nextEmail: string,
-    nextUsername?: string,
-    options?: { skipCooldown?: boolean; initialError?: string | null },
-  ) {
-    setPendingVerifyEmail(nextEmail)
-    setPendingVerifyUsername(nextUsername)
-    setVerifySkipCooldown(options?.skipCooldown ?? false)
-    setVerifyInitialError(options?.initialError ?? null)
-    setStep('verify')
-    setError(null)
-    setSuccess(null)
+  function handleSignupLanguage(next: AppLocale) {
+    if (next === signupLanguage) return
+    setSignupLanguage(next)
+    applyLocaleToDocument(next)
+    void updateLanguagePreferenceAction(next).then(() => {
+      router.refresh()
+    })
+  }
+
+  function handleSignupTheme(next: ThemePreference) {
+    setTheme(next)
   }
 
   useEffect(() => {
-    let cancelled = false
-    async function resumeVerifyIfNeeded() {
-      if (searchParams.get('verify') !== '1') return
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (cancelled || !user?.email) return
-      const verified = await fetchIsEmailVerified(supabase, user.id)
-      if (cancelled || verified) return
-      goToVerify(user.email, undefined, { skipCooldown: true })
+    if (resendCooldown <= 0) return
+    const id = window.setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [resendCooldown])
+
+  function confirmationRedirectTo() {
+    const siteOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
+      window.location.origin
+    return new URL('/auth/callback?next=/dashboard/home', siteOrigin).href
+  }
+
+  function showCheckEmail(nextEmail: string, startCooldown = true) {
+    setPendingConfirmEmail(nextEmail)
+    setAwaitingConfirm(true)
+    setError(null)
+    setSuccess(null)
+    setResendCooldown(startCooldown ? RESEND_COOLDOWN_SEC : 0)
+  }
+
+  async function handleResendConfirmation() {
+    if (resendCooldown > 0 || resending) return
+    const target = (pendingConfirmEmail || email).trim()
+    if (!target) return
+    setError(null)
+    setSuccess(null)
+    setResending(true)
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: target,
+        options: { emailRedirectTo: confirmationRedirectTo() },
+      })
+      if (resendError) {
+        setError(resendError.message || t('resendFailed'))
+        return
+      }
+      setSuccess(t('confirmationResent'))
+      setResendCooldown(RESEND_COOLDOWN_SEC)
+    } finally {
+      setResending(false)
     }
-    void resumeVerifyIfNeeded()
-    return () => {
-      cancelled = true
-    }
-  }, [searchParams, supabase])
+  }
 
   const signupBodyReady =
     Boolean(gender) &&
@@ -256,24 +299,20 @@ function LoginPageContent() {
 
     try {
       if (mode === 'signin') {
-        const { data: signInData, error: signInError } =
+        const { error: signInError } =
           await supabase.auth.signInWithPassword({
             email: email.trim(),
             password,
           })
 
         if (signInError) {
-          setError(friendlyAuthError(signInError.message, t))
-          return
-        }
-
-        const userId = signInData.user?.id
-        if (userId) {
-          const verified = await fetchIsEmailVerified(supabase, userId)
-          if (!verified) {
-            goToVerify(email.trim(), undefined, { skipCooldown: true })
+          if (isEmailNotConfirmed(signInError)) {
+            showCheckEmail(email.trim(), false)
+            setError(t('confirmEmail'))
             return
           }
+          setError(friendlyAuthError(signInError.message, t, signInError.code))
+          return
         }
 
         clearIronstackAuthCache()
@@ -318,45 +357,29 @@ function LoginPageContent() {
             gender: metrics.gender,
             birth_date: metrics.birth_date,
             weight_kg: metrics.weight_kg,
+            language: signupLanguage,
+            theme_preference: theme,
           },
-          emailRedirectTo: new URL(
-            '/auth/callback?next=/dashboard/home',
-            window.location.origin,
-          ).href,
+          emailRedirectTo: confirmationRedirectTo(),
         },
       })
 
       if (signUpError) {
-        setError(friendlyAuthError(signUpError.message, t))
+        setError(friendlyAuthError(signUpError.message, t, signUpError.code))
         return
       }
 
-      if (!data.session || !data.user) {
-        setError(t('verifyNeedsSession'))
+      const identities = data.user?.identities ?? []
+      if (data.user && identities.length === 0) {
+        setError(t('alreadyRegistered'))
         return
       }
 
-      const claim = await claimUsernameAction({
-        username: handle,
-        displayName: email.trim().split('@')[0],
-      })
-      if (!claim.ok) {
-        setError(claim.error)
-        return
+      if (data.session) {
+        await supabase.auth.signOut()
       }
 
-      try {
-        await sendVerificationCode(supabase)
-      } catch (err) {
-        const message =
-          err instanceof Error && err.message
-            ? err.message
-            : t('verifySendFailed')
-        goToVerify(email.trim(), handle, { initialError: message })
-        return
-      }
-
-      goToVerify(email.trim(), handle)
+      showCheckEmail(email.trim())
     } finally {
       setLoading(false)
     }
@@ -410,22 +433,22 @@ function LoginPageContent() {
       <div className="relative z-10 w-full max-w-md">
         <div className="fade-up mb-8 flex flex-col items-center gap-3 text-center">
           <p className="text-xs font-semibold tracking-[0.35em] text-gold">
-            {step === 'verify'
-              ? t('verifyKicker')
+            {awaitingConfirm
+              ? t('checkEmailKicker')
               : mode === 'signin'
                 ? t('welcomeBack')
                 : t('joinIronstack')}
           </p>
           <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            {step === 'verify'
-              ? t('verifyTitle')
+            {awaitingConfirm
+              ? t('checkEmailTitle')
               : mode === 'signin'
                 ? t('readyNextSet')
                 : t('startStacking')}
           </h1>
           <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-            {step === 'verify'
-              ? t('verifySubtitle')
+            {awaitingConfirm
+              ? t('checkEmail')
               : mode === 'signin'
                 ? t('signinBody')
                 : t('signupBody')}
@@ -433,23 +456,67 @@ function LoginPageContent() {
         </div>
 
         <div className="fade-up rounded-2xl border border-gold/25 bg-card/60 p-6 shadow-2xl shadow-black/40 backdrop-blur-md sm:p-8">
-          {step === 'verify' ? (
-            <EmailVerifyForm
-              key={`${pendingVerifyEmail}-${verifyInitialError ?? 'ok'}`}
-              email={pendingVerifyEmail}
-              username={pendingVerifyUsername}
-              skipInitialCooldown={verifySkipCooldown}
-              initialError={verifyInitialError}
-              onBack={() => {
-                void supabase.auth.signOut().then(() => {
-                  setStep('auth')
+          {awaitingConfirm ? (
+            <div className="flex flex-col items-center gap-5 text-center">
+              <span className="flex size-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10 text-gold">
+                <Mail className="size-5" aria-hidden="true" />
+              </span>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {t('checkEmailBody', { email: pendingConfirmEmail || email })}
+              </p>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="flex w-full items-start gap-3 rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-start text-sm text-gold/80"
+                >
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <p>{error}</p>
+                </div>
+              )}
+
+              {success && (
+                <div
+                  role="status"
+                  className="flex w-full items-start gap-3 rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-start text-sm text-gold/80"
+                >
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <p>{success}</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={resendCooldown > 0 || resending}
+                onClick={() => void handleResendConfirmation()}
+                className="text-sm font-medium text-gold transition hover:text-gold/80 disabled:cursor-not-allowed disabled:text-muted-foreground"
+              >
+                {resending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    {t('pleaseWait')}
+                  </span>
+                ) : resendCooldown > 0 ? (
+                  t('resendWait', { seconds: resendCooldown })
+                ) : (
+                  t('resendConfirmation')
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAwaitingConfirm(false)
+                  setMode('signin')
                   setError(null)
                   setSuccess(null)
-                  setVerifySkipCooldown(false)
-                  setVerifyInitialError(null)
-                })
-              }}
-            />
+                  if (pendingConfirmEmail) setEmail(pendingConfirmEmail)
+                }}
+                className="text-sm text-muted-foreground transition hover:text-foreground"
+              >
+                {t('verifyBack')}
+              </button>
+            </div>
           ) : (
             <>
           <div className="mb-6 grid grid-cols-2 rounded-xl border border-border bg-background/70 p-1">
@@ -762,6 +829,109 @@ function LoginPageContent() {
                     className="h-11 w-full rounded-xl border border-border bg-card/90 px-4 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
                   />
                 </label>
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div className="flex flex-col gap-4 rounded-xl border border-border/80 bg-background/40 p-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t('signupLanguage')}
+                  </p>
+                  <div
+                    className="mt-2 grid grid-cols-2 gap-2"
+                    role="group"
+                    aria-label={t('signupLanguage')}
+                  >
+                    {(
+                      [
+                        {
+                          value: 'en' as AppLocale,
+                          label: tSettings('langEn'),
+                          hint: tSettings('langEnHint'),
+                        },
+                        {
+                          value: 'ar' as AppLocale,
+                          label: tSettings('langAr'),
+                          hint: tSettings('langArHint'),
+                        },
+                      ] as const
+                    ).map(({ value, label, hint }) => {
+                      const selected = signupLanguage === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => handleSignupLanguage(value)}
+                          className={`flex min-h-16 flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-start transition ${
+                            selected
+                              ? 'border-gold/45 bg-gold-tint text-gold'
+                              : 'border-border bg-background/60 text-muted-foreground'
+                          }`}
+                        >
+                          <span className="text-sm font-semibold tracking-wide text-foreground">
+                            {label}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {hint}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t('signupTheme')}
+                  </p>
+                  <div
+                    className="mt-2 grid grid-cols-2 gap-2"
+                    role="group"
+                    aria-label={t('signupTheme')}
+                  >
+                    {(
+                      [
+                        {
+                          value: 'dark' as ThemePreference,
+                          label: tSettings('themeDark'),
+                          hint: tSettings('themeDarkHint'),
+                          Icon: Moon,
+                        },
+                        {
+                          value: 'light' as ThemePreference,
+                          label: tSettings('themeLight'),
+                          hint: tSettings('themeLightHint'),
+                          Icon: Sun,
+                        },
+                      ] as const
+                    ).map(({ value, label, hint, Icon }) => {
+                      const selected = theme === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => handleSignupTheme(value)}
+                          className={`flex min-h-16 flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-start transition ${
+                            selected
+                              ? 'border-gold/45 bg-gold-tint text-gold'
+                              : 'border-border bg-background/60 text-muted-foreground'
+                          }`}
+                        >
+                          <Icon className="size-4" aria-hidden="true" />
+                          <span className="text-sm font-semibold tracking-wide text-foreground">
+                            {label}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {hint}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 

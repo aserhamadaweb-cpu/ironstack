@@ -13,3 +13,19 @@ export function isAppLocale(value: unknown): value is AppLocale {
 export function localeDir(locale: AppLocale): 'ltr' | 'rtl' {
   return locale === 'ar' ? 'rtl' : 'ltr'
 }
+
+/** Apply locale to the document immediately (login/settings pickers). */
+export function applyLocaleToDocument(locale: AppLocale) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  root.lang = locale
+  root.dir = localeDir(locale)
+  root.dataset.locale = locale
+  document.body.classList.toggle('font-arabic', locale === 'ar')
+  document.body.classList.toggle('font-sans', locale !== 'ar')
+  try {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale)
+  } catch {
+    /* ignore */
+  }
+}

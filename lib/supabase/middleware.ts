@@ -55,29 +55,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  let emailVerified = false
-  let isGuest = false
-  if (userId && (isDashboard || isProfile || isLogin)) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_email_verified, is_guest')
-      .eq('id', userId)
-      .maybeSingle()
-    emailVerified = profile?.is_email_verified === true
-    isGuest = profile?.is_guest === true
-  }
-
-  const canUseApp = isGuest || emailVerified
-
-  if ((isDashboard || isProfile) && userId && !canUseApp) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.search = ''
-    url.searchParams.set('verify', '1')
-    return NextResponse.redirect(url)
-  }
-
-  if (isLogin && userId && canUseApp) {
+  if (isLogin && userId) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard/home'
     url.search = ''
