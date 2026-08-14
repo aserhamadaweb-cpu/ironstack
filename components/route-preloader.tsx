@@ -4,23 +4,45 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, useReducedMotion } from 'framer-motion'
 import { HubPreloader } from '@/components/hub-preloader'
 
-const INTRO_MS = 2100
+const INTRO_MS = 900
+const INTRO_SEEN_KEY = 'ironstack:hub-intro-seen'
+
+/** True if this tab already showed the dumbbell intro. */
+export function hasSeenHubIntro(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    return sessionStorage.getItem(INTRO_SEEN_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+export function markHubIntroSeen() {
+  try {
+    sessionStorage.setItem(INTRO_SEEN_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
- * Self-contained loading overlay. Shows the IronStack dumbbell intro on mount
- * (i.e. every time you navigate to the page), then fades out. Sits on top of
- * page content via the preloader's fixed z-[100] layer, so it needs no wrapping.
+ * Full-screen intro once per browser tab session — not on every navigation.
+ * After the first show, renders nothing so pages paint immediately.
  */
 export function RoutePreloader() {
   const reduce = useReducedMotion()
-  const [done, setDone] = useState(false)
+  const [done, setDone] = useState(true)
 
   useEffect(() => {
-    if (reduce) {
+    if (reduce || hasSeenHubIntro()) {
       setDone(true)
       return
     }
-    const timer = setTimeout(() => setDone(true), INTRO_MS)
+    setDone(false)
+    const timer = setTimeout(() => {
+      markHubIntroSeen()
+      setDone(true)
+    }, INTRO_MS)
     return () => clearTimeout(timer)
   }, [reduce])
 

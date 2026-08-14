@@ -23,6 +23,10 @@ import {
 import { DashboardNav } from '@/components/dashboard-nav'
 import { EASE } from '@/components/reveal'
 import { HubPreloader } from '@/components/hub-preloader'
+import {
+  hasSeenHubIntro,
+  markHubIntroSeen,
+} from '@/components/route-preloader'
 import { StatCard, type StatCardData } from '@/components/stat-card'
 import { getTrainingStats, initialsFrom } from '@/lib/dashboard-utils'
 import { MOCK_PRS, formatLiftDate, formatWeight } from '@/lib/mock-pr-data'
@@ -32,15 +36,15 @@ type DashboardHubProps = {
   email: string
 }
 
-/** How long the cinematic intro plays before the dashboard reveals. */
-const INTRO_MS = 2100
+/** How long the cinematic intro plays (once per tab session). */
+const INTRO_MS = 900
 
 /** Static preview bars (visual only) for the hero card + trend widget. */
 const HERO_BARS = [42, 55, 48, 64, 78, 100]
 const TREND_BARS = [35, 52, 44, 62, 74, 100]
 
 const goldGlow =
-  'hover:border-gold/50 hover:shadow-[0_0_28px_-6px_rgba(234,179,8,0.4)]'
+  'hover:border-gold/50 hover:shadow-[0_0_28px_-6px_rgba(198,40,40,0.4)]'
 const silverGlow =
   'hover:border-silver/40 hover:shadow-[0_0_24px_-6px_rgba(226,232,240,0.28)]'
 
@@ -77,14 +81,18 @@ const NUTS = [
 
 export function DashboardHub({ displayName, email }: DashboardHubProps) {
   const reduce = useReducedMotion()
-  const [introDone, setIntroDone] = useState(false)
+  const [showIntro, setShowIntro] = useState(false)
 
   useEffect(() => {
-    if (reduce) {
-      setIntroDone(true)
+    if (reduce || hasSeenHubIntro()) {
+      setShowIntro(false)
       return
     }
-    const timer = setTimeout(() => setIntroDone(true), INTRO_MS)
+    setShowIntro(true)
+    const timer = setTimeout(() => {
+      markHubIntroSeen()
+      setShowIntro(false)
+    }, INTRO_MS)
     return () => clearTimeout(timer)
   }, [reduce])
 
@@ -146,7 +154,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
         </div>
 
         {/* Gold glow from the top + faint dot grid */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_-5%,rgba(234,179,8,0.14),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_-5%,rgba(198,40,40,0.14),transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(rgba(214,214,224,0.05)_1px,transparent_1px)] [background-size:26px_26px] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_15%,black,transparent_75%)]" />
 
         {/* Drifting golden lights with a touch of red */}
@@ -191,7 +199,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
         {NUTS.map((nut, i) => (
           <motion.div
             key={i}
-            className="absolute text-gold/30 drop-shadow-[0_0_6px_rgba(234,179,8,0.45)]"
+            className="absolute text-gold/30 drop-shadow-[0_0_6px_rgba(198,40,40,0.45)]"
             style={{ left: nut.left, top: nut.top, width: nut.size, height: nut.size }}
             animate={
               reduce
@@ -214,19 +222,16 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
         ))}
       </div>
 
-      {/* ---- Cinematic intro ---- */}
-      <AnimatePresence>{!introDone && <HubPreloader />}</AnimatePresence>
+      <AnimatePresence>{showIntro && <HubPreloader />}</AnimatePresence>
 
-      {introDone && (
-        <>
-          <motion.div {...rise(0)}>
-            <DashboardNav
-              userName={displayName}
-              initials={initialsFrom(displayName)}
-            />
-          </motion.div>
+      <motion.div {...rise(0)}>
+        <DashboardNav
+          userName={displayName}
+          initials={initialsFrom(displayName)}
+        />
+      </motion.div>
 
-          <main className="mx-auto max-w-7xl px-6 py-8 md:py-12">
+      <main className="mx-auto max-w-7xl px-6 py-8 md:py-12">
             {/* Header + streak badge */}
             <motion.div className="mb-10 flex flex-col gap-2" {...rise(0.1)}>
               <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
@@ -236,7 +241,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
                 <h1 className="font-heading text-metallic text-3xl font-bold tracking-tight md:text-4xl">
                   Welcome back, {firstName}
                 </h1>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-bold tracking-wide text-gold shadow-[0_0_18px_-6px_rgba(234,179,8,0.55)]">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-bold tracking-wide text-gold shadow-[0_0_18px_-6px_rgba(198,40,40,0.55)]">
                   <Flame
                     className="size-3.5 fill-orange-500 text-orange-500"
                     aria-hidden="true"
@@ -263,6 +268,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
               >
                 <Link
                   href="/dashboard/profile"
+                  prefetch={false}
                   className={`glass-card sheen-border group flex h-full items-center gap-4 rounded-2xl border border-transparent p-6 transition-all duration-200 ${goldGlow}`}
                 >
                   <div className="flex size-14 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-lg font-bold text-gold">
@@ -300,7 +306,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
               >
                 <Link
                   href="/dashboard/lift-tracker"
-                  className="group relative flex h-full min-h-72 flex-col justify-between overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-br from-gold/15 via-gold/[0.04] to-transparent p-8 backdrop-blur-md transition-all duration-200 hover:border-gold/60 hover:shadow-[0_0_44px_-8px_rgba(234,179,8,0.45)] md:p-10"
+                  className="group relative flex h-full min-h-72 flex-col justify-between overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-br from-gold/15 via-gold/[0.04] to-transparent p-8 backdrop-blur-md transition-all duration-200 hover:border-gold/60 hover:shadow-[0_0_44px_-8px_rgba(198,40,40,0.45)] md:p-10"
                 >
                   <Dumbbell
                     className="absolute -right-6 -bottom-8 size-52 -rotate-12 text-gold opacity-[0.07] transition-transform duration-500 group-hover:-rotate-6"
@@ -424,7 +430,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
                         </p>
                       </div>
                       <div className="relative">
-                        <span className="absolute top-1 -left-[21.5px] size-2 rounded-full bg-gold shadow-[0_0_8px_rgba(234,179,8,0.7)]" />
+                        <span className="absolute top-1 -left-[21.5px] size-2 rounded-full bg-gold shadow-[0_0_8px_rgba(198,40,40,0.7)]" />
                         <p className="font-medium text-foreground">
                           Latest session
                         </p>
@@ -458,7 +464,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
             <Link
               href="/dashboard/ai-coach"
               aria-label="Open AI Coach"
-              className="group relative flex size-14 items-center justify-center rounded-full border border-gold/50 bg-gradient-to-br from-gold to-amber-600 shadow-[0_8px_30px_-6px_rgba(234,179,8,0.55)] transition-transform duration-200 hover:scale-110 active:scale-95"
+              className="group relative flex size-14 items-center justify-center rounded-full border border-gold/50 bg-gradient-to-br from-gold to-amber-600 shadow-[0_8px_30px_-6px_rgba(198,40,40,0.55)] transition-transform duration-200 hover:scale-110 active:scale-95"
             >
               {!reduce && (
                 <motion.span
@@ -474,8 +480,6 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
               </span>
             </Link>
           </motion.div>
-        </>
-      )}
     </div>
   )
 }

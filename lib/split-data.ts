@@ -17,8 +17,12 @@ export type Exercise = {
   sets: number
   reps: string
   muscle: MuscleGroup
-  /** Placeholder for now — swap for a real photo/illustration URL later. */
+  /** lift_types.category — e.g. compound, accessory, cardio. */
+  category?: string
+  /** Real photo URL from lift_types.image_url when available. */
   image?: string
+  /** Live DB lift_types.id — required for session logging against Supabase. */
+  liftTypeId?: string
 }
 
 export type SplitDay = {
@@ -39,6 +43,10 @@ export type SplitDetail = {
   recommended: boolean
   summary: string
   schedule: SplitDay[]
+  /** Owner user id when this is a custom split. */
+  userId?: string | null
+  isShared?: boolean
+  isSystem?: boolean
 }
 
 export const SPLIT_DETAILS: SplitDetail[] = [

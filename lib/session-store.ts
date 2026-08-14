@@ -109,11 +109,24 @@ export function formatClock(totalSec: number) {
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`
 }
 
-/** Compact volume label, e.g. "8.4k kg" / "450 kg". */
-export function formatVolume(kg: number) {
-  if (!Number.isFinite(kg) || kg <= 0) return '0 kg'
-  if (kg >= 1000) return `${(Math.round(kg / 100) / 10).toLocaleString()}k kg`
-  return `${Math.round(kg).toLocaleString()} kg`
+/** Human duration for history rows, e.g. "48m" / "1h 12m". */
+export function formatDuration(totalSec: number) {
+  const safe = Math.max(0, Math.floor(totalSec))
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m`
+  return `${safe}s`
+}
+
+/** Compact volume label. Stored kg; pass preferred unit for display. */
+export function formatVolume(kg: number, unit: 'kg' | 'lb' = 'kg') {
+  if (!Number.isFinite(kg) || kg <= 0) return `0 ${unit}`
+  const display = unit === 'lb' ? kg * 2.2046226218 : kg
+  if (display >= 1000) {
+    return `${(Math.round(display / 100) / 10).toLocaleString()}k ${unit}`
+  }
+  return `${Math.round(display).toLocaleString()} ${unit}`
 }
 
 /** Short date label like "Jul 26". */
@@ -130,4 +143,47 @@ export function isSameLocalDay(a: Date, b: Date) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   )
+}
+
+/**
+ * Relative finished_at badge for Last Session Summary
+ * ("Today", "Yesterday", "2 days ago", or a short date).
+ * Pass locale so Arabic mode gets natural phrasing (avoids RTL bidi on English).
+ * Latin date fallbacks are unicode-isolated so they keep LTR order in RTL pages.
+ */
+export function formatRelativeFinishedAt(
+  iso: string | null | undefined,
+  locale: 'en' | 'ar' = 'en',
+) {
+  const ar = locale === 'ar'
+  if (!iso) return ar ? 'حديث' : 'Recent'
+  const finished = new Date(iso)
+  if (Number.isNaN(finished.getTime())) return ar ? 'حديث' : 'Recent'
+
+  const now = new Date()
+  if (isSameLocalDay(finished, now)) return ar ? 'اليوم' : 'Today'
+
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (isSameLocalDay(finished, yesterday)) return ar ? 'أمس' : 'Yesterday'
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfFinished = new Date(
+    finished.getFullYear(),
+    finished.getMonth(),
+    finished.getDate(),
+  )
+  const dayDiff = Math.round(
+    (startOfToday.getTime() - startOfFinished.getTime()) / (24 * 60 * 60 * 1000),
+  )
+  if (dayDiff > 1 && dayDiff < 14) {
+    // Arabic phrase keeps correct order in RTL; English embeds LTR isolate
+    // so "5 days ago" never becomes "days ago 5" inside an RTL container.
+    return ar
+      ? `منذ ${dayDiff} أيام`
+      : `\u2066${dayDiff} days ago\u2069`
+  }
+
+  const date = formatSessionDate(iso)
+  return ar ? `\u2066${date}\u2069` : date
 }

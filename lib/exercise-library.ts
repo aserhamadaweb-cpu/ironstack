@@ -6,6 +6,8 @@ export type LibraryExercise = {
   muscles: string[]
   equipment: string
   level: string
+  /** Dataset category, e.g. "strength", "plyometrics". */
+  category: string | null
   /** Full thumbnail URL, or null when the entry has no images. */
   image: string | null
 }

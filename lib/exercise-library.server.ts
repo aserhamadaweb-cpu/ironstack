@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { LibraryExercise } from '@/lib/exercise-library'
-import type { SplitDetail } from '@/lib/split-data'
+import type { MuscleGroup, SplitDetail } from '@/lib/split-data'
 
 const IMAGE_BASE =
   'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/'
@@ -33,6 +33,7 @@ type RawExercise = {
   primaryMuscles: string[]
   equipment: string | null
   level: string
+  category?: string | null
   images: string[]
 }
 
@@ -40,38 +41,47 @@ function titleCase(value: string) {
   return value.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function normalizeName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function readDataset(): RawExercise[] {
   const file = path.join(process.cwd(), 'data', 'data', 'exercises.json')
   return JSON.parse(fs.readFileSync(file, 'utf8')) as RawExercise[]
 }
 
-/** Reads and slims the free-exercise-db dataset (server-side only). */
-export function loadExerciseLibrary(): LibraryExercise[] {
-  const raw = readDataset()
-
-  return raw.map((exercise) => ({
+function toLibraryExercise(exercise: RawExercise): LibraryExercise {
+  return {
     id: exercise.id,
     name: exercise.name,
     muscles: [
       ...new Set(
         (exercise.primaryMuscles.length ? exercise.primaryMuscles : ['other']).map(
-          (muscle) => MUSCLE_LABELS[muscle] ?? titleCase(muscle)
-        )
+          (muscle) => MUSCLE_LABELS[muscle] ?? titleCase(muscle),
+        ),
       ),
     ],
     equipment: titleCase(exercise.equipment ?? 'None'),
     level: titleCase(exercise.level ?? ''),
+    category: exercise.category?.trim().toLowerCase() || null,
     image: exercise.images?.[0] ? `${IMAGE_BASE}${exercise.images[0]}` : null,
-  }))
+  }
+}
+
+/** Reads and slims the free-exercise-db dataset (server-side only). */
+export function loadExerciseLibrary(): LibraryExercise[] {
+  return readDataset().map(toLibraryExercise)
 }
 
 /**
- * Curated map from the ready-made split exercise names (see `lib/split-data.ts`)
- * to specific free-exercise-db entry ids, so pre-built splits pull the same
- * real photo thumbnails the builder uses — hand-picked instead of fuzzy-matched
- * so shared exercises stay accurate and consistent.
+ * Curated map from ready-made / seeded split exercise names to free-exercise-db
+ * entry ids — same catalog the custom split builder searches.
  */
-const SPLIT_IMAGE_ALIASES: Record<string, string> = {
+const SPLIT_LIBRARY_ALIASES: Record<string, string> = {
   'Barbell Bench Press': 'Barbell_Bench_Press_-_Medium_Grip',
   'Seated Dumbbell Shoulder Press': 'Dumbbell_Shoulder_Press',
   'Incline Dumbbell Press': 'Incline_Dumbbell_Press',
@@ -122,38 +132,110 @@ const SPLIT_IMAGE_ALIASES: Record<string, string> = {
   'Cable Hammer Curl': 'Cable_Hammer_Curls_-_Rope_Attachment',
 }
 
-let idImageCache: Map<string, string> | null = null
+let libraryById: Map<string, LibraryExercise> | null = null
+let libraryByNormalizedName: Map<string, LibraryExercise> | null = null
 
-/** Builds (once) a map of dataset id → first image URL. */
-function idImageMap(): Map<string, string> {
-  if (idImageCache) return idImageCache
-  const map = new Map<string, string>()
-  for (const exercise of readDataset()) {
-    if (exercise.images?.[0]) {
-      map.set(exercise.id, `${IMAGE_BASE}${exercise.images[0]}`)
-    }
+function libraryIndexes() {
+  if (libraryById && libraryByNormalizedName) {
+    return { byId: libraryById, byName: libraryByNormalizedName }
   }
-  idImageCache = map
-  return map
+
+  const byId = new Map<string, LibraryExercise>()
+  const byName = new Map<string, LibraryExercise>()
+  for (const entry of loadExerciseLibrary()) {
+    byId.set(entry.id, entry)
+    const key = normalizeName(entry.name)
+    if (!byName.has(key)) byName.set(key, entry)
+    // Also index the dataset id as a spaced name (Barbell_Squat → barbell squat).
+    const idAsName = normalizeName(entry.id.replace(/_/g, ' '))
+    if (!byName.has(idAsName)) byName.set(idAsName, entry)
+  }
+
+  libraryById = byId
+  libraryByNormalizedName = byName
+  return { byId, byName }
+}
+
+/**
+ * Resolve an exercise name (from seeded splits / lift_types) to the same
+ * free-exercise-db entry the custom split builder uses.
+ */
+export function resolveLibraryExercise(name: string): LibraryExercise | null {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+
+  const { byId, byName } = libraryIndexes()
+
+  const aliasId = SPLIT_LIBRARY_ALIASES[trimmed]
+  if (aliasId) {
+    const aliased = byId.get(aliasId)
+    if (aliased) return aliased
+  }
+
+  const exact = byName.get(normalizeName(trimmed))
+  if (exact) return exact
+
+  // Soft contains match — prefer shorter library names to avoid odd hits.
+  const needle = normalizeName(trimmed)
+  let best: LibraryExercise | null = null
+  for (const [key, entry] of byName) {
+    if (!key.includes(needle) && !needle.includes(key)) continue
+    if (!best || entry.name.length < best.name.length) best = entry
+  }
+  return best
 }
 
 /** Resolves a ready-made split exercise name to a real thumbnail URL, if known. */
 export function resolveExerciseImage(name: string): string | null {
-  const id = SPLIT_IMAGE_ALIASES[name]
-  if (!id) return null
-  return idImageMap().get(id) ?? null
+  return resolveLibraryExercise(name)?.image ?? null
 }
 
-/** Returns a copy of the split with real photo thumbnails filled in per exercise. */
-export function withResolvedImages(split: SplitDetail): SplitDetail {
+/**
+ * Enrich a split (recommended or custom) with photos + muscle labels from
+ * `data/data/exercises.json` — the same catalog as Create Your Own Split.
+ */
+export function enrichSplitFromLibrary(split: SplitDetail): SplitDetail {
+  const muscleMap: Record<string, MuscleGroup> = {
+    Chest: 'Chest',
+    Back: 'Back',
+    Shoulders: 'Shoulders',
+    Biceps: 'Biceps',
+    Triceps: 'Triceps',
+    Quads: 'Quads',
+    Hamstrings: 'Hamstrings',
+    Glutes: 'Glutes',
+    Calves: 'Calves',
+    Abs: 'Core',
+    Core: 'Core',
+    Traps: 'Traps',
+  }
+
   return {
     ...split,
     schedule: split.schedule.map((day) => ({
       ...day,
-      exercises: day.exercises.map((exercise) => ({
-        ...exercise,
-        image: exercise.image ?? resolveExerciseImage(exercise.name) ?? undefined,
-      })),
+      exercises: day.exercises.map((exercise) => {
+        const library = resolveLibraryExercise(exercise.name)
+        const rawMuscle = library?.muscles[0]
+        const muscle = rawMuscle
+          ? (muscleMap[rawMuscle] ?? exercise.muscle)
+          : exercise.muscle
+        return {
+          ...exercise,
+          name: library?.name ?? exercise.name,
+          category:
+            library?.category === 'cardio'
+              ? 'cardio'
+              : (exercise.category ?? library?.category ?? undefined),
+          image: library?.image ?? exercise.image ?? undefined,
+          muscle,
+        }
+      }),
     })),
   }
+}
+
+/** @deprecated Prefer enrichSplitFromLibrary — kept for older call sites. */
+export function withResolvedImages(split: SplitDetail): SplitDetail {
+  return enrichSplitFromLibrary(split)
 }

@@ -1,52 +1,122 @@
 'use client'
 
+import { useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
 import { Plus, Trophy } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { FindPeopleSheet } from '@/components/find-people-sheet'
+import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
+import { useIsGuest } from '@/components/use-is-guest'
 import {
-  CIRCLE_PRS,
   formatLiftDate,
   formatWeight,
   MOCK_PRS,
 } from '@/lib/mock-pr-data'
+import { profileHref } from '@/lib/profile-path'
+
+type FriendAvatar = {
+  id: string
+  name: string
+  initials: string
+  tone: string
+  username?: string | null
+  avatarUrl?: string | null
+}
 
 type TrainingCircleFeedProps = {
   showAvatars?: boolean
+  friends?: FriendAvatar[]
 }
 
-const FRIENDS = [
-  { name: 'Maya Chen', initials: 'MC', tone: 'border chip-amber' },
-  { name: 'Jordan Lee', initials: 'JL', tone: 'border chip-blue' },
-  { name: 'Sam Okoro', initials: 'SO', tone: 'border chip-green' },
-  { name: 'Riley Park', initials: 'RP', tone: 'border chip-amber' },
-  { name: 'Chris N.', initials: 'CN', tone: 'border chip-blue' },
-  { name: 'Ava Brooks', initials: 'AB', tone: 'border chip-green' },
-]
+export function TrainingCircleAvatars({
+  friends = [],
+  onAddClick,
+  showAdd = true,
+}: {
+  friends?: FriendAvatar[]
+  onAddClick?: () => void
+  showAdd?: boolean
+}) {
+  const t = useTranslations('home')
 
-export function TrainingCircleAvatars() {
   return (
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
-      {FRIENDS.map((friend) => (
-        <div
-          key={friend.name}
-          className="group relative flex w-16 shrink-0 flex-col items-center sm:w-auto"
-          title={friend.name}
-        >
+      {friends.length === 0 && (
+        <p className="max-w-xs py-2 text-sm leading-relaxed text-muted-foreground">
+          {showAdd
+            ? t.rich('noFriendsYet', {
+                plus: () => (
+                  <span className="font-semibold text-gold" dir="ltr">
+                    +
+                  </span>
+                ),
+              })
+            : t('guestCircleEmpty')}
+        </p>
+      )}
+      {friends.map((friend) => {
+        const href = profileHref(friend.username, friend.id)
+        const firstName = friend.name.split(' ')[0]
+        const avatar = (
           <div
-            className={`flex size-12 items-center justify-center rounded-full border-2 text-xs font-bold transition-transform hover:z-10 hover:scale-110 sm:size-14 ${friend.tone}`}
+            className={`relative flex size-12 items-center justify-center overflow-hidden rounded-full border-2 text-xs font-bold transition-transform group-hover:z-10 group-hover:scale-110 sm:size-14 ${friend.tone}`}
           >
-            {friend.initials}
+            {friend.avatarUrl ? (
+              <Image
+                src={friend.avatarUrl}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="56px"
+              />
+            ) : (
+              friend.initials
+            )}
           </div>
-          <span className="mt-2 max-w-16 truncate text-center text-[10px] text-muted-foreground">
-            {friend.name.split(' ')[0]}
-          </span>
-        </div>
-      ))}
-      <button
-        type="button"
-        aria-label="Add friend"
-        className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gold/40 text-gold transition-colors hover:border-gold hover:bg-gold/10 sm:size-14"
-      >
-        <Plus className="size-5" aria-hidden="true" />
-      </button>
+        )
+        return (
+          <div
+            key={friend.id}
+            className="group relative flex w-16 shrink-0 flex-col items-center sm:w-auto"
+            title={friend.name}
+          >
+            {href ? (
+              <Link href={href} className="flex flex-col items-center">
+                {avatar}
+                <LtrIsolate
+                  as="span"
+                  when={isLatinFragment(firstName)}
+                  className="mt-2 max-w-16 truncate text-center text-[10px] text-muted-foreground"
+                >
+                  {firstName}
+                </LtrIsolate>
+              </Link>
+            ) : (
+              <>
+                {avatar}
+                <LtrIsolate
+                  as="span"
+                  when={isLatinFragment(firstName)}
+                  className="mt-2 max-w-16 truncate text-center text-[10px] text-muted-foreground"
+                >
+                  {firstName}
+                </LtrIsolate>
+              </>
+            )}
+          </div>
+        )
+      })}
+      {showAdd ? (
+        <button
+          type="button"
+          aria-label={t('findPeopleAria')}
+          onClick={onAddClick}
+          className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gold/40 text-gold transition-colors hover:border-gold hover:bg-gold/10 sm:size-14"
+        >
+          <Plus className="size-5" aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -79,7 +149,7 @@ export function PersonalPrBoard() {
         {current.map((record) => (
           <li
             key={record.id}
-            className="rounded-xl border border-silver/10 bg-zinc-950/40 px-4 py-3"
+            className="rounded-xl border border-silver/10 bg-background/40 px-4 py-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -107,64 +177,41 @@ export function PersonalPrBoard() {
   )
 }
 
-export function TrainingCircleFeed({ showAvatars = true }: TrainingCircleFeedProps) {
+export function TrainingCircleFeed({
+  showAvatars = true,
+  friends = [],
+}: TrainingCircleFeedProps) {
+  const t = useTranslations('home')
+  const [findOpen, setFindOpen] = useState(false)
+  const { isGuest } = useIsGuest()
+
   return (
-    <section className="rounded-2xl border border-silver/10 bg-zinc-900/40 p-5 backdrop-blur-md sm:p-7">
+    <section className="is-panel p-5 sm:p-7">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-            COMMUNITY
-          </p>
-          <h2 className="font-heading mt-1 text-2xl font-bold text-white">
-            Your Training Circle
+          <p className="section-kicker">{t('community')}</p>
+          <h2 className="font-heading mt-1 text-2xl font-bold text-headline">
+            {t('trainingCircle')}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Friends who lift with you — cheer recent PRs and stay accountable.
+            {t('trainingCircleBody')}
           </p>
         </div>
-        <button
-          type="button"
-          className="hidden min-h-11 rounded-full border border-gold/30 px-4 text-[10px] font-semibold tracking-[0.2em] text-gold transition-colors hover:bg-gold/10 sm:inline-flex sm:items-center"
-        >
-          SEE ALL
-        </button>
       </div>
 
       {showAvatars && (
-        <div className="mb-6">
-          <TrainingCircleAvatars />
+        <div className="mb-2">
+          <TrainingCircleAvatars
+            friends={friends}
+            showAdd={!isGuest}
+            onAddClick={() => setFindOpen(true)}
+          />
         </div>
       )}
 
-      <div className="space-y-2.5">
-        <p className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground">
-          RECENT CIRCLE PRS
-        </p>
-        {CIRCLE_PRS.map((entry) => (
-          <article
-            key={entry.id}
-            className="flex items-center gap-3 rounded-xl border border-silver/10 bg-zinc-950/40 px-3 py-3 sm:px-4"
-          >
-            <div
-              className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-bold ${entry.tone}`}
-            >
-              {entry.initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">
-                {entry.name}{' '}
-                <span className="font-normal text-muted-foreground">hit a PR</span>
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {entry.liftName} · {formatLiftDate(entry.loggedAt)}
-              </p>
-            </div>
-            <p className="shrink-0 font-heading text-sm font-bold tabular-nums text-gold sm:text-base">
-              {formatWeight(entry.weight, entry.unit)}
-            </p>
-          </article>
-        ))}
-      </div>
+      {!isGuest && (
+        <FindPeopleSheet open={findOpen} onClose={() => setFindOpen(false)} />
+      )}
     </section>
   )
 }

@@ -2,15 +2,19 @@
 
 import { AiCoachPanel } from '@/components/ai-coach-panel'
 import { DashboardNav } from '@/components/dashboard-nav'
-import { FloatingActions } from '@/components/floating-actions'
 import { PersonalPrBoard } from '@/components/training-circle-feed'
+import type { CoachInsightView } from '@/lib/ai/insights'
 import { initialsFrom } from '@/lib/dashboard-utils'
 
 type AiCoachDashboardProps = {
   displayName: string
+  insight: CoachInsightView
 }
 
-export function AiCoachDashboard({ displayName }: AiCoachDashboardProps) {
+export function AiCoachDashboard({
+  displayName,
+  insight,
+}: AiCoachDashboardProps) {
   return (
     <div className="min-h-svh pb-20 md:pb-0">
       <DashboardNav
@@ -33,12 +37,11 @@ export function AiCoachDashboard({ displayName }: AiCoachDashboardProps) {
         </div>
 
         <div className="flex flex-col gap-6">
-          <AiCoachPanel athleteName={displayName} />
+          <AiCoachPanel insight={insight} />
           <PersonalPrBoard />
         </div>
       </main>
 
-      <FloatingActions />
     </div>
   )
 }

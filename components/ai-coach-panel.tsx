@@ -1,88 +1,122 @@
 'use client'
 
 import Link from 'next/link'
-import { BrainCircuit, Sparkles } from 'lucide-react'
-import { getLastSessionSummary } from '@/lib/dashboard-utils'
+import {
+  Bot,
+  CheckCircle2,
+  ChevronRight,
+  Database,
+} from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { LtrIsolate } from '@/components/ltr-isolate'
+import type { CoachInsightView } from '@/lib/ai/insights'
 
 type AiCoachPanelProps = {
-  athleteName: string
+  insight: CoachInsightView
   /** Compact card for home / workout embeds. */
   compact?: boolean
+  /** Where empty-state CTA should go (e.g. first split session). */
+  startHref?: string
 }
 
-function buildTip(athleteName: string) {
-  const session = getLastSessionSummary()
-  const top = session.standouts[0]
-  const firstName = athleteName.trim().split(/\s+/)[0] || athleteName
+export function AiCoachPanel({
+  insight,
+  compact = false,
+  startHref = '/dashboard/workout',
+}: AiCoachPanelProps) {
+  const t = useTranslations('coach')
+  const isEmpty = insight.kind === 'empty'
+  const padding = compact ? 'p-5 sm:p-6' : 'p-6 sm:p-8'
 
-  if (!top) {
-    return {
-      headline: `Ready when you are, ${firstName}`,
-      body: 'Log a session and your coach will start reading the room — volume, rest, and the lifts that need a cue.',
-      focus: 'Start your next workout',
-    }
-  }
-
-  return {
-    headline: `${top.lift} is your leverage point`,
-    body: `Last ${session.name.toLowerCase()} you hit ${top.weight} kg × ${top.reps}. ${
-      top.cue
-        ? `Keep the cue: “${top.cue}”.`
-        : 'Add a technical note next time so cues stick between sessions.'
-    } Push volume 5–8% this week, then retest a heavy single.`,
-    focus: `${session.dateLabel} · ${session.sets} sets · ${Math.round(session.volumeKg / 1000)}k kg`,
-  }
-}
-
-export function AiCoachPanel({ athleteName, compact = false }: AiCoachPanelProps) {
-  const tip = buildTip(athleteName)
-
-  return (
-    <section
-      className={`relative overflow-hidden rounded-2xl border border-border bg-card ${
-        compact ? 'p-5 sm:p-6' : 'p-6 sm:p-8'
-      }`}
-    >
-      <div
-        className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-gold/15 blur-3xl"
-        aria-hidden="true"
-      />
-
-      <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 flex-1">
+  if (isEmpty) {
+    return (
+      <section
+        className={`relative overflow-hidden rounded-2xl border border-border border-s-[3px] border-s-blue bg-card ${padding}`}
+      >
+        <div
+          className="pointer-events-none absolute -top-16 -end-10 h-40 w-40 rounded-full bg-blue/10 blur-3xl"
+          aria-hidden="true"
+        />
+        <div className="relative">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl border chip-amber">
-              <BrainCircuit className="size-5" aria-hidden="true" />
+            <div className="flex size-11 items-center justify-center rounded-xl border border-blue/35 bg-blue-tint text-blue">
+              <Bot className="size-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                AI-POWERED COACHING
+              <p className="text-[10px] font-semibold tracking-[0.3em] text-blue">
+                {t('aiPowered')}
               </p>
-              <h2 className="font-heading text-xl font-bold text-white sm:text-2xl">
-                {tip.headline}
+              <h2 className="font-heading text-xl font-bold text-foreground sm:text-2xl">
+                {insight.headline || t('noInsights')}
               </h2>
             </div>
           </div>
-
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {tip.body}
+            {insight.detail || t('noInsightsBody')}
           </p>
+          <Link
+            href={startHref}
+            className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-gold px-5 text-xs font-bold tracking-[0.16em] text-background transition hover:bg-gold/90"
+          >
+            {t('startWorkout')}
+            <ChevronRight className="size-4 rtl-flip" aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
+    )
+  }
 
-          <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-silver/15 bg-zinc-950/50 px-3 py-1.5 text-[10px] font-semibold tracking-[0.14em] text-zinc-300">
-            <Sparkles className="size-3 text-gold" aria-hidden="true" />
-            {tip.focus}
-          </p>
+  return (
+    <Link
+      href="/dashboard/ai-coach"
+      className={`group relative block overflow-hidden rounded-2xl border border-border border-s-[3px] border-s-blue bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-blue/40 hover:shadow-[0_12px_40px_-20px_rgba(78,161,245,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/40 ${padding}`}
+    >
+      <div
+        className="pointer-events-none absolute -top-16 -end-10 h-40 w-40 rounded-full bg-blue/10 blur-3xl transition-opacity group-hover:opacity-100"
+        aria-hidden="true"
+      />
+
+      <div className="relative">
+        <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-blue/35 bg-blue-tint text-blue">
+              <Bot className="size-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-[0.3em] text-blue">
+                {t('aiPowered')}
+              </p>
+              <h2 className="font-heading text-xl font-bold text-foreground sm:text-2xl">
+                {insight.headline}
+              </h2>
+            </div>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 pt-1 text-[11px] font-semibold tracking-wide text-blue/90 transition-colors group-hover:text-blue">
+            {t('openCoach')}
+            <ChevronRight className="size-3.5 rtl-flip" aria-hidden="true" />
+          </span>
         </div>
 
-        {!compact && (
-          <Link
-            href="/dashboard/workout"
-            className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-primary px-6 text-sm font-bold tracking-[0.16em] text-primary-foreground transition-all hover:bg-primary/90"
-          >
-            APPLY IN WORKOUT
-          </Link>
-        )}
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          {insight.detail}
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-success">
+            <Database className="size-3" aria-hidden="true" />
+            {t('grounded')}
+          </span>
+          {insight.sessionMeta && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <CheckCircle2
+                className="size-3 text-success/80"
+                aria-hidden="true"
+              />
+              <LtrIsolate>{insight.sessionMeta}</LtrIsolate>
+            </span>
+          )}
+        </div>
       </div>
-    </section>
+    </Link>
   )
 }

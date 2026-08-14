@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { resolveLiftImageUrl } from '@/lib/lift-image'
 
 type HighlightShape = { cx: number; cy: number; rx: number; ry: number }
 
@@ -60,12 +61,12 @@ function SilhouetteSvg({ muscle }: { muscle: string }) {
     <svg viewBox="0 0 48 52" className="h-full w-full p-1.5" aria-hidden="true">
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f6f7f9" />
-          <stop offset="100%" stopColor="#8b8f97" />
+          <stop offset="0%" stopColor="var(--foreground)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--muted-foreground)" stopOpacity="0.7" />
         </linearGradient>
       </defs>
 
-      <g fill="#5b5f66" opacity="0.55">
+      <g fill="var(--muted-foreground)" opacity="0.45">
         <circle cx="24" cy="7" r="4" />
         <path d="M17 12h14l3 4v9l-2 8h-16l-2-8v-9z" />
         <path d="M14 16.5 11 20v11h3z" />
@@ -98,23 +99,24 @@ type ExerciseThumbProps = {
  * no image exists (or it fails to load).
  */
 export function ExerciseThumb({ muscle, image, name, className }: ExerciseThumbProps) {
-  const [broken, setBroken] = useState(false)
-  const showImage = image && !broken
+  const resolved = resolveLiftImageUrl(image)
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null)
+  const showImage = Boolean(resolved) && brokenSrc !== resolved
 
   return (
     <div
-      className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-silver/15 bg-gradient-to-b from-zinc-800/80 to-zinc-950 ${
+      className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-silver/15 bg-gradient-to-b from-muted/80 to-background ${
         className ?? 'size-12 sm:size-14'
       }`}
     >
-      {showImage ? (
+      {showImage && resolved ? (
         <Image
-          src={image}
+          src={resolved}
           alt={name}
           fill
           className="object-cover"
           sizes="112px"
-          onError={() => setBroken(true)}
+          onError={() => setBrokenSrc(resolved)}
         />
       ) : (
         <SilhouetteSvg muscle={muscle} />

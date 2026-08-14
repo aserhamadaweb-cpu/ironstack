@@ -31,7 +31,7 @@ export function toneForFocus(focus: string): AccentTone {
   const key = focus.trim().toLowerCase()
   if (key.includes('strength')) return 'blue'
   if (key.includes('athletic') || key.includes('power')) return 'green'
-  return 'amber' // Hypertrophy + brand default
+  return 'amber'
 }
 
 /** Cycle amber → blue → green for feature grids */
@@ -40,10 +40,8 @@ export function toneAt(index: number): AccentTone {
   return order[index % order.length]
 }
 
-/** Shared primary CTA classes — white fill, dark text */
-export const CTA_PRIMARY =
-  'bg-primary text-primary-foreground hover:bg-primary/90'
+/** Shared primary CTA — chalk fill */
+export const CTA_PRIMARY = 'btn-pill btn-pill-primary'
 
-/** Shared secondary outline button */
-export const CTA_SECONDARY =
-  'border border-border bg-transparent text-foreground hover:border-gold/40 hover:text-gold'
+/** Shared secondary outline */
+export const CTA_SECONDARY = 'btn-pill btn-pill-secondary'

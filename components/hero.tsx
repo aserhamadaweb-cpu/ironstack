@@ -1,8 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useRef } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import {
   motion,
   useReducedMotion,
@@ -10,18 +10,16 @@ import {
   useTransform,
   type Variants,
 } from 'framer-motion'
+import { GetAppButton } from '@/components/get-app-button'
+import { IronStackMark } from '@/components/ironstack-mark'
 import { EASE } from '@/components/reveal'
 
-const MotionLink = motion.create(Link)
-
-// Headline split into words so each can stagger in sequence.
 const HEADLINE = ['TRAIN', 'SMARTER.', 'FEEL', 'STRONGER.']
 
 export function Hero() {
   const reduce = useReducedMotion()
   const sectionRef = useRef<HTMLElement>(null)
 
-  // Parallax: background drifts slower than the page as you scroll past the hero.
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start start', 'end start'],
@@ -44,7 +42,6 @@ export function Hero() {
     },
   }
 
-  // Eyebrow rule lines grow outward from the center label.
   const lineVariants: Variants = {
     hidden: { scaleX: 0, opacity: 0 },
     visible: {
@@ -69,6 +66,7 @@ export function Hero() {
           alt=""
           fill
           priority
+          loading="eager"
           className="hero-zoom object-cover opacity-50"
         />
       </motion.div>
@@ -83,29 +81,34 @@ export function Hero() {
         initial="hidden"
         animate="visible"
       >
-        <motion.p
+        <motion.div
           variants={rise}
-          className="flex items-center gap-3 text-xs font-medium tracking-[0.4em] text-gold"
+          className="flex flex-col items-center gap-3"
         >
-          <motion.span
-            variants={lineVariants}
-            className="h-px w-8 origin-right bg-gold/60"
-            aria-hidden="true"
-          />
-          WELCOME TO IRONSTACK
-          <motion.span
-            variants={lineVariants}
-            className="h-px w-8 origin-left bg-gold/60"
-            aria-hidden="true"
-          />
-        </motion.p>
+          <span className="relative flex size-16 items-center justify-center overflow-hidden rounded-2xl border border-gold/30 bg-card sm:size-20">
+            <IronStackMark size="lg" />
+          </span>
+          <p className="flex items-center gap-3 text-xs font-medium tracking-[0.4em] text-gold">
+            <motion.span
+              variants={lineVariants}
+              className="h-px w-8 origin-right bg-gold/60"
+              aria-hidden="true"
+            />
+            <span className="inline-flex items-center gap-2">IRONSTACK</span>
+            <motion.span
+              variants={lineVariants}
+              className="h-px w-8 origin-left bg-gold/60"
+              aria-hidden="true"
+            />
+          </p>
+        </motion.div>
 
-        <h1 className="font-heading text-metallic text-balance text-5xl font-bold leading-tight tracking-tight md:text-7xl">
+        <h1 className="font-heading text-metallic text-balance text-4xl font-bold leading-[1.05] tracking-tight drop-shadow-[0_8px_40px_rgba(0,0,0,0.55)] sm:text-5xl md:text-7xl">
           {HEADLINE.map((word, i) => (
             <motion.span
               key={`${word}-${i}`}
               variants={rise}
-              className="mr-3 inline-block last:mr-0"
+              className="mr-2 inline-block last:mr-0 sm:mr-3"
             >
               {word}
             </motion.span>
@@ -116,20 +119,22 @@ export function Hero() {
           variants={rise}
           className="max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg"
         >
-          Your friendly training companion — track your progress, get smart
-          coaching tips, and celebrate every win along the way.
+          Log lifts, run challenges with friends, and keep your streak lit —
+          install IronStack to your home screen like a native gym app.
         </motion.p>
 
-        <MotionLink
-          href="/login"
+        <motion.div
           variants={rise}
-          whileHover={reduce ? undefined : { scale: 1.05 }}
-          whileTap={reduce ? undefined : { scale: 0.96 }}
-          transition={{ duration: 0.18, ease: EASE }}
-          className="cta-pulse rounded-full bg-primary px-10 py-4 text-sm font-bold tracking-[0.25em] text-primary-foreground hover:brightness-110"
+          className="flex w-full flex-col items-center gap-4"
         >
-          GET STARTED
-        </MotionLink>
+          <Link
+            href="/login"
+            className="cta-pulse btn-pill min-h-14 bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] transition-transform duration-200 active:scale-[0.98]"
+          >
+            SIGN IN
+          </Link>
+          <GetAppButton />
+        </motion.div>
       </motion.div>
     </section>
   )

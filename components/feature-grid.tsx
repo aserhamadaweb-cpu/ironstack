@@ -1,33 +1,64 @@
 'use client'
 
-import { BrainCircuit, ClipboardList, Users } from 'lucide-react'
+import {
+  BrainCircuit,
+  ClipboardList,
+  History,
+  MessageSquare,
+  Swords,
+  Trophy,
+} from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { EASE, Reveal } from '@/components/reveal'
 import { ACCENT } from '@/lib/accent'
 
 const features = [
   {
-    id: 'ai-assistant',
-    icon: BrainCircuit,
-    title: 'AI Assistant',
-    description:
-      'Your personal training buddy. Get workout plans that fit your life, friendly recovery tips, and helpful advice whenever you need it.',
-    tone: 'amber' as const,
-  },
-  {
-    id: 'lift-tracker',
+    id: 'training',
     icon: ClipboardList,
-    title: 'Lift Tracker',
+    title: 'Workout logging',
     description:
-      'Log every set, watch your working weights climb, and turn consistent effort into real, visible progress.',
+      'Run your splits, log sets and cardio, and keep every session on record.',
     tone: 'blue' as const,
   },
   {
-    id: 'community-circle',
-    icon: Users,
-    title: 'Community Circle',
+    id: 'messages',
+    icon: MessageSquare,
+    title: 'Messages & groups',
     description:
-      'A warm and welcoming space to share your journey. Cheer each other on, swap tips, and make friends who love training as much as you do.',
+      'DMs and group chats so your training circle stays close between sessions.',
+    tone: 'green' as const,
+  },
+  {
+    id: 'challenges',
+    icon: Swords,
+    title: 'Friend challenges',
+    description:
+      'Pick a lift, set a target, and settle it under the bar with a friend.',
+    tone: 'amber' as const,
+  },
+  {
+    id: 'progress',
+    icon: Trophy,
+    title: 'PRs & streaks',
+    description:
+      'Personal records, leaderboards, and streak tracking that reward consistency.',
+    tone: 'amber' as const,
+  },
+  {
+    id: 'history',
+    icon: History,
+    title: 'Training history',
+    description:
+      'Browse past sessions and volume so you can see the climb, not just today.',
+    tone: 'blue' as const,
+  },
+  {
+    id: 'ai-coach',
+    icon: BrainCircuit,
+    title: 'AI Coach',
+    description:
+      'Coaching tips grounded in your own logs, recovery, and training pattern.',
     tone: 'green' as const,
   },
 ]
@@ -38,7 +69,7 @@ export function FeatureGrid() {
   const gridVariants: Variants = {
     hidden: {},
     visible: {
-      transition: { staggerChildren: 0.14 },
+      transition: { staggerChildren: 0.1 },
     },
   }
 
@@ -47,7 +78,7 @@ export function FeatureGrid() {
     visible: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.6, ease: EASE },
+      transition: { duration: 0.5, ease: EASE },
     },
   }
 
@@ -61,13 +92,13 @@ export function FeatureGrid() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="font-heading text-metallic text-balance text-3xl font-bold md:text-5xl">
-            EVERYTHING YOU NEED TO GROW
+            EVERYTHING IN THE APP
           </h2>
         </Reveal>
       </div>
 
       <motion.div
-        className="grid gap-6 md:grid-cols-3"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
         variants={gridVariants}
         initial="hidden"
         whileInView="visible"
@@ -78,12 +109,10 @@ export function FeatureGrid() {
             key={feature.id}
             id={feature.id}
             variants={cardVariants}
-            whileHover={reduce ? undefined : { y: -6, scale: 1.02 }}
-            transition={{ duration: 0.2, ease: EASE }}
-            className="glass-card sheen-border group flex flex-col gap-5 rounded-2xl p-8"
+            className="glass-card sheen-border flex flex-col gap-4 rounded-2xl p-6 transition-transform duration-200 active:scale-[0.98]"
           >
             <div
-              className={`icon-bounce flex size-12 items-center justify-center rounded-xl transition-colors duration-300 ${ACCENT[feature.tone].chip}`}
+              className={`flex size-12 items-center justify-center rounded-xl ${ACCENT[feature.tone].chip}`}
             >
               <feature.icon className="size-6" aria-hidden="true" />
             </div>

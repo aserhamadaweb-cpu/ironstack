@@ -14,3 +14,15 @@ node_modules
 .next/
 .DS_Store
 .vercel
+
+# next-pwa / Workbox build output (regenerated on `next build --webpack`)
+# Production overwrites public/sw.js; restore push-only SW for local if needed.
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+public/worker-*.js.map
+public/swe-worker-*.js
+public/swe-worker-*.js.map
+public/fallback-*.js

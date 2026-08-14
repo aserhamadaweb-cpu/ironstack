@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
-import { Dumbbell } from 'lucide-react'
+import { ChevronLeft, Dumbbell } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import {
   signIn,
@@ -15,9 +16,10 @@ type AuthMode = 'signin' | 'signup'
 const initialState: AuthState | null = null
 
 const inputClassName =
-  'w-full rounded-lg border border-silver/20 bg-background/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20'
+  'min-h-11 w-full rounded-lg border border-silver/20 bg-background/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20'
 
 export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
+  const t = useTranslations('auth')
   const [mode, setMode] = useState<AuthMode>('signin')
   const action = mode === 'signin' ? signIn : signUp
   const [state, formAction, pending] = useActionState(action, initialState)
@@ -35,7 +37,7 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
           </span>
         </Link>
         <p className="text-xs tracking-[0.3em] text-muted-foreground">
-          {mode === 'signin' ? 'WELCOME BACK' : 'JOIN THE ARENA'}
+          {mode === 'signin' ? t('welcomeBack') : t('joinArena')}
         </p>
       </div>
 
@@ -43,24 +45,24 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
         <button
           type="button"
           onClick={() => setMode('signin')}
-          className={`flex-1 rounded-full py-2 text-xs font-semibold tracking-[0.15em] transition-colors ${
+          className={`flex min-h-11 flex-1 items-center justify-center rounded-full text-xs font-semibold tracking-[0.15em] transition-colors ${
             mode === 'signin'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'border border-gold/30 bg-gold/10 text-gold'
+              : 'text-muted-foreground active:text-foreground'
           }`}
         >
-          SIGN IN
+          {t('signIn')}
         </button>
         <button
           type="button"
           onClick={() => setMode('signup')}
-          className={`flex-1 rounded-full py-2 text-xs font-semibold tracking-[0.15em] transition-colors ${
+          className={`flex min-h-11 flex-1 items-center justify-center rounded-full text-xs font-semibold tracking-[0.15em] transition-colors ${
             mode === 'signup'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'border border-gold/30 bg-gold/10 text-gold'
+              : 'text-muted-foreground active:text-foreground'
           }`}
         >
-          SIGN UP
+          {t('signUp')}
         </button>
       </div>
 
@@ -73,14 +75,14 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
               htmlFor="displayName"
               className="text-xs font-medium tracking-[0.15em] text-silver-dim"
             >
-              DISPLAY NAME
+              {t('displayName')}
             </label>
             <input
               id="displayName"
               name="displayName"
               type="text"
               autoComplete="name"
-              placeholder="Your name"
+              placeholder={t('displayNamePlaceholder')}
               className={inputClassName}
             />
           </div>
@@ -91,7 +93,7 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
             htmlFor="email"
             className="text-xs font-medium tracking-[0.15em] text-silver-dim"
           >
-            EMAIL
+            {t('email')}
           </label>
           <input
             id="email"
@@ -109,7 +111,7 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
             htmlFor="password"
             className="text-xs font-medium tracking-[0.15em] text-silver-dim"
           >
-            PASSWORD
+            {t('password')}
           </label>
           <input
             id="password"
@@ -141,19 +143,23 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
           type="submit"
           disabled={pending}
           size="lg"
-          className="mt-2 h-11 w-full tracking-[0.2em]"
+          className="cta-pulse mt-4 min-h-14 w-full bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] hover:bg-gold/90"
         >
           {pending
-            ? 'PLEASE WAIT…'
+            ? t('pleaseWait')
             : mode === 'signin'
-              ? 'SIGN IN'
-              : 'CREATE ACCOUNT'}
+              ? t('signIn')
+              : t('createAccount')}
         </Button>
       </form>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        <Link href="/" className="link-underline hover:text-silver">
-          ← Back to home
+        <Link
+          href="/"
+          className="link-underline inline-flex items-center gap-1 hover:text-silver"
+        >
+          <ChevronLeft className="size-3.5 rtl-flip" aria-hidden="true" />
+          {t('backHome')}
         </Link>
       </p>
     </div>

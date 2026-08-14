@@ -14,7 +14,7 @@ const LANGUAGES = [
 const TOTAL_STEPS = 3
 
 const inputClassName =
-  'h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900/90 px-4 text-sm text-white placeholder:text-zinc-600 outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20'
+  'h-11 w-full rounded-xl border border-border bg-card/90 px-4 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20'
 
 function Pill({
   label,
@@ -32,7 +32,7 @@ function Pill({
       className={`rounded-full border px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
         selected
           ? 'border-gold/60 bg-gold text-black shadow-[0_0_18px_-6px_rgba(245,158,11,0.55)]'
-          : 'border-zinc-800 bg-zinc-950/70 text-zinc-400 hover:border-zinc-700 hover:text-white'
+          : 'border-border bg-background/70 text-muted-foreground hover:border-border hover:text-foreground'
       }`}
     >
       {label}
@@ -104,7 +104,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-zinc-950 px-4 pt-28 pb-12 text-zinc-100">
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-4 pt-28 pb-12 text-foreground">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-radial from-gold/15 via-transparent to-transparent"
         aria-hidden="true"
@@ -137,17 +137,17 @@ export default function OnboardingPage() {
           <p className="text-xs font-semibold tracking-[0.35em] text-gold">
             {step >= TOTAL_STEPS ? 'YOU ARE READY' : current.eyebrow}
           </p>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             {step >= TOTAL_STEPS ? 'PROFILE LOOKS GREAT' : current.title}
           </h1>
-          <p className="max-w-sm text-sm leading-relaxed text-zinc-400">
+          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
             {step >= TOTAL_STEPS
               ? 'Your IronStack profile is ready. Wire this up to the hub when you are.'
               : current.subtitle}
           </p>
         </div>
 
-        <div className="fade-up rounded-2xl border border-gold/25 bg-zinc-900/60 p-6 shadow-2xl shadow-black/40 backdrop-blur-md sm:p-8">
+        <div className="fade-up rounded-2xl border border-gold/25 bg-card/60 p-6 shadow-2xl shadow-black/40 backdrop-blur-md sm:p-8">
           {/* Progress bar */}
           {step < TOTAL_STEPS && (
             <div className="mb-6">
@@ -157,16 +157,16 @@ export default function OnboardingPage() {
                     <span
                       key={index}
                       className={`h-1.5 w-8 rounded-full transition-colors ${
-                        index <= step ? 'bg-gold' : 'bg-zinc-800'
+                        index <= step ? 'bg-gold' : 'bg-muted'
                       }`}
                     />
                   ))}
                 </div>
-                <span className="text-[10px] font-semibold tracking-[0.2em] text-zinc-500">
+                <span className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground">
                   {Math.round(progress)}%
                 </span>
               </div>
-              <div className="h-1 overflow-hidden rounded-full bg-zinc-800">
+              <div className="h-1 overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full bg-gold transition-all duration-300"
                   style={{ width: `${progress}%` }}
@@ -181,10 +181,10 @@ export default function OnboardingPage() {
                 <Check className="size-8" aria-hidden="true" />
               </div>
               <div className="space-y-1">
-                <p className="font-heading text-xl font-bold text-white">
+                <p className="font-heading text-xl font-bold text-foreground">
                   @{username || 'athlete'}
                 </p>
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-muted-foreground">
                   {fullName || 'Athlete'} · {gymLevel || 'Ready'} ·{' '}
                   {language === 'ar' ? 'العربية' : 'English'}
                 </p>
@@ -203,7 +203,7 @@ export default function OnboardingPage() {
                   <div className="flex flex-col gap-2">
                     <label
                       htmlFor="fullName"
-                      className="text-sm font-medium text-zinc-300"
+                      className="text-sm font-medium text-muted-foreground"
                     >
                       Full name
                     </label>
@@ -221,7 +221,7 @@ export default function OnboardingPage() {
                   <div className="flex flex-col gap-2">
                     <label
                       htmlFor="username"
-                      className="text-sm font-medium text-zinc-300"
+                      className="text-sm font-medium text-muted-foreground"
                     >
                       Username
                     </label>
@@ -245,7 +245,7 @@ export default function OnboardingPage() {
                         className={`${inputClassName} pl-8`}
                       />
                     </div>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-foreground">
                       Letters, numbers, and underscores only.
                     </p>
                   </div>
@@ -253,7 +253,7 @@ export default function OnboardingPage() {
                   <div className="flex flex-col gap-2">
                     <label
                       htmlFor="age"
-                      className="text-sm font-medium text-zinc-300"
+                      className="text-sm font-medium text-muted-foreground"
                     >
                       Age
                     </label>
@@ -275,7 +275,7 @@ export default function OnboardingPage() {
               {step === 1 && (
                 <>
                   <div className="flex flex-col gap-3">
-                    <p className="text-sm font-medium text-zinc-300">Gym level</p>
+                    <p className="text-sm font-medium text-muted-foreground">Gym level</p>
                     <div className="flex flex-wrap gap-2">
                       {GYM_LEVELS.map((level) => (
                         <Pill
@@ -289,7 +289,7 @@ export default function OnboardingPage() {
                   </div>
 
                   <div className="flex flex-col gap-3">
-                    <p className="text-sm font-medium text-zinc-300">Gender</p>
+                    <p className="text-sm font-medium text-muted-foreground">Gender</p>
                     <div className="flex flex-wrap gap-2">
                       {GENDERS.map((option) => (
                         <Pill
@@ -306,7 +306,7 @@ export default function OnboardingPage() {
 
               {step === 2 && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-sm font-medium text-zinc-300">
+                  <p className="text-sm font-medium text-muted-foreground">
                     Preferred language
                   </p>
                   <div className="grid gap-3">
@@ -320,19 +320,19 @@ export default function OnboardingPage() {
                           className={`rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
                             selected
                               ? 'border-gold/50 bg-gold/15 shadow-[0_0_24px_-8px_rgba(245,158,11,0.45)]'
-                              : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
+                              : 'border-border bg-background/70 hover:border-border'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p
                                 className={`text-base font-bold ${
-                                  selected ? 'text-gold/80' : 'text-white'
+                                  selected ? 'text-gold/80' : 'text-foreground'
                                 }`}
                               >
                                 {option.label}
                               </p>
-                              <p className="mt-0.5 text-xs text-zinc-500">
+                              <p className="mt-0.5 text-xs text-muted-foreground">
                                 {option.hint}
                               </p>
                             </div>
@@ -340,7 +340,7 @@ export default function OnboardingPage() {
                               className={`flex size-6 items-center justify-center rounded-full border ${
                                 selected
                                   ? 'border-gold bg-gold text-black'
-                                  : 'border-zinc-700 text-transparent'
+                                  : 'border-border text-transparent'
                               }`}
                             >
                               <Check className="size-3.5" aria-hidden="true" />
@@ -358,7 +358,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={() => setStep((value) => value - 1)}
-                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 text-sm font-bold tracking-[0.15em] text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full border border-border bg-background/70 text-sm font-bold tracking-[0.15em] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                   >
                     <ArrowLeft className="size-4" aria-hidden="true" />
                     BACK
@@ -390,7 +390,7 @@ export default function OnboardingPage() {
           )}
         </div>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Design preview — selections are interactive, not saved yet.
         </p>
       </div>

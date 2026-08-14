@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
+import { getSiteUrl } from '@/lib/site-url'
 
 export type AuthState = {
   error?: string
@@ -11,7 +12,7 @@ export type AuthState = {
 
 async function getOrigin() {
   const headersList = await headers()
-  return headersList.get('origin') ?? 'http://localhost:3000'
+  return getSiteUrl(headersList.get('origin'))
 }
 
 export async function signUp(

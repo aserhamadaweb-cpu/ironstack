@@ -1,40 +1,27 @@
 import { notFound, redirect } from 'next/navigation'
+import { PageError } from '@/components/page-states'
 import { SplitDetailPage } from '@/components/split-detail-page'
-import { SPLIT_DETAILS, getSplitBySlug } from '@/lib/split-data'
-import { withResolvedImages } from '@/lib/exercise-library.server'
+import { getProfile, getSplitDetail } from '@/lib/data/queries'
+import { toSplitDetail } from '@/lib/data/split-adapter'
+import { enrichSplitFromLibrary } from '@/lib/exercise-library.server'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
 
 type Params = { params: Promise<{ slug: string }> }
 
-export function generateStaticParams() {
-  return SPLIT_DETAILS.map((split) => ({ slug: split.slug }))
-}
-
 export async function generateMetadata({ params }: Params) {
   const { slug } = await params
-  const split = getSplitBySlug(slug)
-
-  if (!split) {
-    return { title: 'Split — IRONSTACK' }
-  }
+  const result = await getSplitDetail(slug)
+  const split = result.data
 
   return {
-    title: `${split.name} — IRONSTACK`,
-    description: split.description,
+    title: split ? `${split.name} — IRONSTACK` : 'Split — IRONSTACK',
+    description: split?.description ?? 'Training split details',
   }
 }
 
 export default async function SplitPage({ params }: Params) {
   const { slug } = await params
-  const baseSplit = getSplitBySlug(slug)
-
-  if (!baseSplit) {
-    notFound()
-  }
-
-  // Pull real photo thumbnails from the same dataset the builder uses.
-  const split = withResolvedImages(baseSplit)
 
   const supabase = await createClient()
   const {
@@ -45,19 +32,35 @@ export default async function SplitPage({ params }: Params) {
     redirect('/login')
   }
 
-  const metadataName =
-    typeof user.user_metadata?.display_name === 'string'
-      ? user.user_metadata.display_name
-      : typeof user.user_metadata?.full_name === 'string'
-        ? user.user_metadata.full_name
-        : ''
-  const displayName = metadataName || user.email?.split('@')[0] || 'Athlete'
+  const [splitResult, profileResult] = await Promise.all([
+    getSplitDetail(slug),
+    getProfile(user.id),
+  ])
+
+  if (splitResult.error || profileResult.error) {
+    return (
+      <main className="mx-auto max-w-3xl px-6 py-16">
+        <PageError message={splitResult.error || profileResult.error || 'Error'} />
+      </main>
+    )
+  }
+
+  if (!splitResult.data) {
+    notFound()
+  }
+
+  const split = enrichSplitFromLibrary(toSplitDetail(splitResult.data))
+  const displayName =
+    profileResult.data?.display_name ||
+    user.email?.split('@')[0] ||
+    'Athlete'
 
   return (
     <SplitDetailPage
       split={split}
       displayName={displayName}
       initials={initialsFrom(displayName)}
+      viewerUserId={user.id}
     />
   )
 }

@@ -1,27 +1,23 @@
 import { redirect } from 'next/navigation'
-import { ProfileDashboard } from '@/components/profile-dashboard'
-import { createClient } from '@/lib/supabase/server'
+import { profileHref } from '@/lib/profile-path'
+import { createClient, getAuthUserId } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'Profile — IRONSTACK',
-  description: 'Your IRONSTACK profile and training stats.',
+  description: 'Your IRONSTACK profile and personal records.',
 }
 
+/** Legacy route — unified profile lives at /profile/[username|userId]. */
 export default async function ProfilePage() {
+  const userId = await getAuthUserId()
+  if (!userId) redirect('/login')
+
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', userId)
+    .maybeSingle()
 
-  if (!user) {
-    redirect('/login')
-  }
-
-  const metadataName =
-    typeof user.user_metadata?.display_name === 'string'
-      ? user.user_metadata.display_name
-      : ''
-  const displayName = metadataName || user.email?.split('@')[0] || 'Athlete'
-
-  return <ProfileDashboard displayName={displayName} email={user.email ?? ''} />
+  redirect(profileHref(profile?.username, userId))
 }

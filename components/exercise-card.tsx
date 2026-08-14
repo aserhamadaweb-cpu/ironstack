@@ -7,8 +7,10 @@ type ExerciseCardProps = {
   /** Zero-based position; rendered as a two-digit number. */
   index: number
   name: string
-  /** Display muscle labels; the first is used for the thumbnail + read-only pill. */
+  /** Muscle keys used for the thumbnail silhouette (e.g. "Chest"). */
   muscles: string[]
+  /** Optional display labels for muscle pills (e.g. Arabic). Defaults to `muscles`. */
+  displayMuscles?: string[]
   /** Real photo URL (shared exercise-image dataset); falls back to a silhouette. */
   image?: string | null
   /**
@@ -35,6 +37,7 @@ export function ExerciseCard({
   index,
   name,
   muscles,
+  displayMuscles,
   image,
   setsReps,
   leading,
@@ -42,6 +45,8 @@ export function ExerciseCard({
   children,
 }: ExerciseCardProps) {
   const primaryMuscle = muscles[0] ?? 'Core'
+  const labels = displayMuscles ?? muscles
+  const primaryLabel = labels[0] ?? primaryMuscle
   const readOnly = setsReps != null
 
   return (
@@ -53,24 +58,24 @@ export function ExerciseCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-[11px] font-semibold tabular-nums text-zinc-600">
+            <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
               {String(index + 1).padStart(2, '0')}
             </span>
-            <h3 className="truncate font-heading text-base font-semibold text-white sm:text-lg">
+            <h3 className="truncate font-heading text-base font-semibold text-foreground sm:text-lg">
               {name}
             </h3>
           </div>
 
           {readOnly ? (
-            <p className="mt-1 text-xs text-zinc-400 sm:text-sm">{setsReps}</p>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{setsReps}</p>
           ) : (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {muscles.map((muscle) => (
+              {labels.map((label, i) => (
                 <span
-                  key={muscle}
-                  className="rounded-full border border-silver/20 bg-zinc-950/60 px-2 py-0.5 text-[9px] font-semibold tracking-[0.1em] text-zinc-400"
+                  key={`${muscles[i] ?? label}-${i}`}
+                  className="rounded-full border border-silver/20 bg-background/60 px-2 py-0.5 text-[9px] font-semibold tracking-[0.1em] text-muted-foreground"
                 >
-                  {muscle.toUpperCase()}
+                  {label}
                 </span>
               ))}
             </div>
@@ -78,8 +83,8 @@ export function ExerciseCard({
         </div>
 
         {readOnly && (
-          <span className="hidden shrink-0 rounded-full border border-silver/20 bg-zinc-950/60 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-zinc-400 sm:inline-block">
-            {primaryMuscle.toUpperCase()}
+          <span className="hidden shrink-0 rounded-full border border-silver/20 bg-background/60 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground sm:inline-block">
+            {primaryLabel}
           </span>
         )}
 

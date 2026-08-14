@@ -1,16 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
-import { Dumbbell } from 'lucide-react'
 import { motion, useMotionValueEvent, useScroll } from 'framer-motion'
+import { useState } from 'react'
+import { GetAppButton } from '@/components/get-app-button'
+import { IronStackMark } from '@/components/ironstack-mark'
 import { EASE } from '@/components/reveal'
-
-const links = [
-  { label: 'AI ASSISTANT', href: '#ai-assistant' },
-  { label: 'LIFT TRACKER', href: '#lift-tracker' },
-  { label: 'COMMUNITY CIRCLE', href: '#community-circle' },
-]
 
 export function Navbar() {
   const { scrollY } = useScroll()
@@ -22,57 +17,35 @@ export function Navbar() {
 
   return (
     <motion.header
-      className="fixed inset-x-0 top-0 z-50"
+      className="fixed inset-x-0 top-0 z-50 pt-[env(safe-area-inset-top)]"
       initial={{ y: -16, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.7, ease: EASE }}
+      transition={{ duration: 0.22, ease: EASE }}
     >
-      <motion.nav
+      <nav
         aria-label="Main navigation"
-        className="mx-auto mt-4 flex max-w-6xl items-center justify-between rounded-full border px-6 py-3 backdrop-blur-md transition-colors duration-300"
-        animate={{
-          backgroundColor: scrolled
-            ? 'rgba(18, 18, 20, 0.72)'
-            : 'rgba(18, 18, 20, 0)',
-          borderColor: scrolled
-            ? 'rgba(214, 214, 224, 0.18)'
-            : 'rgba(214, 214, 224, 0)',
-          boxShadow: scrolled
-            ? '0 12px 32px -18px rgba(0, 0, 0, 0.8)'
-            : '0 0 0 0 rgba(0, 0, 0, 0)',
-        }}
-        transition={{ duration: 0.3, ease: EASE }}
+        className={`mx-auto mt-3 flex max-w-6xl items-center justify-between gap-3 rounded-full border px-3 py-2 backdrop-blur-md transition-all duration-200 sm:px-6 ${
+          scrolled
+            ? 'border-border/80 bg-background/80 shadow-[var(--panel-shadow)]'
+            : 'border-transparent bg-transparent shadow-none'
+        }`}
       >
         <Link
           href="/"
-          className="flex items-center gap-2 transition-transform duration-300 hover:scale-105"
+          className="flex min-h-11 min-w-0 items-center gap-2 rounded-full px-1 active:opacity-80"
         >
-          <Dumbbell className="size-5 text-gold" aria-hidden="true" />
+          <IronStackMark size="sm" className="shrink-0" />
           <span className="font-heading text-metallic text-lg font-bold tracking-[0.25em]">
             IRONSTACK
           </span>
         </Link>
 
-        <ul className="hidden items-center gap-8 md:flex">
-          {links.map((link) => (
-            <li key={link.label}>
-              <Link
-                href={link.href}
-                className="link-underline text-xs font-medium tracking-[0.2em] text-silver-dim transition-colors duration-300 hover:text-gold"
-              >
-                {link.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-
-        <Link
-          href="/login"
-          className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold tracking-[0.15em] text-foreground transition-all duration-300 hover:scale-105 hover:border-gold/40 hover:text-gold"
-        >
-          JOIN US
-        </Link>
-      </motion.nav>
+        <GetAppButton
+          compact
+          label="GET APP"
+          className="btn-pill btn-pill-primary min-h-11 shrink-0 px-4 py-2 text-[10px] tracking-[0.18em] sm:px-5 sm:text-xs"
+        />
+      </nav>
     </motion.header>
   )
 }
