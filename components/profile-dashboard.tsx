@@ -19,6 +19,7 @@ import { PersonalRecordsSection,
 import { EASE } from '@/components/reveal'
 import { StatCard, type StatCardData } from '@/components/stat-card'
 import { UserAvatar } from '@/components/user-avatar'
+import { useIsGuest } from '@/components/use-is-guest'
 import type { CoachInsightView } from '@/lib/ai/insights'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
@@ -55,6 +56,8 @@ export function ProfileDashboard({
 }: ProfileDashboardProps) {
   const t = useTranslations('profile')
   const tNav = useTranslations('nav')
+  const tGuest = useTranslations('guest')
+  const { isGuest } = useIsGuest()
   const reduce = useReducedMotion()
   const [memories, setMemories] = useState(initialMemories)
   const publicHref = profileHref(username)
@@ -138,7 +141,13 @@ export function ProfileDashboard({
                   @{username}
                 </p>
               )}
-              <p className="truncate text-sm text-muted-foreground">{email}</p>
+              {isGuest ? (
+                <p className="text-sm text-muted-foreground">
+                  {tGuest('accountLabel')}
+                </p>
+              ) : (
+                <p className="break-all text-sm text-muted-foreground">{email}</p>
+              )}
               {bio && (
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                   {bio}
@@ -187,7 +196,7 @@ export function ProfileDashboard({
                 },
                 {
                   href: '/dashboard/achievements',
-                  label: tNav('achievements'),
+                  label: tNav('jumpAchievements'),
                   icon: Medal,
                 },
                 {

@@ -15,9 +15,10 @@
     "profile": "الملف",
     "tabHome": "الرئيسية",
     "tabWorkout": "تمرين",
-    "tabMessages": "دردشة",
+    "tabMessages": "رسائل",
     "tabChallenges": "تحديات",
     "tabProfile": "حسابي",
+    "jumpAchievements": "جوائز",
     "menu": "القائمة",
     "openMenu": "فتح القائمة",
     "closeMenu": "إغلاق القائمة",
@@ -320,7 +321,10 @@
     "completeKicker": "أوشكت على الانتهاء",
     "completeTitle": "أكمل ملفك الشخصي",
     "completeBody": "اختر اسم مستخدم وأضف إحصائيات جسمك ليجدك الأصدقاء ويبقى التدريب دقيقاً.",
-    "completeSubmit": "متابعة"
+    "completeSubmit": "متابعة",
+    "accountLabel": "حساب ضيف",
+    "messagesLocked": "أنشئ حساباً لإرسال الرسائل",
+    "messagesLockedCta": "إنشاء حساب"
   },
   "profile": {
     "kicker": "الملف",

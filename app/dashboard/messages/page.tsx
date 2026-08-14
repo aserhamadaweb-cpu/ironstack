@@ -37,6 +37,7 @@ export default async function MessagesPage() {
         initials={initialsFrom(displayName)}
         profileHref={profileHref(profileResult.data?.username, user.id)}
         avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
       />
       <MessagesInbox
         currentUserId={user.id}

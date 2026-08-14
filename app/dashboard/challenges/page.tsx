@@ -48,6 +48,7 @@ export default async function ChallengesPage() {
         initials={initialsFrom(displayName)}
         profileHref={profileHref(profileResult.data?.username, userId)}
         avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
       />
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
         <header>

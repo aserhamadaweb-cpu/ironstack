@@ -164,7 +164,7 @@ export function NotificationBell() {
         }
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="relative inline-flex size-11 items-center justify-center rounded-lg border border-silver/15 text-muted-foreground transition-colors active:opacity-70"
+        className="relative inline-flex size-10 items-center justify-center rounded-lg border border-silver/15 text-muted-foreground transition-colors active:opacity-70 sm:size-11"
       >
         <Bell className="size-4" aria-hidden="true" />
         {badge && (

@@ -80,6 +80,7 @@ type WorkoutDashboardProps = {
   insight: CoachInsightView
   avatarUrl?: string | null
   profileHref?: string
+  isGuest?: boolean
 }
 
 const JOURNEY_PLACEHOLDER_BARS = [28, 28, 28, 28, 28, 28, 28, 28]
@@ -97,6 +98,7 @@ export function WorkoutDashboard({
   insight,
   avatarUrl,
   profileHref,
+  isGuest = false,
 }: WorkoutDashboardProps) {
   const t = useTranslations('workout')
   const router = useRouter()
@@ -279,7 +281,7 @@ export function WorkoutDashboard({
         : volumeTrend.caption
 
   return (
-    <div className="relative min-h-svh overflow-x-clip pb-20 md:pb-0">
+    <div className="relative min-h-svh pb-20 md:pb-0">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         <div className="absolute inset-x-0 top-0 h-[55svh] [mask-image:linear-gradient(to_bottom,black_10%,transparent)]">
           <Image
@@ -300,6 +302,7 @@ export function WorkoutDashboard({
         initials={initialsFrom(displayName)}
         avatarUrl={avatarUrl}
         profileHref={profileHref}
+        isGuest={isGuest}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">

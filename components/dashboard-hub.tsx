@@ -139,7 +139,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
   }
 
   return (
-    <div className="relative min-h-svh overflow-x-clip">
+    <div className="relative min-h-svh">
       {/* ---- Ambient background: gym scene + drifting gold/red lights ---- */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         {/* Faint gym photo, like the welcome page, fading out downward */}
@@ -231,7 +231,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
         />
       </motion.div>
 
-      <main className="mx-auto max-w-7xl px-6 py-8 md:py-12">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">
             {/* Header + streak badge */}
             <motion.div className="mb-10 flex flex-col gap-2" {...rise(0.1)}>
               <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">

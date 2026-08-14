@@ -45,6 +45,7 @@ export default async function AiCoachPage() {
         userName={displayName}
         initials={initialsFrom(displayName)}
         profileHref={profileHref(profileResult.data?.username, userId)}
+        isGuest={profileResult.data?.is_guest === true}
       />
       <main className="mx-auto max-w-3xl space-y-8 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

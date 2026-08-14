@@ -35,6 +35,7 @@ type DashboardNavProps = {
   initials?: string
   profileHref?: string
   avatarUrl?: string | null
+  isGuest?: boolean
 }
 
 type TabId = 'home' | 'workout' | 'messages' | 'challenges' | 'profile'
@@ -61,7 +62,7 @@ type TabLink = {
   id: TabId
   icon: typeof Home
   labelKey: 'tabHome' | 'tabWorkout' | 'tabMessages' | 'tabChallenges' | 'tabProfile'
-  guestHidden?: boolean
+  guestLock?: boolean
 }
 
 const tabs: TabLink[] = [
@@ -77,20 +78,13 @@ const tabs: TabLink[] = [
     id: 'messages',
     icon: MessageSquare,
     labelKey: 'tabMessages',
-    guestHidden: true,
+    guestLock: true,
   },
   {
     href: '/dashboard/challenges',
     id: 'challenges',
     icon: Swords,
     labelKey: 'tabChallenges',
-    guestHidden: true,
-  },
-  {
-    href: '/dashboard/profile',
-    id: 'profile',
-    icon: User,
-    labelKey: 'tabProfile',
   },
 ]
 
@@ -233,14 +227,18 @@ export function DashboardNav({
   initials = 'A',
   profileHref,
   avatarUrl,
+  isGuest: isGuestProp,
 }: DashboardNavProps) {
   const t = useTranslations('nav')
+  const tGuest = useTranslations('guest')
   const pathname = usePathname()
   const router = useRouter()
   const reduceMotion = useReducedMotion()
-  const { isGuest } = useIsGuest()
+  const { isGuest: isGuestClient } = useIsGuest()
+  const isGuest = Boolean(isGuestProp) || isGuestClient
   const hideTabBar = shouldHideTabBar(pathname)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [guestLockOpen, setGuestLockOpen] = useState(false)
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
 
@@ -248,6 +246,8 @@ export function DashboardNav({
   const onPrimaryTabClick = useCallback(() => {
     if (!reduceMotion) triggerIronStackNavTransition()
   }, [reduceMotion])
+
+  const openGuestLock = useCallback(() => setGuestLockOpen(true), [])
 
   useEffect(() => {
     closeMenu()
@@ -292,19 +292,9 @@ export function DashboardNav({
     pathname.startsWith('/dashboard/profile')
 
   const visibleTabs = tabs
-    .filter((tab) => !(isGuest && tab.guestHidden))
-    .map((tab) =>
-      tab.id === 'profile' ? { ...tab, href: profileLinkHref } : tab,
-    )
 
   const visibleSidebarLinks = sidebarLinks.filter(
-    (link) =>
-      !(
-        isGuest &&
-        (link.id === 'messages' ||
-          link.id === 'coach' ||
-          link.id === 'challenges')
-      ),
+    (link) => !(isGuest && (link.id === 'coach')),
   )
 
   const allSidebarLinks: NavLink[] = [
@@ -320,11 +310,11 @@ export function DashboardNav({
 
       <header className="nav-shell sticky top-0 z-50">
         {isGuest ? <GuestBanner /> : null}
-        <div className="mx-auto flex h-12 max-w-7xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-4">
-          <div className="flex min-w-0 items-center gap-1">
+        <div className="mx-auto flex h-12 max-w-7xl items-center gap-1 px-2 sm:h-14 sm:gap-2 sm:px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
             <button
               type="button"
-              className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-silver/15 text-foreground transition-colors active:border-gold/40 active:text-gold"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-silver/15 text-foreground transition-colors active:border-gold/40 active:text-gold sm:size-11"
               aria-expanded={menuOpen}
               aria-controls="site-nav-sidebar"
               aria-label={menuOpen ? t('closeMenu') : t('openMenu')}
@@ -339,22 +329,22 @@ export function DashboardNav({
 
             <Link
               href="/dashboard/home"
-              className="flex min-h-11 min-w-11 shrink-0 items-center gap-2 rounded-lg px-1 transition-opacity active:opacity-70"
+              className="flex min-h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-1 transition-opacity active:opacity-70 sm:min-h-11"
             >
               <IronStackMark size="sm" className="shrink-0" />
-              <span className="font-heading text-metallic text-sm font-bold tracking-[0.2em]">
+              <span className="font-heading text-metallic hidden min-w-0 truncate text-sm font-bold tracking-[0.18em] min-[480px]:inline">
                 IRONSTACK
               </span>
             </Link>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
-            <NotificationBell />
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+            {!isGuest ? <NotificationBell /> : null}
 
             <Link
               href="/dashboard/settings"
               aria-label={t('settings')}
-              className={`inline-flex size-11 items-center justify-center rounded-lg border transition-colors active:opacity-80 ${
+              className={`inline-flex size-10 items-center justify-center rounded-lg border transition-colors active:opacity-80 sm:size-11 ${
                 isSidebarActive(pathname, 'settings', '/dashboard/settings')
                   ? 'border-gold/40 bg-gold-tint text-gold'
                   : 'border-border text-muted-foreground active:border-gold/40 active:text-gold'
@@ -365,7 +355,7 @@ export function DashboardNav({
 
             {onProfile ? (
               <div
-                className="inline-flex size-11 items-center justify-center"
+                className="inline-flex size-10 items-center justify-center sm:size-11"
                 aria-current="page"
               >
                 <NavFace photo={photo} initials={initials} />
@@ -375,7 +365,7 @@ export function DashboardNav({
               <Link
                 href={profileLinkHref}
                 aria-label={t('profile')}
-                className="inline-flex size-11 items-center justify-center rounded-full transition-opacity active:opacity-80"
+                className="inline-flex size-10 items-center justify-center rounded-full transition-opacity active:opacity-80 sm:size-11"
               >
                 <NavFace photo={photo} initials={initials} />
               </Link>
@@ -444,6 +434,18 @@ export function DashboardNav({
                       <link.icon className="size-4" aria-hidden="true" />
                       {label}
                     </span>
+                  ) : isGuest && link.id === 'messages' ? (
+                    <button
+                      type="button"
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-start text-sm font-semibold tracking-[0.12em] text-muted-foreground transition-colors active:bg-silver/10 active:text-foreground"
+                      onClick={() => {
+                        closeMenu()
+                        openGuestLock()
+                      }}
+                    >
+                      <link.icon className="size-4" aria-hidden="true" />
+                      {label}
+                    </button>
                   ) : (
                     <Link
                       href={link.href}
@@ -483,6 +485,20 @@ export function DashboardNav({
                 )
               }
 
+              if (isGuest && tab.guestLock) {
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={className}
+                    onClick={openGuestLock}
+                  >
+                    <Icon className="size-5" aria-hidden="true" />
+                    {label}
+                  </button>
+                )
+              }
+
               return (
                 <Link
                   key={tab.id}
@@ -500,7 +516,47 @@ export function DashboardNav({
         </nav>
       )}
 
-      <FloatingActions />
+      <FloatingActions onGuestMessages={openGuestLock} />
+
+      {guestLockOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-[var(--overlay-scrim)]"
+            aria-label={t('closeMenu')}
+            onClick={() => setGuestLockOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="guest-messages-lock-title"
+            className="is-panel relative z-10 w-full max-w-sm p-5"
+          >
+            <p
+              id="guest-messages-lock-title"
+              className="text-sm leading-relaxed text-foreground"
+            >
+              {tGuest('messagesLocked')}
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Link
+                href="/dashboard/settings"
+                className="btn-pill inline-flex min-h-11 items-center justify-center bg-gold px-4 text-xs font-bold tracking-[0.16em] text-black"
+                onClick={() => setGuestLockOpen(false)}
+              >
+                {tGuest('messagesLockedCta')}
+              </Link>
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center justify-center rounded-full text-xs font-semibold tracking-[0.14em] text-muted-foreground"
+                onClick={() => setGuestLockOpen(false)}
+              >
+                {t('closeMenu')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }

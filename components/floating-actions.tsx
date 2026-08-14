@@ -1,52 +1,86 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bot, Dumbbell } from 'lucide-react'
+import { Bot, Dumbbell, MessageSquare } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useIsGuest } from '@/components/use-is-guest'
 
 /** Hide during an in-progress workout so logging stays full-screen. */
 function shouldHideFloating(pathname: string) {
-  return (
-    pathname.startsWith('/dashboard/ai-coach') ||
-    /\/splits\/[^/]+\/session(?:\/|$)/.test(pathname)
-  )
+  return /\/splits\/[^/]+\/session(?:\/|$)/.test(pathname)
 }
 
-/** Floating AI Coach button pinned above the bottom tab bar. */
-export function FloatingActions() {
+type FloatingActionsProps = {
+  onGuestMessages?: () => void
+}
+
+/** Messages + AI Coach, pinned above the bottom tab bar. */
+export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
   const pathname = usePathname()
   const reduce = useReducedMotion()
   const { isGuest } = useIsGuest()
+  const [mounted, setMounted] = useState(false)
 
-  if (isGuest || shouldHideFloating(pathname)) return null
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  return (
+  if (!mounted || shouldHideFloating(pathname)) return null
+
+  const hideCoach = pathname.startsWith('/dashboard/ai-coach')
+  const hideMessages = pathname.startsWith('/dashboard/messages')
+
+  return createPortal(
     <motion.div
-      className="pointer-events-none fixed end-4 z-40 flex flex-col items-center gap-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom)+0.75rem)] sm:end-6"
+      className="pointer-events-none fixed end-3 z-[55] flex flex-col items-center gap-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom)+0.75rem)] sm:end-6"
       initial={reduce ? false : { opacity: 0, scale: 0.5, y: 24 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ delay: 0.35, type: 'spring', stiffness: 240, damping: 18 }}
+      transition={{ delay: 0.2, type: 'spring', stiffness: 240, damping: 18 }}
     >
-      <Link
-        href="/dashboard/ai-coach"
-        aria-label="Open AI Coach"
-        className="pointer-events-auto group relative inline-flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-[0_8px_30px_-6px_rgba(242,241,237,0.35)] transition-transform duration-200 active:scale-95"
-      >
-        {!reduce && (
-          <motion.span
-            className="absolute inset-0 rounded-full border-2 border-primary/40"
-            animate={{ scale: [1, 1.45], opacity: [0.7, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-            aria-hidden="true"
-          />
-        )}
-        <Bot className="size-7 text-primary-foreground" aria-hidden="true" />
-        <span className="absolute -top-0.5 -end-0.5 flex size-4 items-center justify-center rounded-full border border-background bg-gold">
-          <Dumbbell className="size-2.5 text-background" aria-hidden="true" />
-        </span>
-      </Link>
-    </motion.div>
+      {!hideMessages &&
+        (isGuest ? (
+          <button
+            type="button"
+            aria-label="Messages"
+            onClick={onGuestMessages}
+            className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
+          >
+            <MessageSquare className="size-5" aria-hidden="true" />
+          </button>
+        ) : (
+          <Link
+            href="/dashboard/messages"
+            aria-label="Messages"
+            className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
+          >
+            <MessageSquare className="size-5" aria-hidden="true" />
+          </Link>
+        ))}
+
+      {!hideCoach && (
+        <Link
+          href="/dashboard/ai-coach"
+          aria-label="Open AI Coach"
+          className="pointer-events-auto group relative inline-flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-[0_8px_30px_-6px_rgba(242,241,237,0.35)] transition-transform duration-200 active:scale-95"
+        >
+          {!reduce && (
+            <motion.span
+              className="absolute inset-0 rounded-full border-2 border-primary/40"
+              animate={{ scale: [1, 1.45], opacity: [0.7, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+              aria-hidden="true"
+            />
+          )}
+          <Bot className="size-7 text-primary-foreground" aria-hidden="true" />
+          <span className="absolute -top-0.5 -end-0.5 flex size-4 items-center justify-center rounded-full border border-background bg-gold">
+            <Dumbbell className="size-2.5 text-background" aria-hidden="true" />
+          </span>
+        </Link>
+      )}
+    </motion.div>,
+    document.body,
   )
 }

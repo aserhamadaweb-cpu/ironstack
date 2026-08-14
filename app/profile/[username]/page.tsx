@@ -71,6 +71,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
         initials={initialsFrom(viewerName)}
         profileHref={profileHref(viewerLite.data?.username, userId)}
         avatarUrl={bundle.data.isSelf ? bundle.data.profile.avatar_url : undefined}
+        isGuest={viewerLite.data?.is_guest === true}
       />
       <UnifiedProfileView
         data={bundle.data}

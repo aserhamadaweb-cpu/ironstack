@@ -254,6 +254,7 @@ export default async function WorkoutPage() {
       insight={insight}
       avatarUrl={profile?.avatar_url}
       profileHref={profileHref(profile?.username, userId)}
+      isGuest={profile?.is_guest === true}
       celebrations={celebrations.map((c) => ({
         id: c.id,
         title: c.title,

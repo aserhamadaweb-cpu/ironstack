@@ -40,8 +40,6 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
       const standalone = isStandaloneDisplay()
 
       if (!standalone) {
-        // Temporary — verify in DevTools that browser tabs hit this path.
-        console.log('standalone:', false, 'session:', null)
         if (!cancelled) setChecking(false)
         return
       }
@@ -52,13 +50,10 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
         if (cancelled) return
 
         const session = data.session
-        // Temporary — verify in DevTools that installed launches hit this path.
-        console.log('standalone:', true, 'session:', !!session)
 
         // Hard navigation so we never leave marketing in history or soft-nav back.
         window.location.replace(session ? '/dashboard' : '/login')
-      } catch (err) {
-        console.log('standalone:', true, 'session:', false, 'error:', err)
+      } catch {
         if (!cancelled) window.location.replace('/login')
       }
     }

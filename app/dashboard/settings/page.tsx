@@ -63,6 +63,7 @@ export default async function SettingsPage() {
         initials={initialsFrom(displayName)}
         profileHref={profileHref(profileResult.data?.username, userId)}
         avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
       />
       <SettingsPageClient
         email={email ?? ''}

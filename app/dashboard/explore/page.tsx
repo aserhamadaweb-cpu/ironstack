@@ -29,6 +29,7 @@ export default async function ExplorePage() {
         userName={displayName}
         initials={initialsFrom(displayName)}
         profileHref={profileHref(profileResult.data?.username, userId)}
+        isGuest={profileResult.data?.is_guest === true}
       />
       <main className="pb-24 md:pb-8">
         <ExplorePageClient

@@ -15,9 +15,10 @@
     "profile": "PROFILE",
     "tabHome": "Home",
     "tabWorkout": "Train",
-    "tabMessages": "Chat",
+    "tabMessages": "Messages",
     "tabChallenges": "Challenges",
     "tabProfile": "You",
+    "jumpAchievements": "Achievements",
     "menu": "MENU",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
@@ -320,7 +321,10 @@
     "completeKicker": "ALMOST THERE",
     "completeTitle": "Complete your profile",
     "completeBody": "Pick a username and add your body stats so friends can find you and training stays accurate.",
-    "completeSubmit": "CONTINUE"
+    "completeSubmit": "CONTINUE",
+    "accountLabel": "Guest account",
+    "messagesLocked": "Create an account to send messages",
+    "messagesLockedCta": "CREATE ACCOUNT"
   },
   "profile": {
     "kicker": "PROFILE",

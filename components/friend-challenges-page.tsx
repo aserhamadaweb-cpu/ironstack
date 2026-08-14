@@ -284,7 +284,7 @@ export function FriendChallengesPage({
           <button
             type="button"
             onClick={() => setShowForm((v) => !v)}
-            className={`shrink-0 px-5 ${CTA_PRIMARY}`}
+            className={`w-full shrink-0 px-5 sm:w-auto ${CTA_PRIMARY}`}
           >
             {showForm ? tCommon('cancel') : t('newChallenge')}
           </button>

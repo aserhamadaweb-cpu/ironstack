@@ -26,6 +26,14 @@ import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import type { WeightUnit } from '@/lib/units'
 
+function isPlaceholderGuestEmail(email: string) {
+  const value = email.trim()
+  if (!value) return false
+  if (/^guest[0-9a-f]+@/i.test(value)) return true
+  const at = value.indexOf('@')
+  return at >= 0 && !value.slice(at + 1).includes('.')
+}
+
 type WeekDay = { day: string; done: boolean }
 
 type FriendAvatar = {
@@ -41,6 +49,7 @@ type HomeDashboardProps = {
   displayName: string
   email: string
   username?: string
+  isGuest?: boolean
   weekActivity: WeekDay[]
   weekSessionCount: number
   streakDays: number
@@ -67,6 +76,7 @@ export function HomeDashboard({
   displayName,
   email,
   username,
+  isGuest: isGuestProp = false,
   weekActivity,
   weekSessionCount,
   streakDays,
@@ -83,16 +93,14 @@ export function HomeDashboard({
   const t = useTranslations('home')
   const tCommon = useTranslations('common')
   const tNav = useTranslations('nav')
-  const { isGuest } = useIsGuest()
+  const tGuest = useTranslations('guest')
+  const { isGuest: isGuestClient } = useIsGuest()
+  const isGuest = isGuestProp || isGuestClient
   const [discordNotice, setDiscordNotice] = useState<string | null>(null)
-  const handle =
-    username ||
-    displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') ||
-    'athlete'
   const firstName = displayName.trim().split(/\s+/)[0] || displayName
 
   return (
-    <div className="relative min-h-svh overflow-x-clip">
+    <div className="relative min-h-svh">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         <div className="absolute inset-x-0 top-0 h-[70svh] [mask-image:linear-gradient(to_bottom,black_15%,transparent)]">
           <Image
@@ -113,6 +121,7 @@ export function HomeDashboard({
         initials={initialsFrom(displayName)}
         profileHref={profileHref(username, currentUserId)}
         avatarUrl={avatarUrl}
+        isGuest={isGuest}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">
@@ -139,10 +148,20 @@ export function HomeDashboard({
                 <h1 className="font-heading mt-1 text-2xl font-bold tracking-tight text-headline sm:text-4xl">
                   {t('hey', { name: firstName })}
                 </h1>
-                <p className="mt-1 truncate text-sm text-muted-foreground">
-                  @{handle}
-                  <span className="mx-2 text-muted-foreground">·</span>
-                  <span className="hidden sm:inline">{email}</span>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {isGuest || isPlaceholderGuestEmail(email) ? (
+                    tGuest('accountLabel')
+                  ) : (
+                    <>
+                      {username ? `@${username}` : null}
+                      {username && email ? (
+                        <span className="mx-2 text-muted-foreground">·</span>
+                      ) : null}
+                      {email ? (
+                        <span className="hidden break-all sm:inline">{email}</span>
+                      ) : null}
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -155,7 +174,7 @@ export function HomeDashboard({
                 className="btn-pill btn-pill-ghost inline-flex min-h-11 items-center gap-1 px-0 text-xs"
               >
                 {tCommon('viewFullProfile')}
-                <ChevronRight className="size-3.5 rtl-flip" aria-hidden="true" />
+                <ChevronRight className="size-3.5" aria-hidden="true" />
               </Link>
             </div>
           </div>
@@ -188,7 +207,7 @@ export function HomeDashboard({
                 },
                 {
                   href: '/dashboard/achievements',
-                  label: tNav('achievements'),
+                  label: tNav('jumpAchievements'),
                   icon: Medal,
                 },
                 ...(!isGuest
@@ -251,14 +270,14 @@ export function HomeDashboard({
 
         <section className="mb-8 sm:mb-10">
           <article className="is-panel p-5 sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="section-kicker">{t('thisWeek')}</p>
                 <h2 className="font-heading mt-1 text-xl font-bold text-headline">
                   {t('recentActivity')}
                 </h2>
               </div>
-              <span className="inline-flex items-center gap-1.5 rounded-full border badge-heat px-3 py-1 text-[10px] font-semibold tabular-nums">
+              <span className="inline-flex max-w-full shrink-0 items-center gap-1.5 rounded-full border badge-heat px-3 py-1 text-[10px] font-semibold tabular-nums">
                 <Activity className="size-3" aria-hidden="true" />
                 {weekSessionCount}{' '}
                 {tCommon('sessions', { count: weekSessionCount })}

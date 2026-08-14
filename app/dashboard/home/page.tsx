@@ -153,6 +153,7 @@ export default async function HomePage() {
       displayName={displayName}
       email={email ?? ''}
       username={username}
+      isGuest={profile?.is_guest === true}
       weekActivity={weekActivity}
       weekSessionCount={weekSessionCount}
       streakDays={streak}
