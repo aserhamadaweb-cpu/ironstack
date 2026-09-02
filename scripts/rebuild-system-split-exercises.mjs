@@ -1,5 +1,5 @@
 /**
- * Rebuild exercise lists for the 3 system splits using data/data/exercises.json
+ * Rebuild exercise lists for the 3 system splits using data/exercises-dataset/exercises.json
  * as the source of truth. Reuses existing lift_types by case-insensitive name
  * (and known aliases); inserts only genuinely new system lifts.
  *
@@ -83,9 +83,20 @@ const REUSE_ALIASES = {
   'Dips - Triceps Version': ['Dip'],
 }
 
-const exercises = JSON.parse(
-  readFileSync(resolve(root, 'data/data/exercises.json'), 'utf8'),
-)
+const CATALOG_PATH = resolve(root, 'data/exercises-dataset/exercises.json')
+
+function loadCatalogRows() {
+  const raw = JSON.parse(readFileSync(CATALOG_PATH, 'utf8'))
+  return raw.map((row) => ({
+    id: row.id,
+    name: row.name,
+    category: row.category || 'strength',
+    primaryMuscles: [row.target || row.muscle_group].filter(Boolean),
+    images: row.image ? [String(row.image).replace(/^images\//, '')] : [],
+  }))
+}
+
+const exercises = loadCatalogRows()
 const byName = new Map(exercises.map((e) => [e.name.toLowerCase(), e]))
 
 function fileEntry(name) {

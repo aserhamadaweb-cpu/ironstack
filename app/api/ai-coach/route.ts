@@ -283,7 +283,11 @@ export async function POST(request: Request) {
     const memoryBlock = [
       formatMemoriesForPrompt(memories),
       splitContext
-        ? formatSplitContextForPrompt(splitContext.preferences, splitContext.slots)
+        ? formatSplitContextForPrompt(
+            splitContext.preferences,
+            splitContext.slots,
+            splitContext.profileInput,
+          )
         : '',
       reviseProposal ? formatProposalForRevision(reviseProposal) : '',
     ]

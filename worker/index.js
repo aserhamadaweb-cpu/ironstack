@@ -53,8 +53,7 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-/* App shell: precache the offline document so a cold launch with no network
- * can still render. next-pwa only precaches hashed JS/CSS, not HTML routes. */
+/* App shell: precache offline assets only — never HTML route documents. */
 const SHELL_CACHE = 'pages'
 const SHELL_URLS = [
   '/offline',
@@ -63,6 +62,8 @@ const SHELL_URLS = [
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
 ]
+
+const NAV_NETWORK_TIMEOUT_MS = 25_000
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -78,36 +79,50 @@ self.addEventListener('install', (event) => {
   )
 })
 
-async function matchCached(request) {
-  const exact = await caches.match(request, { ignoreSearch: true })
-  if (exact) return exact
-  const url = new URL(request.url)
-  return caches.match(url.pathname, { ignoreSearch: true })
-}
+/** Drop stale cached HTML from older builds — only keep the offline shell assets. */
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then(async (cache) => {
+      const keys = await cache.keys()
+      await Promise.all(
+        keys
+          .filter((req) => {
+            try {
+              const path = new URL(req.url).pathname
+              return (
+                path !== '/offline' &&
+                !path.endsWith('.json') &&
+                !path.startsWith('/icons/')
+              )
+            } catch {
+              return true
+            }
+          })
+          .map((req) => cache.delete(req)),
+      )
+    }),
+  )
+})
 
 async function navigationResponse(request) {
+  const reqUrl = new URL(request.url)
+
   try {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 10_000)
+    const timer = setTimeout(() => controller.abort(), NAV_NETWORK_TIMEOUT_MS)
     const response = await fetch(request, { signal: controller.signal })
     clearTimeout(timer)
     if (response && (response.ok || response.type === 'opaqueredirect')) {
-      if (response.ok) {
-        const cache = await caches.open(SHELL_CACHE)
-        void cache.put(request, response.clone())
-      }
+      // Never cache HTML navigations — stale documents caused route reverts on slow networks.
       return response
     }
   } catch {
-    /* offline or timeout */
+    /* offline, timeout, or network error */
   }
 
-  const cached = await matchCached(request)
-  if (cached) return cached
-
+  // Network unavailable: show the offline shell with return path — never a stale cached page.
   const offline = await caches.match('/offline', { ignoreSearch: true })
   if (offline) {
-    const reqUrl = new URL(request.url)
     if (reqUrl.pathname !== '/offline') {
       const dest = new URL('/offline', request.url)
       const ret = reqUrl.pathname + reqUrl.search

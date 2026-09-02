@@ -1,5 +1,5 @@
 /**
- * Validate the imported Gym visual catalog without deleting the old 873 JSON.
+ * Validate the imported Gym visual catalog (1,324 exercises).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -36,8 +36,6 @@ function main() {
   const identity = JSON.parse(
     fs.readFileSync(path.join(root, 'data', 'exercises-dataset', 'identity-map.json'), 'utf8'),
   )
-  const oldPath = path.join(root, 'data', 'data', 'exercises.json')
-  const oldCatalog = JSON.parse(fs.readFileSync(oldPath, 'utf8'))
   const slim = JSON.parse(
     fs.readFileSync(path.join(root, 'public', 'offline', 'exercises.json'), 'utf8'),
   )
@@ -105,15 +103,13 @@ function main() {
     publicGifs: gifFiles.size,
     slimCount: slim.length,
     brokenSlim: brokenSlim.slice(0, 10),
-    oldCatalogKept: oldCatalog.length,
     matchedOldExercises: identity.matchedCount,
     newExercises: identity.newCount,
     unmatchedOldExercises: identity.unmatchedOldCount,
-    oldCatalogSafeToDelete: false,
     notes: [
-      'Old catalog data/data/exercises.json was not deleted.',
+      'Legacy 873-exercise JSON removed; identity-map.json preserves old slug mappings.',
       'lift_types UUIDs are not modified by this filesystem validation.',
-      'Run npm run seed:exercises to insert unmatched catalog rows without changing existing ids.',
+      'Run npm run seed:exercise-identities to insert unmatched catalog rows without changing existing ids.',
     ],
   }
 
@@ -128,8 +124,7 @@ function main() {
     droppedFields.length === 0 &&
     missingLangs.length === 0 &&
     slim.length === EXPECTED &&
-    brokenSlim.length === 0 &&
-    oldCatalog.length > 0
+    brokenSlim.length === 0
 
   fs.writeFileSync(
     path.join(root, 'data', 'exercises-dataset', 'validation-report.json'),

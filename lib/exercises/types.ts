@@ -21,7 +21,7 @@ export type LocalizedText = Record<string, string>
 export type LocalizedSteps = Record<string, string[]>
 
 /**
- * Complete source record from data/exercises.json.
+ * Complete source record from data/exercises-dataset/exercises.json.
  * extra fields are kept so a schema addition is not silently dropped.
  */
 export type SourceExercise = {

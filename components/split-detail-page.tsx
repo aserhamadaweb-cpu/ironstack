@@ -330,47 +330,24 @@ export function SplitDetailPage({
               <div className="flex flex-col gap-2.5">
                 {day.exercises.map((exercise, index) => {
                   const detailRef = splitExerciseDetailRef(exercise)
-                  const openable = Boolean(detailRef)
+                  if (!detailRef) return null
                   return (
-                  <motion.article
-                    key={exercise.id}
-                    variants={row}
-                    role={openable ? 'button' : undefined}
-                    tabIndex={openable ? 0 : undefined}
-                    onClick={
-                      openable
-                        ? () => setSelectedExercise(detailRef)
-                        : undefined
-                    }
-                    onKeyDown={
-                      openable
-                        ? (event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              setSelectedExercise(detailRef)
-                            }
-                          }
-                        : undefined
-                    }
-                    aria-label={
-                      openable
-                        ? `${tCatalog('viewDetails')}: ${exercise.name}`
-                        : undefined
-                    }
-                    className={`group rounded-2xl border border-silver/10 bg-card/50 p-3 transition-all duration-200 sm:p-4 ${
-                      openable
-                        ? 'cursor-pointer hover:-translate-y-0.5 hover:border-silver/25 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40'
-                        : ''
-                    }`}
-                  >
-                    <ExerciseCard
-                      index={index}
-                      name={exercise.name}
-                      muscles={[exercise.muscle]}
-                      image={exercise.image}
-                      setsReps={`${exercise.sets} sets × ${exercise.reps} reps`}
-                    />
-                  </motion.article>
+                  <motion.div key={exercise.id} variants={row}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExercise(detailRef)}
+                      aria-label={`${tCatalog('viewDetails')}: ${exercise.name}`}
+                      className="group w-full rounded-2xl border border-silver/10 bg-card/50 p-3 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-silver/25 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:p-4"
+                    >
+                      <ExerciseCard
+                        index={index}
+                        name={exercise.name}
+                        muscles={[exercise.muscle]}
+                        image={exercise.image}
+                        setsReps={`${exercise.sets} sets × ${exercise.reps} reps`}
+                      />
+                    </button>
+                  </motion.div>
                   )
                 })}
               </div>

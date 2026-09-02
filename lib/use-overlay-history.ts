@@ -66,12 +66,8 @@ export function useOverlayHistory(options: {
 
   useEffect(() => {
     return () => {
-      const depth = depthRef.current
-      if (depth > 0) {
-        ignorePopsRef.current = depth
-        depthRef.current = 0
-        history.go(-depth)
-      }
+      // Route changes unmount overlays; popping history here reverts the user's navigation.
+      depthRef.current = 0
     }
   }, [])
 
@@ -111,17 +107,15 @@ export function useDetailsLayerHistory(options: {
   onCloseRef.current = onClose
 
   useEffect(() => {
-    if (!open) {
-      depthRef.current = 0
-      return
-    }
+    if (!open) return
     if (depthRef.current >= 1) return
-    const frame = window.requestAnimationFrame(() => {
-      if (depthRef.current >= 1 || !open) return
-      history.pushState({ ...history.state, [STATE_KEY]: 'details' as OverlayLayer }, '')
-      depthRef.current = 1
-    })
-    return () => window.cancelAnimationFrame(frame)
+    history.pushState({ ...history.state, [STATE_KEY]: 'details' as OverlayLayer }, '')
+    depthRef.current = 1
+  }, [open])
+
+  useEffect(() => {
+    if (open) return
+    depthRef.current = 0
   }, [open])
 
   useEffect(() => {

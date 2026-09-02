@@ -128,7 +128,7 @@ export function ExerciseLibraryOverlay({
     setDetailStatus('loading')
     setDetail(null)
     setDetailsAdded(false)
-    void loadExerciseDetail(detailsId)
+    void loadExerciseDetail(detailsId, byId.get(detailsId)?.name)
       .then((data) => {
         if (cancelled) return
         if (!data) {

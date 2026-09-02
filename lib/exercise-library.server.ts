@@ -1,5 +1,4 @@
 import type { LibraryExercise } from '@/lib/exercise-library'
-import { parseExerciseDataset } from '@/lib/exercise-library'
 import type { MuscleGroup, SplitDetail } from '@/lib/split-data'
 import { exerciseToLibraryExercise } from '@/lib/exercises/adapters'
 import {
@@ -9,20 +8,10 @@ import {
 import { SPLIT_LIBRARY_ALIASES } from '@/lib/exercises/identity'
 import { normalizeKey } from '@/lib/exercises/normalizers'
 import { gifUrlFromImageUrl } from '@/lib/exercises/paths'
-import fs from 'node:fs'
-import path from 'node:path'
-
-function readLegacyDataset(): LibraryExercise[] {
-  const file = path.join(process.cwd(), 'data', 'data', 'exercises.json')
-  if (!fs.existsSync(file)) return []
-  return parseExerciseDataset(JSON.parse(fs.readFileSync(file, 'utf8')))
-}
 
 /** Reads the Gym visual 1,324-exercise catalog (server-side only). */
 export function loadExerciseLibrary(): LibraryExercise[] {
-  const catalog = loadExerciseCatalog()
-  if (catalog.length > 0) return catalog.map(exerciseToLibraryExercise)
-  return readLegacyDataset()
+  return loadExerciseCatalog().map(exerciseToLibraryExercise)
 }
 
 let libraryById: Map<string, LibraryExercise> | null = null

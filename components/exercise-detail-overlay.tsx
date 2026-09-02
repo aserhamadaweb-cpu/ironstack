@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { ExerciseDetailView } from '@/components/exercise-detail-view'
@@ -22,8 +23,13 @@ export function ExerciseDetailOverlay({
   backLabel,
 }: ExerciseDetailOverlayProps) {
   const tCatalog = useTranslations('exerciseCatalog')
+  const [mounted, setMounted] = useState(false)
   const [detail, setDetail] = useState<ExerciseDetailDto | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const close = useCallback(() => {
     onClose()
@@ -35,6 +41,15 @@ export function ExerciseDetailOverlay({
     open: Boolean(exerciseId),
     onClose: close,
   })
+
+  useEffect(() => {
+    if (!exerciseId) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [exerciseId])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -73,11 +88,11 @@ export function ExerciseDetailOverlay({
     }
   }, [exerciseId, exerciseName])
 
-  if (!exerciseId) return null
+  if (!exerciseId || !mounted) return null
 
-  return (
+  return createPortal(
     <motion.div
-      className="fixed inset-0 z-[70] flex flex-col bg-background"
+      className="fixed inset-0 z-[100] flex flex-col bg-background"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 16 }}
@@ -86,7 +101,7 @@ export function ExerciseDetailOverlay({
       aria-modal="true"
       aria-label={tCatalog('viewDetails')}
     >
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
         {status === 'loading' ? (
           <p className="m-auto text-sm text-muted-foreground">
             {tCatalog('loading')}
@@ -112,6 +127,7 @@ export function ExerciseDetailOverlay({
           />
         )}
       </div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   )
 }

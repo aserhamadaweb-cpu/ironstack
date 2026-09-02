@@ -49,14 +49,7 @@ const withPWA = withPWAInit({
           cacheableResponse: { statuses: [0, 200] },
         },
       },
-      {
-        urlPattern: ({ request }) => request.mode === 'navigate',
-        handler: 'NetworkFirst',
-        options: {
-          cacheName: 'pages',
-          networkTimeoutSeconds: 10,
-        },
-      },
+      // Document navigations are handled in worker/index.js (network-only, no stale HTML cache).
       {
         urlPattern: /\/_next\/static\/.*/i,
         handler: 'CacheFirst',

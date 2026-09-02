@@ -5,7 +5,7 @@
  * - public/offline/exercises.json (slim picker catalog)
  * - data/exercises-dataset/identity-map.json
  *
- * Does not delete data/data/exercises.json (old 873 catalog).
+ * Preserves data/exercises-dataset/identity-map.json when the legacy 873 JSON is gone.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -330,11 +330,17 @@ function main() {
     }
   }
 
+  const identityPath = path.join(destData, 'identity-map.json')
   const oldPath = path.join(root, 'data', 'data', 'exercises.json')
   const oldCatalog = fs.existsSync(oldPath)
     ? JSON.parse(fs.readFileSync(oldPath, 'utf8'))
     : []
-  const identity = buildIdentityMap(source, oldCatalog)
+  const identity =
+    oldCatalog.length > 0
+      ? buildIdentityMap(source, oldCatalog)
+      : fs.existsSync(identityPath)
+        ? JSON.parse(fs.readFileSync(identityPath, 'utf8'))
+        : buildIdentityMap(source, [])
   fs.writeFileSync(
     path.join(destData, 'identity-map.json'),
     JSON.stringify(identity, null, 2),
@@ -364,7 +370,7 @@ function main() {
     matchedOldExercises: identity.matchedCount,
     newExercises: identity.newCount,
     unmatchedOldExercises: identity.unmatchedOldCount,
-    oldCatalogKept: fs.existsSync(oldPath),
+    identityMapPreserved: oldCatalog.length === 0 && fs.existsSync(identityPath),
   }
   fs.writeFileSync(
     path.join(destData, 'import-report.json'),

@@ -1,9 +1,9 @@
 /** Client-safe split-build intent detection (no server imports). */
 
 const SPLIT_ACTION =
-  /\b(create|build|make|design|add|save|generate|draft|plan)\b/i
+  /\b(create|build|make|design|add|save|generate|draft|plan|give|write)\b/i
 const SPLIT_NOUN =
-  /\b(split|splits|ppl|push[\s-]?pull[\s-]?legs?|upper[\s-]?lower|bro[\s-]?split|workout plan|training plan)\b/i
+  /\b(split|splits|ppl|push[\s-]?pull[\s-]?legs?|upper[\s-]?lower|bro[\s-]?split|workout plan|training plan|workout program|training program|workout routine|program|routine)\b/i
 const PROGRAM_WITH_SCHEDULE =
   /\b(\d+\s*-?\s*)?(day|days|days\/week|days per week)\b/i
 const SPLIT_CONTEXT =
@@ -18,6 +18,13 @@ export function isSplitBuildIntent(
   const lower = text.toLowerCase()
 
   if (SPLIT_ACTION.test(lower) && (SPLIT_NOUN.test(lower) || PROGRAM_WITH_SCHEDULE.test(lower))) {
+    return true
+  }
+
+  if (
+    /\b(workout|program|routine|split)\b/i.test(lower) &&
+    /\b(for me|for my|can you|could you|please|i want|i need|help me)\b/i.test(lower)
+  ) {
     return true
   }
 

@@ -8,14 +8,14 @@ Style:
 - When durable memory facts are provided below, honor them in advice (e.g. avoid exercises that conflict with an injury note) without lecturing every turn.
 
 Catalog:
-- The only legal exercises are rows returned by search_exercises / get_exercise_details (the app's 1,324-exercise catalog).
-- Always pass real catalog exercise_id values into propose_split / propose_update_split. Never invent names, ids, equipment, or instructions.
+- Exercises must exist in the IronStack catalog. Pass exercise **name** (e.g. "Barbell Bench Press", "Lat Pulldown", "Leg Press") or catalog exercise_id — the server resolves names automatically.
+- Never invent exercise names that are not in the catalog. If propose_split returns an unknown exercise error, retry with a clearer catalog-style name or call search_exercises once.
 
 Taking action (splits and workouts):
 - You cannot save, edit, start, finish, or discard anything by talking. You only build PREVIEW proposals via tools.
 - Never tell the athlete a split was saved, a session started, or a session discarded unless they already confirmed in the app UI.
 - When they ask to create, build, add, or save a split/program to the app: call propose_split once with exercise **name** fields (server resolves to catalog ids). Only use search_exercises if propose_split returns an unknown exercise error.
-- Create split flow: skip get_user_workout_preferences when split context is already pre-loaded in the prompt. If has_best_exercises is false, ASK days/week, equipment, and avoids — do not pretend you know their favorites. Then propose_split directly — not many search_exercises rounds.
+- Create split flow: profile defaults are pre-loaded in split context when available — use them. Call propose_split directly with a complete plan; do not stall with long Q&A unless days or equipment are genuinely missing from context.
 - Edit flow (saved split in the app): get_user_splits once, then propose_update_split with operations.
 - Revise flow (gold preview card, NOT saved yet): the pending plan is provided in context. Call propose_split with the FULL updated plan — merge the athlete's edits into the existing days/exercises. Do NOT call get_user_splits or propose_update_split for unsaved previews.
 - After propose_split / propose_update_split / propose_session_action returns pending_confirmation, STOP calling tools and reply in plain text pointing them to the preview card.
@@ -93,7 +93,7 @@ export function buildCoachSystemPrompt(
     )
   } else if (options?.splitBuildMode) {
     parts.push(
-      'This turn is split-building. Use the FAST PATH above: one propose_split call with exercise names, no catalog search tools unless validation fails.',
+      'This turn is split-building. You MUST call propose_split once in your first tool round with a complete plan. Use profile defaults from context when the athlete did not specify days, equipment, or goals. Pass standard English exercise names — the server resolves them. Do not reply with only a text workout plan.',
     )
   }
   if (locale === 'ar') parts.push(ARABIC_RESPONSE_RULE)

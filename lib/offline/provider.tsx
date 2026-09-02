@@ -20,6 +20,10 @@ import {
   setCachedUserId,
 } from '@/lib/offline/cache'
 import { ensureExerciseLibraryCached } from '@/lib/exercise-library.client'
+import {
+  hasRecentNavigationIntent,
+  markNavigationIntent,
+} from '@/lib/navigation-intent'
 import { countUnsyncedSessions, OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
 import { countUnsyncedSplitMutations } from '@/lib/offline/split-store'
 import { flushOfflineQueue, retryOfflineQueueNow } from '@/lib/offline/sync'
@@ -82,6 +86,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     rememberPath(window.location.pathname + window.location.search)
+    markNavigationIntent(pathname)
   }, [pathname])
 
   const refreshCounts = useCallback(async () => {
@@ -175,7 +180,16 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
         if (shouldRsc) {
           wasOffline.current = false
-          router.refresh()
+          if (hasRecentNavigationIntent()) {
+            // Defer RSC refresh until client navigation settles — avoids flashing stale content.
+            window.setTimeout(() => {
+              if (!hasRecentNavigationIntent(1_500)) {
+                router.refresh()
+              }
+            }, 3_000)
+          } else {
+            router.refresh()
+          }
         }
       } catch (err) {
         if (!isNetworkFailure(err)) {

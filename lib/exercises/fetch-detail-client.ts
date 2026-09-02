@@ -18,7 +18,7 @@ export async function loadExerciseDetail(
   try {
     const response = await fetch(url, {
       credentials: 'same-origin',
-      cache: 'force-cache',
+      cache: 'no-store',
     })
     if (!response.ok) return null
     return (await response.json()) as ExerciseDetailDto

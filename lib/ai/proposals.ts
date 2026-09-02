@@ -1,6 +1,13 @@
 import { getExerciseById } from '@/lib/exercises/catalog'
 import { isHomeEquipment } from '@/lib/exercises/home-workouts'
-import { catalogExerciseToLibrary, resolveCatalogId, searchCatalogExercises } from '@/lib/ai/catalog-lookup'
+import {
+  aliasSearchQuery,
+  catalogExerciseToLibrary,
+  pickBestCatalogMatch,
+  resolveCatalogId,
+  resolveExerciseIdAlias,
+  searchCatalogExercises,
+} from '@/lib/ai/catalog-lookup'
 import type {
   SplitProposal,
   SplitProposalDay,
@@ -63,13 +70,29 @@ function hydrateExercise(
   const nameRaw = String(raw.name ?? '').trim()
   let resolved = resolveCatalogId(idRaw || nameRaw)
   if (!resolved.id && nameRaw) {
-    const hits = searchCatalogExercises({ query: nameRaw, limit: 5 })
+    const idAlias = resolveExerciseIdAlias(nameRaw)
+    if (idAlias && getExerciseById(idAlias)) {
+      resolved = { id: idAlias, matches: [] }
+    }
+  }
+  if (!resolved.id && nameRaw) {
+    const searchQuery = aliasSearchQuery(nameRaw)
+    const hits = searchCatalogExercises({ query: searchQuery, limit: 12 })
     if (hits.length === 1) {
       resolved = { id: hits[0].id, matches: [] }
     } else if (hits.length > 1) {
       const key = normalizeKey(nameRaw)
       const exact = hits.find((hit) => normalizeKey(hit.name) === key)
-      if (exact) resolved = { id: exact.id, matches: [] }
+      if (exact) {
+        resolved = { id: exact.id, matches: [] }
+      } else {
+        const picked = pickBestCatalogMatch(nameRaw, hits, { homeOnly })
+        if (picked) resolved = { id: picked.id, matches: [] }
+      }
+    } else if (searchQuery !== nameRaw) {
+      const retryHits = searchCatalogExercises({ query: nameRaw, limit: 12 })
+      const picked = pickBestCatalogMatch(nameRaw, retryHits, { homeOnly })
+      if (picked) resolved = { id: picked.id, matches: [] }
     }
   }
   if (!resolved.id) {

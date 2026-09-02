@@ -14,11 +14,9 @@
   "publicGifs": 1324,
   "slimCount": 1324,
   "brokenSlim": [],
-  "oldCatalogKept": 873,
   "matchedOldExercises": 141,
   "newExercises": 1183,
   "unmatchedOldExercises": 732,
-  "oldCatalogSafeToDelete": false,
   "database": {
     "existingBefore": 881,
     "matchedExisting": 142,
@@ -29,7 +27,7 @@
     "rowsDeleted": 0
   },
   "notes": [
-    "Old catalog data/data/exercises.json was not deleted and should stay until a later cleanup.",
+    "Legacy data/data/exercises.json (873 exercises) removed; identity-map.json keeps old slug mappings.",
     "Existing lift_types UUIDs were not changed or deleted.",
     "142 existing rows were matched by slug/name; only image_url was updated to local thumbnails.",
     "1182 new lift_types rows were inserted for unmatched catalog exercises.",

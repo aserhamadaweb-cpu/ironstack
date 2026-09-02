@@ -31,6 +31,7 @@ import { GuestBanner } from '@/components/guest-banner'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { IronStackMark } from '@/components/ironstack-mark'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
+import { useGuardedNavigation } from '@/lib/use-guarded-navigation'
 import { NotificationBell } from '@/components/notification-bell'
 import { OfflineStatusBadges } from '@/components/offline-status-badges'
 import { useIsGuest } from '@/components/use-is-guest'
@@ -294,6 +295,7 @@ export function DashboardNav({
   const floorMode = hydrated && !online
   const isGuest = Boolean(isGuestProp) || isGuestClient
   const { openUpgrade } = useGuestGate()
+  const { onNavClick } = useGuardedNavigation()
   const hideTabBar = shouldHideTabBar(pathname)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -584,7 +586,10 @@ export function DashboardNav({
                       href={link.href}
                       data-tour={tourAttr}
                       className="flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm font-semibold tracking-[0.12em] text-muted-foreground transition-colors active:bg-silver/10 active:text-foreground lg:hover:bg-silver/10 lg:hover:text-foreground"
-                      onClick={closeMenu}
+                      onClick={(e) => {
+                        onNavClick(link.href, e)
+                        closeMenu()
+                      }}
                     >
                       <link.icon className="size-4" aria-hidden="true" />
                       {label}
@@ -634,7 +639,10 @@ export function DashboardNav({
                   data-tour={tourAttr}
                   className={className}
                   prefetch
-                  onClick={onPrimaryTabClick}
+                  onClick={(e) => {
+                    onNavClick(href, e)
+                    onPrimaryTabClick()
+                  }}
                 >
                   <Icon className="size-5" aria-hidden="true" />
                   {label}

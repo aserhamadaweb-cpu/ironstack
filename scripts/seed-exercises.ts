@@ -39,8 +39,32 @@ type RawExercise = {
   id: string
   name: string
   category: string
+  target?: string
+  muscle_group?: string
+  image?: string
+  /** Legacy free-exercise-db shape */
   primaryMuscles?: string[]
   images?: string[]
+}
+
+const CATALOG_PATH = resolve(root, 'data/exercises-dataset/exercises.json')
+
+function loadCatalogExercises(): RawExercise[] {
+  const raw = JSON.parse(readFileSync(CATALOG_PATH, 'utf8')) as Array<
+    Record<string, unknown>
+  >
+  return raw.map((row) => ({
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    category: String(row.category ?? 'strength'),
+    target: typeof row.target === 'string' ? row.target : undefined,
+    muscle_group: typeof row.muscle_group === 'string' ? row.muscle_group : undefined,
+    image: typeof row.image === 'string' ? row.image : undefined,
+    primaryMuscles: Array.isArray(row.primaryMuscles)
+      ? (row.primaryMuscles as string[])
+      : undefined,
+    images: Array.isArray(row.images) ? (row.images as string[]) : undefined,
+  }))
 }
 
 type LiftRow = {
@@ -82,7 +106,14 @@ function slugFromId(id: string): string {
 }
 
 function muscleGroupOf(exercise: RawExercise): string {
-  const raw = (exercise.primaryMuscles?.[0] || '').toLowerCase().trim()
+  const raw = (
+    exercise.primaryMuscles?.[0] ||
+    exercise.target ||
+    exercise.muscle_group ||
+    ''
+  )
+    .toLowerCase()
+    .trim()
   if (!raw) return 'OTHER'
   return MUSCLE_MAP[raw] ?? raw.replace(/\s+/g, '_').toUpperCase()
 }
@@ -93,6 +124,10 @@ function categoryOf(exercise: RawExercise): string {
 }
 
 function imageUrlOf(exercise: RawExercise): string | null {
+  if (exercise.image?.startsWith('/')) return exercise.image
+  if (exercise.image?.startsWith('images/')) {
+    return `/exercises/${exercise.image}`
+  }
   const path = exercise.images?.[0]
   return path ? `${IMAGE_BASE}/${path}` : null
 }
@@ -121,11 +156,9 @@ async function main() {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
   }
 
-  const exercises = JSON.parse(
-    readFileSync(resolve(root, 'data/data/exercises.json'), 'utf8'),
-  ) as RawExercise[]
+  const exercises = loadCatalogExercises()
 
-  console.log(`Loaded ${exercises.length} exercises from data/data/exercises.json`)
+  console.log(`Loaded ${exercises.length} exercises from data/exercises-dataset/exercises.json`)
 
   const rows = exercises.map((ex, i) => toRow(ex, i))
   const bySlug = new Map(rows.map((r) => [r.slug, r]))
