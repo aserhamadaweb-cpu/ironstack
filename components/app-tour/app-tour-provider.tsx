@@ -50,6 +50,13 @@ function pathReadyForStep(pathname: string, href: string | null) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+function syncStepToPathname(pathname: string): number | null {
+  const matchIdx = APP_TOUR_STEPS.findIndex(
+    (s) => s.href && pathReadyForStep(pathname, s.href),
+  )
+  return matchIdx >= 0 ? matchIdx : null
+}
+
 export function AppTourProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -107,23 +114,36 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const goToStep = useCallback(
     (
       nextStep: number,
-      options?: { persist?: boolean; status?: AppTourStatus },
+      options?: {
+        persist?: boolean
+        status?: AppTourStatus
+        /** Only true for explicit Next/Back — never auto-navigate on bootstrap. */
+        navigate?: boolean
+      },
     ) => {
       const clamped = Math.max(0, Math.min(APP_TOUR_STEPS.length - 1, nextStep))
       const def = APP_TOUR_STEPS[clamped]
       const nextStatus = options?.status ?? 'active'
+      const shouldNavigate = options?.navigate === true
 
       setStep(clamped)
       setStatus(nextStatus)
       setVisible(true)
       setShowDeferred(false)
 
-      if (def.href && !pathReadyForStep(pathname, def.href)) {
+      if (
+        shouldNavigate &&
+        def.href &&
+        !pathReadyForStep(pathname, def.href)
+      ) {
         setAwaitingPath(def.href)
         syncingPath.current = true
         router.replace(def.href)
       } else {
         setAwaitingPath(null)
+        if (def.href && !pathReadyForStep(pathname, def.href)) {
+          setVisible(false)
+        }
       }
 
       if (options?.persist !== false) {
@@ -135,9 +155,18 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
 
   const startTour = useCallback(
     (fromStep = 0) => {
-      goToStep(fromStep, { status: 'active' })
+      const def = APP_TOUR_STEPS[fromStep]
+      if (def?.href && !pathReadyForStep(pathname, def.href)) {
+        setStep(fromStep)
+        setStatus('deferred')
+        setVisible(false)
+        setShowDeferred(true)
+        void deferAppTourAction(fromStep)
+        return
+      }
+      goToStep(fromStep, { status: 'active', navigate: false })
     },
-    [goToStep],
+    [goToStep, pathname],
   )
 
   const offerTour = useCallback(
@@ -198,10 +227,38 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     bootstrapped.current = true
 
     const currentStatus = statusRef.current
+    const currentPath = pathname
 
     if (currentStatus === 'active') {
-      setVisible(true)
+      const savedStep = stepRef.current
+      const def = APP_TOUR_STEPS[savedStep]
+      if (def?.href && pathReadyForStep(currentPath, def.href)) {
+        setVisible(true)
+        setShowDeferred(false)
+        return
+      }
+      const onPage = syncStepToPathname(currentPath)
+      if (onPage !== null) {
+        setStep(onPage)
+        setVisible(true)
+        setShowDeferred(false)
+        void persistQuiet(onPage, 'active')
+        return
+      }
+      setVisible(false)
       setShowDeferred(false)
+      return
+    }
+
+    const def = APP_TOUR_STEPS[stepRef.current]
+    if (def?.href && !pathReadyForStep(currentPath, def.href)) {
+      setShowDeferred(true)
+      setVisible(false)
+      if (currentStatus === 'pending') {
+        void deferAppTourAction(stepRef.current).then((result) => {
+          if (result.ok) setStatus(result.status)
+        })
+      }
       return
     }
 
@@ -213,7 +270,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     if (!shouldOffer) return
 
     void offerTourRef.current(stepRef.current)
-  }, [hydrated, activeReady, guestReady, isGuest, searchParams])
+  }, [hydrated, activeReady, guestReady, isGuest, searchParams, pathname, persistQuiet])
 
   const prevActiveRef = useRef(active)
   useEffect(() => {
@@ -248,10 +305,8 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     const def = APP_TOUR_STEPS[step]
     if (pathReadyForStep(pathname, def?.href ?? null)) return
 
-    const matchIdx = APP_TOUR_STEPS.findIndex(
-      (s) => s.href && pathReadyForStep(pathname, s.href),
-    )
-    if (matchIdx >= 0) {
+    const matchIdx = syncStepToPathname(pathname)
+    if (matchIdx !== null) {
       setStep(matchIdx)
       void persistQuiet(matchIdx, 'active')
       return
@@ -268,12 +323,12 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
 
   const onNext = useCallback(() => {
     const next = Math.min(APP_TOUR_STEPS.length - 1, step + 1)
-    goToStep(next)
+    goToStep(next, { navigate: true })
   }, [goToStep, step])
 
   const onBack = useCallback(() => {
     const prev = Math.max(0, step - 1)
-    goToStep(prev)
+    goToStep(prev, { navigate: true })
   }, [goToStep, step])
 
   const releaseTourScrollLock = useCallback(() => {
@@ -369,8 +424,13 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   }, [beginBusy, endBusy, step])
 
   const onStartNow = useCallback(async () => {
+    const def = APP_TOUR_STEPS[step]
+    if (def?.href && !pathReadyForStep(pathname, def.href)) {
+      goToStep(step, { status: 'active', navigate: true })
+      return
+    }
     startTour(step)
-  }, [startTour, step])
+  }, [goToStep, pathname, startTour, step])
 
   const restartTour = useCallback(async () => {
     if (isGuest) return

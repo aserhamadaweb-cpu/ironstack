@@ -107,9 +107,14 @@ async function navigationResponse(request) {
 
   const offline = await caches.match('/offline', { ignoreSearch: true })
   if (offline) {
-    const pathname = new URL(request.url).pathname
-    if (pathname !== '/offline') {
-      return Response.redirect(new URL('/offline', request.url), 302)
+    const reqUrl = new URL(request.url)
+    if (reqUrl.pathname !== '/offline') {
+      const dest = new URL('/offline', request.url)
+      const ret = reqUrl.pathname + reqUrl.search
+      if (ret.startsWith('/') && !ret.startsWith('//')) {
+        dest.searchParams.set('return', ret)
+      }
+      return Response.redirect(dest, 302)
     }
     return offline
   }

@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isNetworkFailure } from '@/lib/log'
 import {
@@ -65,6 +65,7 @@ function isDocumentVisible() {
 
 export function OfflineProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [online, setOnline] = useState(true)
   const [hydrated, setHydrated] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
@@ -77,6 +78,11 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const pendingCountRef = useRef(0)
   const focusTimer = useRef<number | null>(null)
   const pollDelayRef = useRef(ACTIVE_POLL_MS)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    rememberPath(window.location.pathname + window.location.search)
+  }, [pathname])
 
   const refreshCounts = useCallback(async () => {
     try {
