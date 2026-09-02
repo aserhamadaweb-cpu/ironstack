@@ -106,7 +106,13 @@ async function navigationResponse(request) {
   if (cached) return cached
 
   const offline = await caches.match('/offline', { ignoreSearch: true })
-  if (offline) return offline
+  if (offline) {
+    const pathname = new URL(request.url).pathname
+    if (pathname !== '/offline') {
+      return Response.redirect(new URL('/offline', request.url), 302)
+    }
+    return offline
+  }
 
   return Response.error()
 }

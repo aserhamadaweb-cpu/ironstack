@@ -2,7 +2,7 @@
   "name": "IronStack",
   "short_name": "IronStack",
   "description": "Train smarter. Track lifts, challenges, and progress with IronStack.",
-  "start_url": "/offline",
+  "start_url": "/dashboard/home",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

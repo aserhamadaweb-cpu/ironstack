@@ -32,7 +32,7 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
         if (!navigator.onLine) {
           const cachedUser = await getCachedUserId().catch(() => null)
           if (cancelled) return
-          window.location.replace(cachedUser ? '/offline' : buildAuthEntryHref())
+          window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
           return
         }
 
