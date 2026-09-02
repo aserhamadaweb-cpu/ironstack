@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseBrowseClient } from '@/components/exercise-browse-client'
-import { loadExerciseLibrary } from '@/lib/exercise-library.server'
+import { expectedSourceCount } from '@/lib/exercises/catalog'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
@@ -21,10 +21,8 @@ export default async function ExerciseBrowsePage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, library] = await Promise.all([
-    getProfile(userId),
-    Promise.resolve(loadExerciseLibrary()),
-  ])
+  const profileResult = await getProfile(userId)
+  const exerciseCount = expectedSourceCount()
 
   const displayName =
     profileResult.data?.display_name || email?.split('@')[0] || 'Athlete'
@@ -49,7 +47,7 @@ export default async function ExerciseBrowsePage() {
             {t('title')}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t('subtitle', { count: library.length })}{' '}
+            {t('subtitle', { count: exerciseCount })}{' '}
             <Link
               href="/dashboard/home-workouts"
               className="font-semibold text-gold underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
@@ -58,7 +56,7 @@ export default async function ExerciseBrowsePage() {
             </Link>
           </p>
         </header>
-        <ExerciseBrowseClient library={library} />
+        <ExerciseBrowseClient />
       </main>
     </>
   )

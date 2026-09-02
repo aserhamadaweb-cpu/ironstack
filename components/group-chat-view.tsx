@@ -61,11 +61,17 @@ export function GroupChatView({ currentUserId, detail }: GroupChatViewProps) {
   }, [detail])
 
   useEffect(() => {
-    const onFocus = () => router.refresh()
-    window.addEventListener('focus', onFocus)
-    const id = window.setInterval(() => router.refresh(), 20000)
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      router.refresh()
+    }
+    window.addEventListener('focus', refreshIfVisible)
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      router.refresh()
+    }, 60_000)
     return () => {
-      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('focus', refreshIfVisible)
       window.clearInterval(id)
     }
   }, [router])

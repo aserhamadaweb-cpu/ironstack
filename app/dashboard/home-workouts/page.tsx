@@ -3,13 +3,11 @@ import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { HomeWorkoutsClient } from '@/components/home-workouts-client'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
-import { loadExerciseLibrary } from '@/lib/exercise-library.server'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
 import { resolveSplitRecommendations } from '@/lib/data/split-recommendations-server'
-import { isHomeEquipment } from '@/lib/exercises/home-workouts'
 
 export const metadata = {
   title: 'Home Workouts — IRONSTACK',
@@ -21,19 +19,14 @@ export default async function HomeWorkoutsPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, library, splitsResult, recommendationsBundle] =
-    await Promise.all([
+  const [profileResult, splitsResult, recommendationsBundle] = await Promise.all([
     getProfile(userId),
-    Promise.resolve(loadExerciseLibrary()),
     getSplitsForUser(userId).catch(() => ({ data: [] as never[], error: null })),
     resolveSplitRecommendations(),
   ])
 
   const displayName =
     profileResult.data?.display_name || email?.split('@')[0] || 'Athlete'
-  const homeCount = library.filter((exercise) =>
-    isHomeEquipment(exercise.equipment),
-  ).length
   const yourSplits = (splitsResult.data ?? [])
     .filter((split) => split.user_id === userId && !split.is_system)
     .map((split) => ({
@@ -59,8 +52,6 @@ export default async function HomeWorkoutsPage() {
         >
           <BackToTrainLink className="mb-2" />
           <HomeWorkoutsClient
-            library={library}
-            homeCount={homeCount}
             yourSplits={yourSplits}
             recommendedSplits={recommendationsBundle.recommendations.slice(0, 3)}
             recommendedSplitsError={recommendationsBundle.error}

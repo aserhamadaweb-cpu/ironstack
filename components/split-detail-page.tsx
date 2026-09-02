@@ -71,11 +71,17 @@ export function SplitDetailPage({
 
   const list: Variants = {
     hidden: {},
-    visible: { transition: { staggerChildren: reduce ? 0 : 0.05 } },
+    visible: {
+      transition: { staggerChildren: reduce || totalExercises > 12 ? 0 : 0.05 },
+    },
   }
   const row: Variants = {
-    hidden: { opacity: 0, y: reduce ? 0 : 16 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE } },
+    hidden: { opacity: 0, y: reduce || totalExercises > 12 ? 0 : 16 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduce || totalExercises > 12 ? 0 : 0.45, ease: EASE },
+    },
   }
 
   const handleSave = () => {

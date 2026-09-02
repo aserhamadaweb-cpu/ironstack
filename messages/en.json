@@ -1563,6 +1563,7 @@
     "title": "Home Workouts",
     "subtitle": "{count} exercises from the library that you can do at home — bodyweight, bands, dumbbells, kettlebells, and other common home kit. Gym machines stay in the full library.",
     "pageIntro": "Create a home split, pick one you already saved, or start a program for your goal. {count} home-friendly moves from the same exercise library.",
+    "pageIntroLoading": "Create a home split, pick one you already saved, or start a program for your goal. Loading home-friendly moves from the exercise library…",
     "backHome": "BACK TO WORKOUT",
     "backToHomeWorkouts": "BACK TO HOME WORKOUTS",
     "quickCategories": "QUICK START",

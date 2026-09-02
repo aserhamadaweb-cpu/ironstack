@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import type { ExerciseDetailDto } from '@/lib/exercises/actions'
@@ -42,6 +42,22 @@ export function ExerciseDetailView({
   )
   const steps = stepsForLocale(exercise, locale)
   const supporting = supportingMuscles(exercise)
+  const [gifReady, setGifReady] = useState(false)
+  const poster = exercise.image || null
+
+  useEffect(() => {
+    setGifReady(false)
+    if (!exercise.gifUrl || !poster || exercise.gifUrl === poster) {
+      setGifReady(true)
+      return
+    }
+    const img = new Image()
+    img.src = exercise.gifUrl
+    img.onload = () => setGifReady(true)
+    return () => {
+      img.onload = null
+    }
+  }, [exercise.gifUrl, exercise.mediaId, poster])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -74,10 +90,12 @@ export function ExerciseDetailView({
         <section className="overflow-hidden rounded-2xl border border-silver/15 bg-card">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={exercise.gifUrl}
+            src={gifReady ? exercise.gifUrl : poster ?? exercise.gifUrl}
             alt={exercise.name}
             width={360}
             height={360}
+            loading="lazy"
+            decoding="async"
             className="mx-auto aspect-square w-full max-w-md object-contain bg-background"
           />
           <p className="border-t border-silver/10 px-4 py-2 text-center text-[11px] text-muted-foreground">

@@ -45,6 +45,10 @@ type OfflineContextValue = {
 const OfflineContext = createContext<OfflineContextValue | null>(null)
 
 const LAST_PATH_KEY = 'ironstack:return-path'
+const IDLE_POLL_MS = 5 * 60_000
+const ACTIVE_POLL_MS = 45_000
+const FOCUS_DEBOUNCE_MS = 3_000
+const CACHE_TTL_MS = 5 * 60_000
 
 function rememberPath(pathname: string) {
   if (!pathname || pathname === '/offline') return
@@ -53,6 +57,10 @@ function rememberPath(pathname: string) {
   } catch {
     /* ignore */
   }
+}
+
+function isDocumentVisible() {
+  return typeof document === 'undefined' || document.visibilityState === 'visible'
 }
 
 export function OfflineProvider({ children }: { children: ReactNode }) {
@@ -66,12 +74,17 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const lastCacheAt = useRef(0)
   const wasOffline = useRef(false)
   const flushInFlight = useRef(false)
+  const pendingCountRef = useRef(0)
+  const focusTimer = useRef<number | null>(null)
+  const pollDelayRef = useRef(ACTIVE_POLL_MS)
 
   const refreshCounts = useCallback(async () => {
     try {
-      setPendingCount(
-        (await countUnsyncedSessions()) + (await countUnsyncedSplitMutations()),
-      )
+      const count =
+        (await countUnsyncedSessions()) + (await countUnsyncedSplitMutations())
+      pendingCountRef.current = count
+      setPendingCount(count)
+      pollDelayRef.current = count > 0 ? ACTIVE_POLL_MS : IDLE_POLL_MS
     } catch {
       /* IndexedDB may be unavailable */
     }
@@ -79,34 +92,39 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     async (reason: 'online' | 'poll' | 'manual' | 'reconnect' = 'manual') => {
+      if (!isDocumentVisible() && reason === 'poll') return
+
       await refreshCounts()
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setOrphanNotice(await getOrphanPurgeNotice().catch(() => null))
         return
       }
 
-      try {
-        await reconcileOutboxWithServer()
-        await purgeStaleOfflineItems()
-        setOrphanNotice(await getOrphanPurgeNotice())
-        await refreshCounts()
-      } catch {
-        /* IndexedDB purge is best-effort */
+      const isReconnect = reason === 'reconnect'
+      const isManual = reason === 'manual'
+      const isPoll = reason === 'poll'
+      const pending = pendingCountRef.current
+
+      if (isPoll && pending === 0) {
+        const cacheStale = Date.now() - lastCacheAt.current > CACHE_TTL_MS
+        if (!cacheStale) return
       }
 
-      const cacheStale = Date.now() - lastCacheAt.current > 5 * 60_000
-      const isReconnect = reason === 'reconnect'
-      const shouldCache = isReconnect || reason !== 'poll' || cacheStale
-      let pending = 0
-      try {
-        pending =
-          (await countUnsyncedSessions()) +
-          (await countUnsyncedSplitMutations())
-      } catch {
-        pending = 0
+      if (!isPoll) {
+        try {
+          await reconcileOutboxWithServer()
+          await purgeStaleOfflineItems()
+          setOrphanNotice(await getOrphanPurgeNotice())
+          await refreshCounts()
+        } catch {
+          /* IndexedDB purge is best-effort */
+        }
       }
-      const shouldFlush = pending > 0 || isReconnect || reason === 'manual'
-      const shouldRsc = isReconnect || reason === 'manual'
+
+      const cacheStale = Date.now() - lastCacheAt.current > CACHE_TTL_MS
+      const shouldCache = isReconnect || isManual || (isPoll && cacheStale)
+      const shouldFlush = pending > 0 || isReconnect || isManual
+      const shouldRsc = isReconnect || isManual
 
       if (!shouldCache && !shouldFlush && !shouldRsc) return
 
@@ -116,18 +134,19 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         const userId = await revalidateAuthSession()
 
         if (shouldFlush) {
-          if (flushInFlight.current && reason === 'poll') {
+          if (flushInFlight.current && isPoll) {
             await refreshCounts()
           } else {
             flushInFlight.current = true
             try {
-              if (isReconnect || reason === 'manual') retryOfflineQueueNow()
+              if (isReconnect || isManual) retryOfflineQueueNow()
               const result = await flushOfflineQueue()
-              await reconcileOutboxWithServer()
+              if (!isPoll) {
+                await reconcileOutboxWithServer()
+              }
               await refreshCounts()
               const realErrors = result.errors.filter((msg) => !isNetworkFailure(msg))
               setLastError(realErrors[0] ?? null)
-              if (result.synced > 0 && !shouldRsc) router.refresh()
             } finally {
               flushInFlight.current = false
             }
@@ -144,7 +163,6 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           if (uid) {
             await setCachedUserId(uid)
             await refreshWorkoutCache(uid)
-            await ensureExerciseLibraryCached()
             lastCacheAt.current = Date.now()
           }
         }
@@ -168,6 +186,20 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     setHydrated(true)
     setOnline(navigator.onLine)
     void resolveSessionUserId()
+    void refreshCounts()
+
+    const scheduleSync = (reason: 'poll' | 'reconnect') => {
+      if (!isDocumentVisible() && reason === 'poll') return
+      if (focusTimer.current) window.clearTimeout(focusTimer.current)
+      focusTimer.current = window.setTimeout(() => {
+        focusTimer.current = null
+        if (!navigator.onLine) return
+        void refresh(wasOffline.current ? 'reconnect' : reason).finally(() => {
+          setOnline(navigator.onLine)
+        })
+      }, reason === 'poll' ? 0 : FOCUS_DEBOUNCE_MS)
+    }
+
     const onOnline = () => {
       void refresh('reconnect').finally(() => {
         setOnline(typeof navigator === 'undefined' ? true : navigator.onLine)
@@ -180,49 +212,62 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     const onChanged = () => {
       void refreshCounts()
     }
-    const syncIfOnline = () => {
-      if (!navigator.onLine) return
-      if (wasOffline.current) {
-        void refresh('reconnect').finally(() => {
-          setOnline(navigator.onLine)
-        })
-        return
-      }
-      void refresh('poll')
-    }
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         rememberPath(window.location.pathname + window.location.search)
-        syncIfOnline()
+        scheduleSync(wasOffline.current ? 'reconnect' : 'poll')
       }
     }
+
+    const onPageShow = () => scheduleSync('poll')
+    const onWindowFocus = () => scheduleSync('poll')
+
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
     window.addEventListener(OFFLINE_CHANGED_EVENT, onChanged)
-    window.addEventListener('pageshow', syncIfOnline)
-    window.addEventListener('focus', syncIfOnline)
+    window.addEventListener('pageshow', onPageShow)
+    window.addEventListener('focus', onWindowFocus)
     document.addEventListener('visibilitychange', onVisible)
+
     void refresh('online')
-    if (navigator.onLine) void ensureExerciseLibraryCached()
-    const poll = window.setInterval(() => {
-      const next = navigator.onLine
-      if (!next) {
-        setOnline(false)
-        void refreshCounts()
-        return
-      }
-      void refresh(wasOffline.current ? 'reconnect' : 'poll').finally(() => {
-        setOnline(navigator.onLine)
-      })
-    }, 30_000)
+
+    const deferCatalog = () => {
+      if (navigator.onLine) void ensureExerciseLibraryCached()
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(deferCatalog, { timeout: 8000 })
+    } else {
+      window.setTimeout(deferCatalog, 2000)
+    }
+
+    let pollTimer: number | null = null
+    const schedulePoll = () => {
+      if (pollTimer) window.clearTimeout(pollTimer)
+      pollTimer = window.setTimeout(() => {
+        pollTimer = null
+        const next = navigator.onLine
+        if (!next) {
+          setOnline(false)
+          void refreshCounts()
+        } else if (isDocumentVisible()) {
+          void refresh(wasOffline.current ? 'reconnect' : 'poll').finally(() => {
+            setOnline(navigator.onLine)
+          })
+        }
+        schedulePoll()
+      }, pollDelayRef.current)
+    }
+    schedulePoll()
+
     return () => {
       window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
       window.removeEventListener(OFFLINE_CHANGED_EVENT, onChanged)
-      window.removeEventListener('pageshow', syncIfOnline)
-      window.removeEventListener('focus', syncIfOnline)
+      window.removeEventListener('pageshow', onPageShow)
+      window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('visibilitychange', onVisible)
-      window.clearInterval(poll)
+      if (focusTimer.current) window.clearTimeout(focusTimer.current)
+      if (pollTimer) window.clearTimeout(pollTimer)
     }
   }, [refresh, refreshCounts])
 

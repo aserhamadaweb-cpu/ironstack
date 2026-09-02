@@ -8,12 +8,12 @@ import { ExerciseDetailOverlay } from '@/components/exercise-detail-overlay'
 import { HomeProgramBoard, type HomeSplitCard } from '@/components/home-program-board'
 import { WorkoutRecommendedSplits } from '@/components/workout-recommended-splits'
 import type { LibraryExercise } from '@/lib/exercise-library'
+import { isHomeEquipment } from '@/lib/exercises/home-workouts'
 import { resolveHomePrograms } from '@/lib/home-splits'
 import type { SplitRecommendation } from '@/lib/split-recommendations'
+import { useClientExerciseLibrary } from '@/lib/use-client-exercise-library'
 
 type HomeWorkoutsClientProps = {
-  library: LibraryExercise[]
-  homeCount: number
   yourSplits: HomeSplitCard[]
   recommendedSplits?: SplitRecommendation[]
   recommendedSplitsError?: string | null
@@ -21,17 +21,21 @@ type HomeWorkoutsClientProps = {
 }
 
 export function HomeWorkoutsClient({
-  library,
-  homeCount,
   yourSplits,
   recommendedSplits = [],
   recommendedSplitsError = null,
   isGuest = false,
 }: HomeWorkoutsClientProps) {
   const t = useTranslations('homeWorkouts')
+  const tCatalog = useTranslations('exerciseCatalog')
+  const { library, loading } = useClientExerciseLibrary()
   const [detailsId, setDetailsId] = useState<string | null>(null)
   const [detailsName, setDetailsName] = useState<string | undefined>(undefined)
   const programs = useMemo(() => resolveHomePrograms(library), [library])
+  const homeCount = useMemo(
+    () => library.filter((exercise) => isHomeEquipment(exercise.equipment)).length,
+    [library],
+  )
 
   const closeDetails = useCallback(() => {
     setDetailsId(null)
@@ -45,7 +49,7 @@ export function HomeWorkoutsClient({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-6">
-      <HomeWorkoutsHeader count={homeCount} />
+      <HomeWorkoutsHeader count={loading ? undefined : homeCount} />
 
       <div data-tour="home-workouts-list">
         <WorkoutRecommendedSplits
@@ -53,11 +57,20 @@ export function HomeWorkoutsClient({
           error={recommendedSplitsError}
           isGuest={isGuest}
         />
-        <HomeProgramBoard
-          programs={programs}
-          yourSplits={yourSplits}
-          onOpenExercise={openExercise}
-        />
+        {loading ? (
+          <div
+            className="mt-6 flex min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-silver/20 bg-card/30"
+            role="status"
+          >
+            <p className="text-sm text-muted-foreground">{tCatalog('loading')}</p>
+          </div>
+        ) : (
+          <HomeProgramBoard
+            programs={programs}
+            yourSplits={yourSplits}
+            onOpenExercise={openExercise}
+          />
+        )}
       </div>
 
       {detailsId ? (
@@ -72,7 +85,7 @@ export function HomeWorkoutsClient({
   )
 }
 
-function HomeWorkoutsHeader({ count }: { count: number }) {
+function HomeWorkoutsHeader({ count }: { count?: number }) {
   const t = useTranslations('homeWorkouts')
   return (
     <header className="space-y-3">
@@ -93,7 +106,7 @@ function HomeWorkoutsHeader({ count }: { count: number }) {
             {t('title')}
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            {t('pageIntro', { count })}
+            {count != null ? t('pageIntro', { count }) : t('pageIntroLoading')}
           </p>
         </div>
       </div>

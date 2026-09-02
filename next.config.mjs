@@ -110,7 +110,7 @@ const withPWA = withPWAInit({
     ],
   },
   customWorkerSrc: 'worker',
-  cacheOnFrontEndNav: true,
+  cacheOnFrontEndNav: false,
   aggressiveFrontEndNavCaching: false,
   reloadOnOnline: false,
 })

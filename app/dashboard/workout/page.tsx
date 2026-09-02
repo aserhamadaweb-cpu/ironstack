@@ -56,6 +56,7 @@ export default async function WorkoutPage() {
     volumeResult,
     celebrations,
     primarySplit,
+    recommendationsBundle,
   ] = unreachable
     ? [
         profileProbe,
@@ -64,6 +65,7 @@ export default async function WorkoutPage() {
         { data: 0, error: null },
         [] as never[],
         { id: null, name: null },
+        { recommendations: [], error: null as string | null },
       ]
     : await Promise.all([
         Promise.resolve(profileProbe),
@@ -72,7 +74,15 @@ export default async function WorkoutPage() {
         getTotalVolume(userId),
         getUnshownBannerCelebrations(userId).catch(() => []),
         getPrimarySplitSummary(userId),
+        resolveSplitRecommendations(),
       ])
+
+  const sessions = sessionsResult.data ?? []
+  const latest = sessions[0] ?? null
+  const latestLogsResult =
+    unreachable || !latest
+      ? { data: [] as never[], error: null }
+      : await getSessionLiftLogs(latest.id)
 
   const profile = profileResult.data
   const tCommon = await getTranslations('common')
@@ -82,7 +92,6 @@ export default async function WorkoutPage() {
   const locale = profileResult.data?.language === 'ar' ? 'ar' : 'en'
 
   const splits = splitsResult.data ?? []
-  const sessions = sessionsResult.data ?? []
   const journeyVolume = volumeResult.data ?? 0
 
   const customSplits = sortSplitsByRecentSaved(
@@ -115,12 +124,9 @@ export default async function WorkoutPage() {
 
   const totalCustomSplits = customSplits.length
 
-  const latest = sessions[0] ?? null
   let lastSession = null
-  if (latest) {
-    const logsResult = await getSessionLiftLogs(latest.id)
-    if (!logsResult.error) {
-    const logs = (logsResult.data ?? []).filter((log) => !log.is_skipped)
+  if (latest && !latestLogsResult.error) {
+    const logs = (latestLogsResult.data ?? []).filter((log) => !log.is_skipped)
     const byLift = new Map<
       string,
       {
@@ -208,7 +214,6 @@ export default async function WorkoutPage() {
       sets: String(latest.total_sets_completed ?? 0),
       standouts,
     }
-    }
   }
 
   const historySessions = sessions.slice(0, 2).map((session) => ({
@@ -257,10 +262,6 @@ export default async function WorkoutPage() {
       total_volume: s.total_volume,
     })),
   )
-
-  const recommendationsBundle = unreachable
-    ? { recommendations: [], error: null as string | null }
-    : await resolveSplitRecommendations()
 
   return (
     <WorkoutDashboard
