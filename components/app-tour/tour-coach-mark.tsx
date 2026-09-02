@@ -52,6 +52,18 @@ function TourCutoutBackdrop({ spot }: { spot: SpotlightRect | null }) {
         className={panelClass}
         style={{ top: spot.top, left: right, right: 0, height: spot.height }}
       />
+      {/* Clear but click-proof: the highlighted control stays visible while the
+          tour is driven only by its own Back / Next / close buttons. */}
+      <div
+        className="pointer-events-auto absolute transition-[top,left,width,height] duration-300 ease-out"
+        style={{
+          top: spot.top,
+          left: spot.left,
+          width: spot.width,
+          height: spot.height,
+        }}
+        aria-hidden="true"
+      />
     </>
   )
 }
