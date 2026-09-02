@@ -45,7 +45,7 @@ const withPWA = withPWAInit({
         handler: 'NetworkFirst',
         options: {
           cacheName: 'pages',
-          networkTimeoutSeconds: 3,
+          networkTimeoutSeconds: 10,
         },
       },
       {

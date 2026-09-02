@@ -88,7 +88,7 @@ async function matchCached(request) {
 async function navigationResponse(request) {
   try {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 3000)
+    const timer = setTimeout(() => controller.abort(), 10_000)
     const response = await fetch(request, { signal: controller.signal })
     clearTimeout(timer)
     if (response && (response.ok || response.type === 'opaqueredirect')) {

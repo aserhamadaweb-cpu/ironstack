@@ -131,21 +131,46 @@ export function inputFromOnboarding(data: OnboardingData): RecommendationInput |
     return null
   }
 
+  return buildRecommendationInput(data)
+}
+
+/** Fills sensible defaults for accounts missing optional onboarding fitness fields. */
+export function inputFromOnboardingWithDefaults(
+  data: OnboardingData,
+): RecommendationInput {
+  const merged: OnboardingData = {
+    ...data,
+    primaryGoal: data.primaryGoal ?? 'build_muscle',
+    fitnessLevel: data.fitnessLevel ?? 'beginner',
+    daysPerWeek: data.daysPerWeek ?? 3,
+    workoutDuration: data.workoutDuration ?? '30_45',
+    trainingLocation: data.trainingLocation ?? 'gym',
+    secondaryGoals: data.secondaryGoals ?? [],
+    equipment: data.equipment ?? [],
+    trainingStyles: data.trainingStyles ?? [],
+    favoriteMuscleGroups: data.favoriteMuscleGroups ?? [],
+    avoidances: data.avoidances ?? '',
+    limitations: data.limitations ?? '',
+  }
+  return buildRecommendationInput(merged)
+}
+
+function buildRecommendationInput(data: OnboardingData): RecommendationInput {
   const seniorMode = data.ageRange === '55_plus'
 
-  let daysPerWeek = data.daysPerWeek
+  let daysPerWeek = data.daysPerWeek ?? 3
   if (seniorMode) {
     daysPerWeek = Math.min(daysPerWeek, 5)
   }
 
   return {
-    primaryGoal: data.primaryGoal,
+    primaryGoal: data.primaryGoal!,
     secondaryGoals: data.secondaryGoals,
-    fitnessLevel: data.fitnessLevel,
+    fitnessLevel: data.fitnessLevel!,
     daysPerWeek,
-    statedDaysPerWeek: data.daysPerWeek,
-    workoutDuration: data.workoutDuration,
-    trainingLocation: data.trainingLocation,
+    statedDaysPerWeek: data.daysPerWeek ?? daysPerWeek,
+    workoutDuration: data.workoutDuration!,
+    trainingLocation: data.trainingLocation!,
     equipment: data.equipment,
     trainingStyles: data.trainingStyles,
     favoriteMuscleGroups: data.favoriteMuscleGroups,

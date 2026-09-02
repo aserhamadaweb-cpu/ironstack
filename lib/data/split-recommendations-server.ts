@@ -5,6 +5,7 @@ import { emptyOnboardingData, type OnboardingData } from '@/lib/onboarding-types
 import {
   generateSplitRecommendations,
   inputFromOnboarding,
+  inputFromOnboardingWithDefaults,
   type RecommendationInput,
   type SplitRecommendation,
 } from '@/lib/split-recommendations'
@@ -59,16 +60,8 @@ export async function resolveSplitRecommendations(
   const profileResult = await getProfile(user.id)
   const base = onboardingDataFromUser(user, profileResult.data ?? undefined)
   const merged = { ...base, ...override }
-  const input = inputFromOnboarding(merged)
-
-  if (!input) {
-    return {
-      recommendations: [],
-      input: null,
-      fingerprint: null,
-      error: 'Complete your fitness profile to get recommendations.',
-    }
-  }
+  const input =
+    inputFromOnboarding(merged) ?? inputFromOnboardingWithDefaults(merged)
 
   try {
     const recommendations = generateSplitRecommendations(input)
@@ -76,7 +69,7 @@ export async function resolveSplitRecommendations(
       recommendations,
       input,
       fingerprint: recommendationInputFingerprint(input),
-      error: null,
+      error: recommendations.length === 0 ? 'Could not build recommendations.' : null,
     }
   } catch (err) {
     console.error('[split-recommendations] resolve', err)
@@ -120,7 +113,15 @@ export async function resolveSplitRecommendationsForAction(
   }
 
   const bundle = await resolveSplitRecommendations(override)
-  if (bundle.error || bundle.recommendations.length === 0) {
+  if (bundle.error && !bundle.input) {
+    return {
+      data: null,
+      fingerprint: bundle.fingerprint,
+      error: bundle.error,
+    }
+  }
+
+  if (!bundle.recommendations.length) {
     return {
       data: null,
       fingerprint: bundle.fingerprint,

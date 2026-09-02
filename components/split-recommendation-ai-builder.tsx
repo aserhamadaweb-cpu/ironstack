@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Loader2, Send, Sparkles, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { SplitRecommendation } from '@/lib/split-recommendations'
@@ -158,9 +159,19 @@ export function SplitRecommendationAiBuilder({
         )}
 
         {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+          <div className="space-y-3">
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+            {/profile|fitness/i.test(error) ? (
+              <Link
+                href="/onboarding/continue"
+                className="inline-flex min-h-11 items-center text-xs font-bold tracking-[0.12em] text-gold"
+              >
+                {t('completeProfileCta')} →
+              </Link>
+            ) : null}
+          </div>
         ) : null}
 
         {preview ? (

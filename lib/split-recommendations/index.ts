@@ -5,7 +5,7 @@ export type {
   RecommendedDay,
   RecommendedExercise,
 } from './types'
-export { inputFromOnboarding } from './types'
+export { inputFromOnboarding, inputFromOnboardingWithDefaults } from './types'
 export { generateSplitRecommendations, generateFromOnboardingData } from './generate'
 export { SPLIT_TEMPLATES, THREE_DAY_TEMPLATE_IDS } from './templates'
 export { buildVolumeProfile } from './volume'

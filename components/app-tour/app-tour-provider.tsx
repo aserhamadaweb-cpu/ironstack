@@ -198,10 +198,16 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     bootstrapped.current = true
 
     const currentStatus = statusRef.current
+
+    if (currentStatus === 'active') {
+      setVisible(true)
+      setShowDeferred(false)
+      return
+    }
+
     const shouldOffer =
       forceOffer.current ||
       currentStatus === 'pending' ||
-      currentStatus === 'active' ||
       currentStatus === 'deferred'
 
     if (!shouldOffer) return

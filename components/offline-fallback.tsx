@@ -30,9 +30,34 @@ function OfflineFallbackInner() {
   }, [])
 
   useEffect(() => {
-    if (hydrated && online) {
-      router.replace('/dashboard/home')
+    if (!hydrated || !online) return
+    const returnTo = (() => {
+      try {
+        const fromQuery = new URLSearchParams(window.location.search).get('return')
+        if (fromQuery?.startsWith('/') && !fromQuery.startsWith('//')) {
+          return fromQuery
+        }
+        const stored = sessionStorage.getItem('ironstack:return-path')
+        if (stored?.startsWith('/') && !stored.startsWith('//')) {
+          return stored
+        }
+      } catch {
+        /* ignore */
+      }
+      return null
+    })()
+
+    if (window.location.pathname === '/offline') {
+      router.replace(returnTo ?? '/dashboard/home')
+      return
     }
+
+    if (returnTo && returnTo !== window.location.pathname) {
+      router.replace(returnTo)
+      return
+    }
+
+    router.refresh()
   }, [hydrated, online, router])
 
   if (!hydrated) {

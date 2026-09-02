@@ -154,7 +154,7 @@ export async function generateCustomSplitFromPromptAction(
   if (guest) return { data: null, warnings: [], error: guest }
 
   const bundle = await resolveSplitRecommendations()
-  if (bundle.error || !bundle.input) {
+  if (!bundle.input) {
     return {
       data: null,
       warnings: [],

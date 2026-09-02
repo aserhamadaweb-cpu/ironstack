@@ -6,24 +6,32 @@ import { ArrowLeft, House } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ExerciseDetailView } from '@/components/exercise-detail-view'
 import { HomeProgramBoard, type HomeSplitCard } from '@/components/home-program-board'
+import { WorkoutRecommendedSplits } from '@/components/workout-recommended-splits'
 import type { LibraryExercise } from '@/lib/exercise-library'
 import {
   fetchExerciseDetail,
   type ExerciseDetailDto,
 } from '@/lib/exercises/actions'
 import { resolveHomePrograms } from '@/lib/home-splits'
+import type { SplitRecommendation } from '@/lib/split-recommendations'
 import { useDetailsLayerHistory } from '@/lib/use-overlay-history'
 
 type HomeWorkoutsClientProps = {
   library: LibraryExercise[]
   homeCount: number
   yourSplits: HomeSplitCard[]
+  recommendedSplits?: SplitRecommendation[]
+  recommendedSplitsError?: string | null
+  isGuest?: boolean
 }
 
 export function HomeWorkoutsClient({
   library,
   homeCount,
   yourSplits,
+  recommendedSplits = [],
+  recommendedSplitsError = null,
+  isGuest = false,
 }: HomeWorkoutsClientProps) {
   const t = useTranslations('homeWorkouts')
   const tCatalog = useTranslations('exerciseCatalog')
@@ -94,6 +102,11 @@ export function HomeWorkoutsClient({
         aria-hidden={Boolean(detailsId)}
         data-tour="home-workouts-list"
       >
+        <WorkoutRecommendedSplits
+          recommendations={recommendedSplits}
+          error={recommendedSplitsError}
+          isGuest={isGuest}
+        />
         <HomeProgramBoard
           programs={programs}
           yourSplits={yourSplits}

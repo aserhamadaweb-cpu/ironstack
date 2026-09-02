@@ -11,6 +11,7 @@ import {
 } from '@/lib/data/queries'
 import {
   getPrimarySplitSummary,
+  resolveSplitRecommendations,
 } from '@/lib/data/split-recommendations-server'
 import { ltrEmbed } from '@/lib/bidi'
 import {
@@ -257,6 +258,10 @@ export default async function WorkoutPage() {
     })),
   )
 
+  const recommendationsBundle = unreachable
+    ? { recommendations: [], error: null as string | null }
+    : await resolveSplitRecommendations()
+
   return (
     <WorkoutDashboard
       displayName={displayName}
@@ -278,6 +283,8 @@ export default async function WorkoutPage() {
         title: c.title,
         body: c.body,
       }))}
+      recommendedSplits={recommendationsBundle.recommendations.slice(0, 3)}
+      recommendedSplitsError={recommendationsBundle.error}
     />
   )
 }

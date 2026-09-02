@@ -44,6 +44,17 @@ type OfflineContextValue = {
 
 const OfflineContext = createContext<OfflineContextValue | null>(null)
 
+const LAST_PATH_KEY = 'ironstack:return-path'
+
+function rememberPath(pathname: string) {
+  if (!pathname || pathname === '/offline') return
+  try {
+    sessionStorage.setItem(LAST_PATH_KEY, pathname)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function OfflineProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [online, setOnline] = useState(true)
@@ -180,7 +191,10 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       void refresh('poll')
     }
     const onVisible = () => {
-      if (document.visibilityState === 'visible') syncIfOnline()
+      if (document.visibilityState === 'visible') {
+        rememberPath(window.location.pathname + window.location.search)
+        syncIfOnline()
+      }
     }
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)

@@ -8,6 +8,7 @@ import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
+import { resolveSplitRecommendations } from '@/lib/data/split-recommendations-server'
 import { isHomeEquipment } from '@/lib/exercises/home-workouts'
 
 export const metadata = {
@@ -20,10 +21,12 @@ export default async function HomeWorkoutsPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, library, splitsResult] = await Promise.all([
+  const [profileResult, library, splitsResult, recommendationsBundle] =
+    await Promise.all([
     getProfile(userId),
     Promise.resolve(loadExerciseLibrary()),
     getSplitsForUser(userId).catch(() => ({ data: [] as never[], error: null })),
+    resolveSplitRecommendations(),
   ])
 
   const displayName =
@@ -59,6 +62,9 @@ export default async function HomeWorkoutsPage() {
             library={library}
             homeCount={homeCount}
             yourSplits={yourSplits}
+            recommendedSplits={recommendationsBundle.recommendations.slice(0, 3)}
+            recommendedSplitsError={recommendationsBundle.error}
+            isGuest={profileResult.data?.is_guest === true}
           />
         </main>
       </OfflineConnectionGate>
