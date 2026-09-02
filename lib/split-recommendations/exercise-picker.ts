@@ -71,6 +71,45 @@ export function pickExerciseForSlot(
   usedSourceIds: Set<string>,
   catalog?: Exercise[],
 ): Exercise | null {
+  return pickExerciseForSlotInternal(
+    role,
+    input,
+    allowed,
+    usedSourceIds,
+    catalog,
+    'strict',
+  )
+}
+
+/** Relaxed matching when strict profile filters leave no candidates. */
+export function pickExerciseForSlotRelaxed(
+  role: ExerciseSlotRole,
+  input: RecommendationInput,
+  usedSourceIds: Set<string>,
+  catalog: Exercise[],
+  options?: { gymEquipment?: boolean },
+): Exercise | null {
+  const allowed = options?.gymEquipment
+    ? resolveAllowedEquipment('gym', [])
+    : buildAllowedEquipment(input)
+  return pickExerciseForSlotInternal(
+    role,
+    input,
+    allowed,
+    usedSourceIds,
+    catalog,
+    'relaxed',
+  )
+}
+
+function pickExerciseForSlotInternal(
+  role: ExerciseSlotRole,
+  input: RecommendationInput,
+  allowed: Set<string>,
+  usedSourceIds: Set<string>,
+  catalog: Exercise[] | undefined,
+  mode: 'strict' | 'relaxed',
+): Exercise | null {
   const all = catalog ?? loadExerciseCatalog()
   const limitText = limitationText(input)
   const preferNames = preferredAlternatives(limitText, input.seniorMode)
@@ -88,8 +127,12 @@ export function pickExerciseForSlot(
     .filter((ex) => {
       if (usedSourceIds.has(ex.sourceId)) return false
       if (!equipmentAllowed(ex, allowed)) return false
-      // Hard exclude — never fall back to an avoided-pattern exercise.
-      if (shouldAvoidExercise(ex.name, limitText, input.seniorMode)) return false
+      if (mode === 'strict' && shouldAvoidExercise(ex.name, limitText, input.seniorMode)) {
+        return false
+      }
+      if (mode === 'relaxed' && input.seniorMode) {
+        if (shouldAvoidExercise(ex.name, 'joint-friendly low-impact', true)) return false
+      }
       if (role === 'cardio_finisher') {
         if (
           ex.category !== 'cardio' &&
@@ -107,7 +150,7 @@ export function pickExerciseForSlot(
       ex,
       score: scoreExercise(ex, role, limitText, input.seniorMode, preferNames),
     }))
-    .filter((row) => row.score > -50)
+    .filter((row) => row.score > (mode === 'relaxed' ? -150 : -50))
     .sort((a, b) => b.score - a.score)
 
   const pick = ranked[0]?.ex ?? null

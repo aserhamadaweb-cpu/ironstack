@@ -15,11 +15,12 @@ const withPWA = withPWAInit({
     runtimeCaching: [
       {
         urlPattern: /\/api\/exercises\/[^/]+$/i,
-        handler: 'CacheFirst',
+        handler: 'NetworkFirst',
         options: {
           cacheName: 'exercise-details',
-          expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 30 },
-          cacheableResponse: { statuses: [0, 200] },
+          networkTimeoutSeconds: 10,
+          expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 7 },
+          cacheableResponse: { statuses: [200] },
         },
       },
       {
@@ -110,6 +111,10 @@ const withPWA = withPWAInit({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Ensure the exercise dataset ships with server actions / API routes on Vercel.
+  outputFileTracingIncludes: {
+    '/**': ['./data/exercises-dataset/**/*', './public/offline/exercises.json'],
+  },
   // Silence Next 16 Turbopack warning when next-pwa injects a webpack plugin.
   turbopack: {},
   typescript: {

@@ -11,6 +11,7 @@ import {
   buildAllowedEquipment,
   exerciseToRecommended,
   pickExerciseForSlot,
+  pickExerciseForSlotRelaxed,
 } from './exercise-picker'
 import { buildVolumeProfile } from './volume'
 import type {
@@ -232,6 +233,44 @@ export function safePickForSlotWithTier(
   return {
     exercise: exerciseToRecommended(picked, sets, reps),
     warnings,
+  }
+}
+
+/** Last-resort slot fill — relaxes injury swaps but keeps equipment and senior safety. */
+export function safePickForSlotRelaxed(
+  role: ExerciseSlotRole,
+  tier: 'main' | 'accessory' | 'finisher',
+  input: RecommendationInput,
+  usedIds: Set<string>,
+  catalog: Exercise[],
+  options?: { gymEquipment?: boolean },
+): { exercise: RecommendedExercise | null; warnings: string[] } {
+  const volume = buildVolumeProfile(
+    input.fitnessLevel,
+    input.workoutDuration,
+    input.primaryGoal,
+    input.seniorMode,
+  )
+  const picked = pickExerciseForSlotRelaxed(
+    role,
+    input,
+    usedIds,
+    catalog,
+    options,
+  )
+  if (!picked) {
+    return {
+      exercise: null,
+      warnings: [
+        `Could not fill ${role.replace(/_/g, ' ')} even with relaxed matching.`,
+      ],
+    }
+  }
+  const sets = tier === 'main' ? volume.mainSets : volume.accessorySets
+  const reps = tier === 'main' ? volume.mainReps : volume.accessoryReps
+  return {
+    exercise: exerciseToRecommended(picked, sets, reps),
+    warnings: [],
   }
 }
 

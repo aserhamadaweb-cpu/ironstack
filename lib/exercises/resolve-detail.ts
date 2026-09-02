@@ -7,6 +7,7 @@ import {
   searchCatalogExercises,
 } from '@/lib/ai/catalog-lookup'
 import { getExerciseById } from '@/lib/exercises/catalog'
+import { isCatalogNumericId, isDbUuid, padCatalogId } from '@/lib/exercises/detail-id'
 import type { Exercise } from '@/lib/exercises/types'
 
 export type ExerciseDetailDto = Omit<Exercise, 'source'>
@@ -15,13 +16,7 @@ function catalogIdFromHints(id: string, name?: string): string | null {
   const idTrim = id.trim()
   const nameTrim = name?.trim() ?? ''
 
-  if (idTrim) {
-    const aliasId = resolveExerciseIdAlias(idTrim)
-    if (aliasId && getExerciseById(aliasId)) return aliasId
-    const fromId = resolveCatalogId(idTrim)
-    if (fromId.id) return fromId.id
-  }
-
+  // Name-first: split rows often only have a Supabase lift UUID as id.
   if (nameTrim) {
     const aliasId = resolveExerciseIdAlias(nameTrim)
     if (aliasId && getExerciseById(aliasId)) return aliasId
@@ -41,6 +36,17 @@ function catalogIdFromHints(id: string, name?: string): string | null {
     }
   }
 
+  if (idTrim && !isDbUuid(idTrim)) {
+    const aliasId = resolveExerciseIdAlias(idTrim)
+    if (aliasId && getExerciseById(aliasId)) return aliasId
+    if (isCatalogNumericId(idTrim)) {
+      const padded = padCatalogId(idTrim)
+      if (getExerciseById(padded)) return padded
+    }
+    const fromId = resolveCatalogId(idTrim)
+    if (fromId.id) return fromId.id
+  }
+
   return null
 }
 
@@ -49,9 +55,13 @@ export function resolveExerciseDetail(
   id: string,
   name?: string,
 ): ExerciseDetailDto | null {
-  const library = resolveLibraryExercise(name?.trim() ?? '', id)
+  const nameTrim = name?.trim() ?? ''
+  const library = resolveLibraryExercise(nameTrim || id, isDbUuid(id) ? id : null)
   const catalogId =
-    catalogIdFromHints(id, name) ?? library?.id ?? catalogIdFromHints(id)
+    catalogIdFromHints(id, name) ??
+    library?.id ??
+    (nameTrim ? catalogIdFromHints(nameTrim, nameTrim) : null)
+
   if (!catalogId) return null
 
   const exercise = getExerciseById(catalogId)

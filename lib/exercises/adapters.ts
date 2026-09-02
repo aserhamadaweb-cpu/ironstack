@@ -1,9 +1,51 @@
 import type { LibraryExercise } from '@/lib/exercise-library'
+import type { SourceExercise } from '@/lib/exercises/types'
 import type { ExerciseCatalogItem } from '@/lib/exercise-catalog'
 import { normalizeCategory, normalizeMuscleGroup } from '@/lib/exercise-catalog'
 import type { Exercise, ExerciseSlim } from '@/lib/exercises/types'
 import { muscleDisplayLabel, titleCase } from '@/lib/exercises/normalizers'
 import { gifUrlFromImageUrl } from '@/lib/exercises/paths'
+
+/** Minimal catalog row from the offline slim JSON bundle. */
+export function libraryExerciseToCatalogExercise(lib: LibraryExercise): Exercise {
+  const equipment = (lib.equipment ?? 'body weight').toLowerCase()
+  const stubSource: SourceExercise = {
+    id: lib.id,
+    name: lib.name,
+    category: lib.category ?? lib.bodyPart ?? '',
+    body_part: lib.bodyPart ?? '',
+    equipment,
+    instructions: {},
+    instruction_steps: {},
+    muscle_group: lib.muscleGroup ?? '',
+    secondary_muscles: [],
+    target: lib.target ?? '',
+    media_id: '',
+    image: lib.image ?? '',
+    gif_url: lib.gifUrl ?? '',
+    attribution: '',
+    created_at: '',
+  }
+  return {
+    sourceId: lib.id,
+    name: lib.name,
+    category: lib.category ?? lib.bodyPart ?? '',
+    bodyPart: lib.bodyPart ?? '',
+    target: lib.target ?? '',
+    muscleGroup: lib.muscleGroup ?? '',
+    secondaryMuscles: [],
+    equipment,
+    instructions: {},
+    instructionSteps: {},
+    image: lib.image ?? '',
+    gifUrl: lib.gifUrl ?? gifUrlFromImageUrl(lib.image) ?? '',
+    mediaId: '',
+    attribution: '',
+    createdAt: '',
+    legacySlug: lib.legacySlug ?? null,
+    source: stubSource,
+  }
+}
 
 export function exerciseToSlim(exercise: Exercise): ExerciseSlim {
   return {

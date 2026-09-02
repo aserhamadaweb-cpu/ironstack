@@ -8,6 +8,7 @@ import {
 import {
   detectExplicitUserRequests,
   enforceSafetyOnSchedule,
+  safePickForSlotRelaxed,
   safePickForSlotWithTier,
 } from './enforce-safety'
 import type { CustomSplitIntent } from './parse-custom-intent'
@@ -20,6 +21,7 @@ import type {
   SplitRecommendation,
 } from './types'
 import { buildVolumeProfile } from './volume'
+import { applyPromptTrainingHints, promptMentionsGym } from './prompt-profile'
 
 const DAY_META: Record<
   DayFocusId,
@@ -95,7 +97,10 @@ function applySeniorAdjustments(
     daysPerWeek = Math.min(daysPerWeek, 5)
   }
 
-  daysPerWeek = Math.min(daysPerWeek, input.daysPerWeek)
+  daysPerWeek = Math.max(
+    1,
+    Math.min(daysPerWeek, input.daysPerWeek > 0 ? input.daysPerWeek : daysPerWeek),
+  )
 
   if (
     input.seniorMode &&
@@ -135,22 +140,33 @@ export function buildCustomSplitFromIntent(
   input: RecommendationInput,
   userPrompt: string,
 ): { recommendation: SplitRecommendation; warnings: string[] } | { error: string } {
+  const { input: profileInput, assumptions: promptAssumptions } =
+    applyPromptTrainingHints(input, userPrompt)
+
   const { intent: adjusted, warnings: seniorWarnings } = applySeniorAdjustments(
     intent,
     userPrompt,
-    input,
+    profileInput,
   )
 
   const catalog = loadExerciseCatalog()
-  const allowed = buildAllowedEquipment(input)
+  if (catalog.length === 0) {
+    return {
+      error:
+        'The exercise catalog is temporarily unavailable. Please try again in a moment.',
+    }
+  }
+
+  const allowed = buildAllowedEquipment(profileInput)
   const usedIds = new Set<string>()
   const volume = buildVolumeProfile(
-    input.fitnessLevel,
-    input.workoutDuration,
-    input.primaryGoal,
-    input.seniorMode,
+    profileInput.fitnessLevel,
+    profileInput.workoutDuration,
+    profileInput.primaryGoal,
+    profileInput.seniorMode,
   )
-  const buildWarnings = [...seniorWarnings, ...adjusted.assumptions]
+  const buildWarnings = [...seniorWarnings, ...promptAssumptions, ...adjusted.assumptions]
+  const gymFromPrompt = promptMentionsGym(userPrompt)
 
   const schedule: RecommendedDay[] = []
 
@@ -164,10 +180,10 @@ export function buildCustomSplitFromIntent(
     for (const slot of slots) {
       if (exercises.length >= exerciseBudget) break
       const requested = explicitNameForRole(userPrompt, slot.role)
-      const { exercise, warnings: slotWarnings } = safePickForSlotWithTier(
+      let picked = safePickForSlotWithTier(
         slot.role,
         slot.tier,
-        input,
+        profileInput,
         allowed,
         usedIds,
         catalog,
@@ -175,8 +191,18 @@ export function buildCustomSplitFromIntent(
           ? { userPrompt, requestedExerciseName: requested }
           : { userPrompt },
       )
-      buildWarnings.push(...slotWarnings)
-      if (exercise) exercises.push(exercise)
+      if (!picked.exercise) {
+        picked = safePickForSlotRelaxed(
+          slot.role,
+          slot.tier,
+          profileInput,
+          usedIds,
+          catalog,
+          gymFromPrompt ? { gymEquipment: true } : undefined,
+        )
+      }
+      buildWarnings.push(...picked.warnings)
+      if (picked.exercise) exercises.push(picked.exercise)
     }
 
     if (exercises.length === 0) {
@@ -194,7 +220,7 @@ export function buildCustomSplitFromIntent(
   }
 
   const { schedule: safeSchedule, warnings: safetyWarnings } =
-    enforceSafetyOnSchedule(schedule, input, userPrompt)
+    enforceSafetyOnSchedule(schedule, profileInput, userPrompt)
 
   if (safeSchedule.every((d) => d.exercises.length === 0)) {
     return {

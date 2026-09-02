@@ -1,19 +1,14 @@
 import type { Exercise } from '@/lib/split-data'
+import {
+  splitExerciseDetailRef as buildSplitExerciseDetailRef,
+  type SplitExerciseDetailRef,
+} from '@/lib/exercises/detail-id'
 
-export type SplitExerciseDetailRef = {
-  id: string
-  name: string
-}
+export type { SplitExerciseDetailRef }
 
-/** Id + name passed to `fetchExerciseDetail` from a split exercise row. */
+/** Id + name passed to exercise detail loaders from a split exercise row. */
 export function splitExerciseDetailRef(
   exercise: Pick<Exercise, 'liftTypeId' | 'catalogExerciseId' | 'name'>,
 ): SplitExerciseDetailRef | null {
-  const name = exercise.name?.trim()
-  if (!name) return null
-  const id =
-    exercise.catalogExerciseId?.trim() ||
-    exercise.liftTypeId?.trim() ||
-    name
-  return { id, name }
+  return buildSplitExerciseDetailRef(exercise)
 }

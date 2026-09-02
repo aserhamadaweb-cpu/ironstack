@@ -1,5 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { parseExerciseDataset } from '@/lib/exercise-library'
+import { libraryExerciseToCatalogExercise } from '@/lib/exercises/adapters'
 import type { Exercise, ExerciseSlim, IdentityMapFile, SourceExercise } from '@/lib/exercises/types'
 import { emptyIdentityMap } from '@/lib/exercises/identity'
 import { parseSourceExercise, sourceToExercise } from '@/lib/exercises/normalizers'
@@ -9,6 +11,8 @@ const SOURCE_CANDIDATES = [
   ['data', 'exercises-dataset', 'exercises.json'],
   ['vendor', 'exercises-dataset', 'data', 'exercises.json'],
 ]
+
+const OFFLINE_CATALOG = ['public', 'offline', 'exercises.json']
 
 const IDENTITY_PATH = ['data', 'exercises-dataset', 'identity-map.json']
 
@@ -21,6 +25,12 @@ function readJson<T>(segments: string[]): T | null {
   const file = path.join(process.cwd(), ...segments)
   if (!fs.existsSync(file)) return null
   return JSON.parse(fs.readFileSync(file, 'utf8')) as T
+}
+
+function loadOfflineFallbackCatalog(): Exercise[] {
+  const raw = readJson<unknown>(OFFLINE_CATALOG)
+  if (!raw) return []
+  return parseExerciseDataset(raw).map(libraryExerciseToCatalogExercise)
 }
 
 export function loadIdentityMapFile(): IdentityMapFile {
@@ -49,9 +59,11 @@ export function loadSourceExercises(): SourceExercise[] {
 export function loadExerciseCatalog(): Exercise[] {
   if (catalogCache) return catalogCache
   const identity = loadIdentityMapFile()
-  catalogCache = loadSourceExercises().map((source) =>
+  const fromSource = loadSourceExercises().map((source) =>
     sourceToExercise(source, identity.bySourceId[source.id]?.legacySlug ?? null),
   )
+  catalogCache =
+    fromSource.length > 0 ? fromSource : loadOfflineFallbackCatalog()
   return catalogCache
 }
 

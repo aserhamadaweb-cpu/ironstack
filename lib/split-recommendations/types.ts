@@ -159,6 +159,7 @@ function buildRecommendationInput(data: OnboardingData): RecommendationInput {
   const seniorMode = data.ageRange === '55_plus'
 
   let daysPerWeek = data.daysPerWeek ?? 3
+  if (daysPerWeek < 1) daysPerWeek = 3
   if (seniorMode) {
     daysPerWeek = Math.min(daysPerWeek, 5)
   }
