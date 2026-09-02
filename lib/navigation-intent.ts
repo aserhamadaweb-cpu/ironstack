@@ -1,7 +1,7 @@
 'use client'
 
 /** How long after a route change we treat navigation as user-intentional. */
-const RECENT_NAV_MS = 4_000
+const RECENT_NAV_MS = 8_000
 
 let lastIntentAt = 0
 let intendedPath: string | null = null

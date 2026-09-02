@@ -9,6 +9,8 @@ type LoginPageProps = {
   searchParams: Promise<{ next?: string; mode?: string; pickLanguage?: string }>
 }
 
+// Signed-in visitors are redirected away from /login by proxy.ts — no extra
+// Auth round-trip here so the sign-in screen paints immediately.
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams
   const jar = await cookies()

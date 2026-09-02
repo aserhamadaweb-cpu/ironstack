@@ -28,6 +28,7 @@ import {
   type AuthCopy,
 } from '@/lib/auth-errors'
 import { buildAuthCallbackUrl } from '@/lib/auth-callback-url'
+import { signIn, signInGuest } from '@/app/login/actions'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
 import { handleAuthUserChanged } from '@/lib/clear-client-user-state'
@@ -202,22 +203,11 @@ function LoginAuthForm() {
     setError(null)
     setGuestLoading(true)
     try {
-      const { error: guestError } = await supabase.auth.signInAnonymously()
-      if (guestError) {
-        setError(friendlyAuthError(guestError.message, copy, guestError.code))
-        return
+      clearIronstackAuthCache()
+      const result = await signInGuest()
+      if (result?.error) {
+        setError(friendlyAuthError(result.error, copy))
       }
-      const {
-        data: { user: guestUser },
-      } = await supabase.auth.getUser()
-      if (!guestUser) {
-        setError(copy.generic)
-        return
-      }
-      await handleAuthUserChanged(guestUser.id)
-      triggerIronStackNavTransition()
-      router.push(HOME_PATH)
-      router.refresh()
     } finally {
       setGuestLoading(false)
     }
@@ -295,38 +285,17 @@ function LoginAuthForm() {
 
     try {
       if (mode === 'signin') {
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email: trimmedEmail,
-            password,
-          })
-
-        if (signInError) {
-          setError(
-            friendlyAuthError(signInError.message, copy, signInError.code),
-          )
-          return
-        }
-
-        if (!signInData.session?.user) {
-          setError(t('signinNoSession'))
-          return
-        }
+        const formData = new FormData()
+        formData.set('email', trimmedEmail)
+        formData.set('password', password)
+        formData.set('next', returnNext ?? HOME_PATH)
 
         clearIronstackAuthCache()
-        await handleAuthUserChanged(signInData.session.user.id)
         triggerIronStackNavTransition()
-        if (returnNext) {
-          router.push(returnNext)
-          router.refresh()
-          return
+        const result = await signIn(null, formData)
+        if (result?.error) {
+          setError(friendlyAuthError(result.error, copy))
         }
-        const { resolvePostAuthPathAction } = await import(
-          '@/lib/data/onboarding-actions'
-        )
-        const destination = await resolvePostAuthPathAction()
-        router.push(destination)
-        router.refresh()
         return
       }
 

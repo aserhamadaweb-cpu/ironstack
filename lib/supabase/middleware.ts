@@ -60,6 +60,8 @@ export async function updateSession(request: NextRequest) {
   let userId: string | null = null
   let claimsOnboardingIncomplete: boolean | null = null
   let authClaims: Record<string, unknown> | undefined
+  // getClaims() refreshes an expired session and rewrites auth cookies, so a
+  // separate getUser() round-trip would only add latency to every navigation.
   try {
     const { data: claimsData } = await supabase.auth.getClaims()
     authClaims = claimsData?.claims as Record<string, unknown> | undefined

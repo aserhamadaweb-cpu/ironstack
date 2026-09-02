@@ -6,26 +6,16 @@ import { ArrowLeft, House } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ExerciseDetailOverlay } from '@/components/exercise-detail-overlay'
 import { HomeProgramBoard, type HomeSplitCard } from '@/components/home-program-board'
-import { WorkoutRecommendedSplits } from '@/components/workout-recommended-splits'
 import type { LibraryExercise } from '@/lib/exercise-library'
 import { isHomeEquipment } from '@/lib/exercises/home-workouts'
 import { resolveHomePrograms } from '@/lib/home-splits'
-import type { SplitRecommendation } from '@/lib/split-recommendations'
 import { useClientExerciseLibrary } from '@/lib/use-client-exercise-library'
 
 type HomeWorkoutsClientProps = {
   yourSplits: HomeSplitCard[]
-  recommendedSplits?: SplitRecommendation[]
-  recommendedSplitsError?: string | null
-  isGuest?: boolean
 }
 
-export function HomeWorkoutsClient({
-  yourSplits,
-  recommendedSplits = [],
-  recommendedSplitsError = null,
-  isGuest = false,
-}: HomeWorkoutsClientProps) {
+export function HomeWorkoutsClient({ yourSplits }: HomeWorkoutsClientProps) {
   const t = useTranslations('homeWorkouts')
   const tCatalog = useTranslations('exerciseCatalog')
   const { library, loading } = useClientExerciseLibrary()
@@ -52,11 +42,6 @@ export function HomeWorkoutsClient({
       <HomeWorkoutsHeader count={loading ? undefined : homeCount} />
 
       <div data-tour="home-workouts-list">
-        <WorkoutRecommendedSplits
-          recommendations={recommendedSplits}
-          error={recommendedSplitsError}
-          isGuest={isGuest}
-        />
         {loading ? (
           <div
             className="mt-6 flex min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-silver/20 bg-card/30"

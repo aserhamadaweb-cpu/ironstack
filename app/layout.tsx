@@ -4,6 +4,7 @@ import { DM_Sans, Noto_Sans_Arabic, Oswald } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import { NavTransitionOverlay } from '@/components/nav-transition-overlay'
+import { PwaWindowChrome } from '@/components/pwa-window-chrome'
 import { ThemeProvider } from '@/components/theme-provider'
 import { localeDir, type AppLocale } from '@/lib/i18n'
 import { getServerAppearanceMode, getServerThemePreference } from '@/lib/theme-server'
@@ -97,6 +98,7 @@ export default async function RootLayout({
             initialTheme={serverTheme}
             initialAppearance={serverAppearance}
           >
+            <PwaWindowChrome />
             <NavTransitionOverlay />
             {children}
           </ThemeProvider>

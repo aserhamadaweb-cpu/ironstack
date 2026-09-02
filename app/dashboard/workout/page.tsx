@@ -9,10 +9,7 @@ import {
   getSplitsForUser,
   getTotalVolume,
 } from '@/lib/data/queries'
-import {
-  getPrimarySplitSummary,
-  resolveSplitRecommendations,
-} from '@/lib/data/split-recommendations-server'
+import { getPrimarySplitSummary } from '@/lib/data/split-recommendations-server'
 import { ltrEmbed } from '@/lib/bidi'
 import {
   computeWeeklyVolumeTrend,
@@ -56,7 +53,6 @@ export default async function WorkoutPage() {
     volumeResult,
     celebrations,
     primarySplit,
-    recommendationsBundle,
   ] = unreachable
     ? [
         profileProbe,
@@ -65,7 +61,6 @@ export default async function WorkoutPage() {
         { data: 0, error: null },
         [] as never[],
         { id: null, name: null },
-        { recommendations: [], error: null as string | null },
       ]
     : await Promise.all([
         Promise.resolve(profileProbe),
@@ -74,7 +69,6 @@ export default async function WorkoutPage() {
         getTotalVolume(userId),
         getUnshownBannerCelebrations(userId).catch(() => []),
         getPrimarySplitSummary(userId),
-        resolveSplitRecommendations(),
       ])
 
   const sessions = sessionsResult.data ?? []
@@ -284,8 +278,6 @@ export default async function WorkoutPage() {
         title: c.title,
         body: c.body,
       }))}
-      recommendedSplits={recommendationsBundle.recommendations.slice(0, 3)}
-      recommendedSplitsError={recommendationsBundle.error}
     />
   )
 }

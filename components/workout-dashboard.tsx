@@ -47,6 +47,7 @@ import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
 import { ActiveWorkoutConflict } from '@/components/active-workout-conflict'
 import { useActiveWorkout } from '@/lib/use-active-workout'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
+import { safeRouterRefresh } from '@/lib/safe-router-refresh'
 import { createSplitChoiceHref } from '@/lib/split-create-paths'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { CTA_PRIMARY } from '@/lib/accent'
@@ -55,8 +56,6 @@ import {
   formatLoadChangePct,
   type WeeklyVolumeTrend,
 } from '@/lib/volume-trend'
-import { WorkoutRecommendedSplits } from '@/components/workout-recommended-splits'
-
 type WorkoutDashboardProps = {
   displayName: string
   featuredSplit: WorkoutSplitCardData | null
@@ -91,8 +90,6 @@ type WorkoutDashboardProps = {
   profileHref?: string
   isGuest?: boolean
   liveDegraded?: boolean
-  recommendedSplits?: import('@/lib/split-recommendations').SplitRecommendation[]
-  recommendedSplitsError?: string | null
 }
 
 /** Survives RSC remounts so reconnect reload does not loop. */
@@ -128,8 +125,6 @@ export function WorkoutDashboard({
   profileHref,
   isGuest = false,
   liveDegraded = false,
-  recommendedSplits = [],
-  recommendedSplitsError = null,
 }: WorkoutDashboardProps) {
   const t = useTranslations('workout')
   const tHome = useTranslations('homeWorkouts')
@@ -189,7 +184,7 @@ export function WorkoutDashboard({
           }),
         ])
         if (cancelled) return
-        router.refresh()
+        safeRouterRefresh(router)
         setLiveReloading(false)
       } catch (err) {
         if (cancelled) return
@@ -659,12 +654,6 @@ export function WorkoutDashboard({
                 </div>
               )}
             </section>
-
-            <WorkoutRecommendedSplits
-              recommendations={recommendedSplits}
-              error={recommendedSplitsError}
-              isGuest={resolvedGuest}
-            />
 
             {/* Last Session Summary */}
             <section className="mb-10">

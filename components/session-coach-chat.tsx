@@ -246,7 +246,7 @@ export function SessionCoachChat({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={reduce ? undefined : { opacity: 0, y: 24, scale: 0.98 }}
               transition={{ duration: 0.22, ease: EASE }}
-              className="absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] flex max-h-[min(420px,55dvh)] flex-col overflow-hidden rounded-2xl border border-silver/15 bg-background shadow-2xl sm:static sm:inset-auto sm:max-h-[min(440px,58dvh)] sm:w-full"
+              className="absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] flex max-h-[min(720px,calc(100dvh-env(safe-area-inset-bottom)-5.75rem))] flex-col overflow-hidden rounded-2xl border border-silver/15 bg-background shadow-2xl sm:static sm:inset-auto sm:max-h-[min(440px,58dvh)] sm:w-full"
             >
               <header className="flex shrink-0 items-start gap-2 border-b border-silver/10 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
@@ -301,7 +301,11 @@ export function SessionCoachChat({
                         </div>
                       ) : null}
                       <div
-                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                        className={`max-w-[92%] rounded-2xl px-3 py-2 leading-relaxed sm:max-w-[85%] ${
+                          isUser
+                            ? 'text-sm'
+                            : 'text-base sm:text-sm'
+                        } ${
                           isUser
                             ? 'rounded-ee-md border border-blue/25 border-e-[3px] border-e-blue bg-card/95 text-foreground'
                             : 'rounded-es-md border border-silver/10 bg-card/80 text-foreground'

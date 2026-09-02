@@ -5,6 +5,7 @@
   "start_url": "/dashboard/home",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "handle_links": "preferred",
   "launch_handler": {

@@ -63,8 +63,6 @@ const SHELL_URLS = [
   '/icons/icon-512x512.png',
 ]
 
-const NAV_NETWORK_TIMEOUT_MS = 25_000
-
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) =>
@@ -108,19 +106,14 @@ async function navigationResponse(request) {
   const reqUrl = new URL(request.url)
 
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), NAV_NETWORK_TIMEOUT_MS)
-    const response = await fetch(request, { signal: controller.signal })
-    clearTimeout(timer)
-    if (response && (response.ok || response.type === 'opaqueredirect')) {
-      // Never cache HTML navigations — stale documents caused route reverts on slow networks.
-      return response
-    }
+    // No timeout: a slow network must still resolve to the requested page.
+    // Timing out here used to bounce users back to the previous route.
+    return await fetch(request)
   } catch {
-    /* offline, timeout, or network error */
+    /* genuinely offline — fall through to the offline shell */
   }
 
-  // Network unavailable: show the offline shell with return path — never a stale cached page.
+  // Offline: show the offline shell with a return path — never a stale cached page.
   const offline = await caches.match('/offline', { ignoreSearch: true })
   if (offline) {
     if (reqUrl.pathname !== '/offline') {

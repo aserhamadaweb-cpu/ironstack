@@ -24,6 +24,7 @@ import {
   hasRecentNavigationIntent,
   markNavigationIntent,
 } from '@/lib/navigation-intent'
+import { safeRouterRefresh } from '@/lib/safe-router-refresh'
 import { countUnsyncedSessions, OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
 import { countUnsyncedSplitMutations } from '@/lib/offline/split-store'
 import { flushOfflineQueue, retryOfflineQueueNow } from '@/lib/offline/sync'
@@ -181,12 +182,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         if (shouldRsc) {
           wasOffline.current = false
           if (hasRecentNavigationIntent()) {
-            // Defer RSC refresh until client navigation settles — avoids flashing stale content.
-            window.setTimeout(() => {
-              if (!hasRecentNavigationIntent(1_500)) {
-                router.refresh()
-              }
-            }, 3_000)
+            safeRouterRefresh(router, { delayMs: 1_500 })
           } else {
             router.refresh()
           }

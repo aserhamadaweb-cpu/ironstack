@@ -38,7 +38,6 @@ export function ExerciseDetailOverlay({
   }, [onClose])
 
   const requestClose = useDetailsLayerHistory({
-    open: Boolean(exerciseId),
     onClose: close,
   })
 

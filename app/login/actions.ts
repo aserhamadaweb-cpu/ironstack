@@ -9,6 +9,7 @@ import {
   homePathWithTourIfNeeded,
 } from '@/lib/app-tour-storage'
 import {
+  HOME_PATH,
   ONBOARDING_COOKIE,
   ONBOARDING_PATH,
 } from '@/lib/onboarding-types'
@@ -161,6 +162,27 @@ export async function signIn(
   const destination =
     next.startsWith('/') && !next.startsWith('//') ? next : fallback
   redirect(destination)
+}
+
+/** Establishes a guest session in HTTP cookies (survives PWA cold start). */
+export async function signInGuest(): Promise<AuthState> {
+  const supabase = await createClient()
+  const { error } = await supabase.auth.signInAnonymously()
+  if (error) {
+    return { error: error.message }
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: 'Could not start a guest session. Try again.' }
+  }
+
+  // Guests skip onboarding entirely — a stale gate cookie would trap them there.
+  const jar = await cookies()
+  jar.set(ONBOARDING_COOKIE, '', { path: '/', maxAge: 0, sameSite: 'lax' })
+  redirect(HOME_PATH)
 }
 
 export async function signOut() {

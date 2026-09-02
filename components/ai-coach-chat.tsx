@@ -423,17 +423,17 @@ export function AiCoachChat({
         isGuest={isGuest}
       />
 
-      <div className="mx-auto flex w-full max-w-6xl flex-col overflow-hidden px-4 pt-4 app-chat-viewport-height sm:px-6 sm:pt-6">
-        <BackToTrainLink className="mb-4 shrink-0" />
-        <header className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-3">
+      <div className="mx-auto flex w-full max-w-6xl flex-col overflow-hidden px-3 pt-2 app-chat-viewport-height sm:px-6 sm:pt-6">
+        <BackToTrainLink className="mb-2 shrink-0 sm:mb-4" />
+        <header className="mb-2 flex shrink-0 flex-wrap items-end justify-between gap-2 sm:mb-4 sm:gap-3">
           <div>
             <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
               {t('kicker')}
             </p>
-            <h1 className="font-heading mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="font-heading mt-1 text-xl font-bold tracking-tight text-foreground sm:text-3xl">
               {t('brandTitle')}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
               {t('tagline')}
             </p>
           </div>
@@ -546,12 +546,16 @@ export function AiCoachChat({
                         </div>
                       )}
                       <div
-                        className={`max-w-[85%] sm:max-w-[75%] ${
+                        className={`max-w-[92%] sm:max-w-[75%] ${
                           isUser ? 'items-end' : 'items-start'
                         } flex flex-col gap-2`}
                       >
                         <div
-                          className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                          className={`rounded-2xl px-3.5 py-2.5 leading-relaxed ${
+                            isUser
+                              ? 'text-sm sm:text-sm'
+                              : 'text-base sm:text-sm'
+                          } ${
                             isUser
                               ? 'rounded-ee-md border border-blue/25 border-e-[3px] border-e-blue bg-card/95 text-foreground'
                               : usedTools

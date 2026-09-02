@@ -7,7 +7,6 @@ import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
-import { resolveSplitRecommendations } from '@/lib/data/split-recommendations-server'
 
 export const metadata = {
   title: 'Home Workouts — IRONSTACK',
@@ -19,10 +18,9 @@ export default async function HomeWorkoutsPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, splitsResult, recommendationsBundle] = await Promise.all([
+  const [profileResult, splitsResult] = await Promise.all([
     getProfile(userId),
     getSplitsForUser(userId).catch(() => ({ data: [] as never[], error: null })),
-    resolveSplitRecommendations(),
   ])
 
   const displayName =
@@ -51,12 +49,7 @@ export default async function HomeWorkoutsPage() {
           className="mx-auto flex min-h-[70vh] max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8"
         >
           <BackToTrainLink className="mb-2" />
-          <HomeWorkoutsClient
-            yourSplits={yourSplits}
-            recommendedSplits={recommendationsBundle.recommendations.slice(0, 3)}
-            recommendedSplitsError={recommendationsBundle.error}
-            isGuest={profileResult.data?.is_guest === true}
-          />
+          <HomeWorkoutsClient yourSplits={yourSplits} />
         </main>
       </OfflineConnectionGate>
     </>

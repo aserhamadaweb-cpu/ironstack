@@ -80,8 +80,6 @@ export function ExerciseLibraryOverlay({
   }, [catalogItems, homeOnly, homeQuery])
 
   const { requestCloseDetails, requestCloseLibrary } = useOverlayHistory({
-    libraryOpen: true,
-    detailsOpen: Boolean(detailsId),
     onCloseDetails: () => {
       setDetailsId(null)
       setDetail(null)
