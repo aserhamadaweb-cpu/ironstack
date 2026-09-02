@@ -6,13 +6,16 @@ import type {
   ChallengeStatus,
   ChallengeWithRelations,
   LiftType,
-  Profile,
+  PublicProfile,
 } from '@/lib/database.types'
 import { createClient } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
+import { logServerError } from '@/lib/log'
 import { displayToKg, type WeightUnit } from '@/lib/units'
+import { fetchPublicProfilesByIds } from '@/lib/data/public-profiles'
 
 type ProfileLite = Pick<
-  Profile,
+  PublicProfile,
   'id' | 'username' | 'display_name' | 'avatar_url'
 >
 
@@ -43,13 +46,8 @@ async function loadProfiles(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ids: string[],
 ): Promise<Map<string, ProfileLite>> {
-  const unique = [...new Set(ids.filter(Boolean))]
-  if (unique.length === 0) return new Map()
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url')
-    .in('id', unique)
-  return new Map(((data ?? []) as ProfileLite[]).map((p) => [p.id, p]))
+  const { data } = await fetchPublicProfilesByIds(supabase, ids)
+  return new Map((data ?? []).map((p) => [p.id, p]))
 }
 
 async function hydrateChallenges(
@@ -94,7 +92,7 @@ export async function listLiftTypesForChallenges(): Promise<LiftLite[]> {
     .order('name', { ascending: true })
 
   if (error) {
-    console.error('[challenges] lift_types', error.message)
+    logServerError('[challenges] lift_types', error.message)
     return []
   }
   return (data ?? []) as LiftLite[]
@@ -103,6 +101,7 @@ export async function listLiftTypesForChallenges(): Promise<LiftLite[]> {
 export async function listMyChallenges(
   userId: string,
 ): Promise<ChallengeWithRelations[]> {
+  try {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('challenges')
@@ -113,7 +112,7 @@ export async function listMyChallenges(
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[challenges] list', error.message)
+    logServerError('[challenges] list', error.message)
     return []
   }
 
@@ -121,6 +120,10 @@ export async function listMyChallenges(
     supabase,
     (data ?? []) as Array<Challenge & { lift_types?: LiftLite | LiftLite[] | null }>,
   )
+  } catch (err) {
+    logServerError('[challenges] list', err)
+    return []
+  }
 }
 
 export async function getChallengesHomeSummary(userId: string): Promise<{
@@ -147,6 +150,9 @@ export async function createChallengeAction(input: {
   targetReps: number
   unit?: WeightUnit
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 
@@ -208,6 +214,9 @@ async function respondToChallenge(
   challengeId: string,
   nextStatus: Extract<ChallengeStatus, 'active' | 'declined' | 'cancelled'>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 

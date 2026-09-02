@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Bot, Dumbbell, MessageSquare } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { useIsGuest } from '@/components/use-is-guest'
+import { useGuestGate } from '@/components/guest-gate-provider'
+import { useSuggestionBadge } from '@/components/use-suggestion-badge'
 
 /** Hide during an in-progress workout so logging stays full-screen. */
 function shouldHideFloating(pathname: string) {
@@ -21,7 +22,8 @@ type FloatingActionsProps = {
 export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
   const pathname = usePathname()
   const reduce = useReducedMotion()
-  const { isGuest } = useIsGuest()
+  const { isGuest, openUpgrade } = useGuestGate()
+  const { count: suggestionCount } = useSuggestionBadge()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
           <button
             type="button"
             aria-label="Messages"
-            onClick={onGuestMessages}
+            onClick={onGuestMessages ?? (() => openUpgrade('messages'))}
             className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
           >
             <MessageSquare className="size-5" aria-hidden="true" />
@@ -60,26 +62,46 @@ export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
           </Link>
         ))}
 
-      {!hideCoach && (
-        <Link
-          href="/dashboard/ai-coach"
-          aria-label="Open AI Coach"
-          className="pointer-events-auto group relative inline-flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-[0_8px_30px_-6px_rgba(242,241,237,0.35)] transition-transform duration-200 active:scale-95"
-        >
-          {!reduce && (
-            <motion.span
-              className="absolute inset-0 rounded-full border-2 border-primary/40"
-              animate={{ scale: [1, 1.45], opacity: [0.7, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-              aria-hidden="true"
-            />
-          )}
-          <Bot className="size-7 text-primary-foreground" aria-hidden="true" />
-          <span className="absolute -top-0.5 -end-0.5 flex size-4 items-center justify-center rounded-full border border-background bg-gold">
-            <Dumbbell className="size-2.5 text-background" aria-hidden="true" />
-          </span>
-        </Link>
-      )}
+      {!hideCoach &&
+        (isGuest ? (
+          <button
+            type="button"
+            aria-label="Open AI Coach"
+            onClick={() => openUpgrade('aiCoach')}
+            className="pointer-events-auto group relative inline-flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-[0_8px_30px_-6px_rgba(242,241,237,0.35)] transition-transform duration-200 active:scale-95"
+          >
+            <Bot className="size-7 text-primary-foreground" aria-hidden="true" />
+          </button>
+        ) : (
+          <Link
+            href="/dashboard/ai-coach"
+            aria-label={
+              suggestionCount > 0
+                ? `Open AI Coach — ${suggestionCount} new suggestions`
+                : 'Open AI Coach'
+            }
+            className="pointer-events-auto group relative inline-flex size-14 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-[0_8px_30px_-6px_rgba(242,241,237,0.35)] transition-transform duration-200 active:scale-95"
+          >
+            {!reduce && (
+              <motion.span
+                className="absolute inset-0 rounded-full border-2 border-primary/40"
+                animate={{ scale: [1, 1.45], opacity: [0.7, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                aria-hidden="true"
+              />
+            )}
+            <Bot className="size-7 text-primary-foreground" aria-hidden="true" />
+            {suggestionCount > 0 ? (
+              <span className="absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-background bg-gold px-1 text-[10px] font-bold tabular-nums text-background">
+                {suggestionCount > 9 ? '9+' : suggestionCount}
+              </span>
+            ) : (
+              <span className="absolute -top-0.5 -end-0.5 flex size-4 items-center justify-center rounded-full border border-background bg-gold">
+                <Dumbbell className="size-2.5 text-background" aria-hidden="true" />
+              </span>
+            )}
+          </Link>
+        ))}
     </motion.div>,
     document.body,
   )

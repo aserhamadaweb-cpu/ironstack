@@ -21,8 +21,12 @@ export type Exercise = {
   category?: string
   /** Real photo URL from lift_types.image_url when available. */
   image?: string
+  /** Looping catalog GIF so the athlete can follow the movement. */
+  gif?: string
   /** Live DB lift_types.id — required for session logging against Supabase. */
   liftTypeId?: string
+  /** Catalog source id (e.g. "0025") for exercise detail / GIF lookup. */
+  catalogExerciseId?: string
 }
 
 export type SplitDay = {

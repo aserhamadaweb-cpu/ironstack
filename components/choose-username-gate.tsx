@@ -5,12 +5,19 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
+  ProfileAvatarPicker,
+  type ProfileAvatarPickerValue,
+} from '@/components/profile-avatar-picker'
+import {
   claimUsernameAction,
   getUsernameStatusAction,
   logBodyWeightAction,
   updateBodyStatsAction,
 } from '@/lib/data/profile-actions'
 import { CTA_PRIMARY } from '@/lib/accent'
+import { isTemporaryUsername } from '@/lib/avatar-presets'
+import { normalizeUsername } from '@/lib/username'
+import { uploadProfileAvatar } from '@/lib/upload-profile-avatar.client'
 import {
   displayToKg,
   feetInchesToCm,
@@ -50,6 +57,8 @@ function loadOnboardingStatus(): Promise<OnboardingStatus> {
           isGuest: false,
           suggestion: 'athlete',
           displayName: 'Athlete',
+          userId: null,
+          avatarUrl: null,
         })
       }
     } catch {
@@ -57,25 +66,35 @@ function loadOnboardingStatus(): Promise<OnboardingStatus> {
     }
   }
   if (!onboardingStatusPromise) {
-    onboardingStatusPromise = getUsernameStatusAction().then((status) => {
-      const done =
-        status.isGuest || (!status.needsUsername && !status.needsBodyStats)
-      if (done && typeof window !== 'undefined') {
-        try {
-          sessionStorage.setItem(PROFILE_OK_KEY, '1')
-        } catch {
-          /* ignore */
+    onboardingStatusPromise = getUsernameStatusAction()
+      .then((status) => {
+        const done =
+          status.isGuest || (!status.needsUsername && !status.needsBodyStats)
+        if (done && typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem(PROFILE_OK_KEY, '1')
+          } catch {
+            /* ignore */
+          }
         }
-      }
-      return status
-    })
+        return status
+      })
+      .catch(() => ({
+        needsUsername: false,
+        needsBodyStats: false,
+        isGuest: false,
+        suggestion: 'athlete',
+        displayName: 'Athlete',
+        userId: null,
+        avatarUrl: null,
+      }))
   }
   return onboardingStatusPromise
 }
 
 /**
- * One-time gate for accounts that still need a username and/or body stats.
- * Guests skip this entirely. After a guest upgrades, this collects what they skipped.
+ * Blocking gate after Google/OAuth (and legacy accounts) when username /
+ * display name still need to be chosen. Guests skip this entirely.
  */
 export function ChooseUsernameGate() {
   const t = useTranslations('auth')
@@ -86,6 +105,13 @@ export function ChooseUsernameGate() {
   const [needsBodyStats, setNeedsBodyStats] = useState(false)
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
+  const [initialAvatarUrl, setInitialAvatarUrl] = useState<string | null>(null)
+  const [avatarSelection, setAvatarSelection] = useState<ProfileAvatarPickerValue>({
+    file: null,
+    presetPath: null,
+    previewUrl: null,
+  })
   const [unit, setUnit] = useState<WeightUnit>('kg')
   const [gender, setGender] = useState<ProfileGender | ''>('')
   const [birthDate, setBirthDate] = useState('')
@@ -106,8 +132,12 @@ export function ChooseUsernameGate() {
       if (status.needsUsername || status.needsBodyStats) {
         setNeedsUsername(status.needsUsername)
         setNeedsBodyStats(status.needsBodyStats)
-        setUsername(status.suggestion)
+        setUsername(
+          isTemporaryUsername(status.suggestion) ? '' : status.suggestion,
+        )
         setDisplayName(status.displayName)
+        setUserId(status.userId)
+        setInitialAvatarUrl(status.avatarUrl)
         setOpen(true)
       }
     })
@@ -134,10 +164,10 @@ export function ChooseUsernameGate() {
           id="complete-profile-title"
           className="font-heading mt-1 text-xl font-bold text-foreground"
         >
-          {tGuest('completeTitle')}
+          {needsUsername ? t('claimProfileTitle') : tGuest('completeTitle')}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          {tGuest('completeBody')}
+          {needsUsername ? t('claimProfileBody') : tGuest('completeBody')}
         </p>
 
         <form
@@ -147,9 +177,35 @@ export function ChooseUsernameGate() {
             setError(null)
             startTransition(async () => {
               if (needsUsername) {
+                const handle = normalizeUsername(username)
+                const name = displayName.trim()
+                if (name.length < 2) {
+                  setError(t('displayNameRequired'))
+                  return
+                }
+                let newAvatarPath: string | null = null
+                if (avatarSelection.file) {
+                  if (!userId) {
+                    setError(t('avatarUploadFailed'))
+                    return
+                  }
+                  try {
+                    newAvatarPath = await uploadProfileAvatar(
+                      userId,
+                      avatarSelection.file,
+                    )
+                  } catch {
+                    setError(t('avatarUploadFailed'))
+                    return
+                  }
+                }
                 const claim = await claimUsernameAction({
-                  username,
-                  displayName,
+                  username: handle,
+                  displayName: name,
+                  avatarPresetPath: newAvatarPath
+                    ? null
+                    : avatarSelection.presetPath,
+                  newAvatarPath,
                 })
                 if (!claim.ok) {
                   setError(claim.error)
@@ -212,30 +268,59 @@ export function ChooseUsernameGate() {
             })
           }}
         >
-          {needsUsername && (
-            <div>
-              <label className="mb-1.5 block text-[10px] font-semibold tracking-[0.18em] text-muted-foreground">
-                {t('username')}
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-sm text-muted-foreground">
-                  @
+          {needsUsername ? (
+            <div className="space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-[10px] font-semibold tracking-[0.18em] text-muted-foreground">
+                  {t('displayName')} <span className="text-gold">*</span>
                 </span>
                 <input
-                  value={username}
-                  onChange={(e) =>
-                    setUsername(
-                      e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-                    )
-                  }
-                  maxLength={30}
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={60}
                   required
-                  autoFocus
-                  className="w-full rounded-xl border border-border bg-card/90 py-2.5 pe-3 ps-7 text-sm text-foreground outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20"
+                  autoComplete="name"
+                  placeholder={t('displayNamePlaceholder')}
+                  className="w-full rounded-xl border border-border bg-card/90 px-3 py-2.5 text-sm text-foreground outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20"
                 />
+              </label>
+
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold tracking-[0.18em] text-muted-foreground">
+                  {t('username')} <span className="text-gold">*</span>
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-sm text-muted-foreground">
+                    @
+                  </span>
+                  <input
+                    value={username}
+                    onChange={(e) =>
+                      setUsername(normalizeUsername(e.target.value))
+                    }
+                    maxLength={30}
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    placeholder={t('usernamePlaceholder')}
+                    className="w-full rounded-xl border border-border bg-card/90 py-2.5 pe-3 ps-7 text-sm text-foreground outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20"
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {t('usernameHint')}
+                </p>
               </div>
+
+              <ProfileAvatarPicker
+                displayName={displayName}
+                username={username}
+                initialAvatarUrl={initialAvatarUrl}
+                disabled={pending}
+                onChange={setAvatarSelection}
+                onError={(message) => setError(message)}
+              />
             </div>
-          )}
+          ) : null}
 
           {needsBodyStats && (
             <div className="space-y-4 rounded-xl border border-border/80 bg-background/40 p-4">
@@ -369,7 +454,8 @@ export function ChooseUsernameGate() {
             type="submit"
             disabled={
               pending ||
-              (needsUsername && username.length < 3) ||
+              (needsUsername &&
+                (username.length < 3 || displayName.trim().length < 2)) ||
               (needsBodyStats && !gender)
             }
             className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-xs font-bold tracking-[0.14em] disabled:opacity-60 ${CTA_PRIMARY}`}

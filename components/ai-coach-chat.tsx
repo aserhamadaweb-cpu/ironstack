@@ -16,15 +16,21 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useLocale, useTranslations } from 'next-intl'
+import { GuestBlockedScreen } from '@/components/guest-blocked-screen'
 import { CoachMascot } from '@/components/coach-mascot'
 import {
   CoachMemoryPanel,
   type MemoryItem,
 } from '@/components/coach-memory-panel'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { LtrIsolate } from '@/components/ltr-isolate'
 import { EASE } from '@/components/reveal'
+import { CoachActionCard } from '@/components/coach-action-card'
+import { CoachSuggestions } from '@/components/coach-suggestions'
 import { SUGGESTED_QUESTIONS } from '@/lib/ai/prompt'
+import { isSplitBuildIntent } from '@/lib/ai/split-intent'
+import type { CoachUiAction, SplitProposal } from '@/lib/ai/action-types'
 import { initialsFrom } from '@/lib/dashboard-utils'
 
 type ChatMessage = {
@@ -33,6 +39,7 @@ type ChatMessage = {
   content: string
   createdAt: string
   usedTools?: boolean
+  action?: CoachUiAction
 }
 
 type ConversationSummary = {
@@ -44,6 +51,8 @@ type ConversationSummary = {
 type AiCoachChatProps = {
   displayName: string
   initials: string
+  avatarUrl?: string | null
+  isGuest?: boolean
   conversationId: string | null
   initialMessages: ChatMessage[]
   initialConversations: ConversationSummary[]
@@ -68,7 +77,7 @@ function extractStatHints(text: string) {
 
 type CoachT = ReturnType<typeof useTranslations<'coach'>>
 
-function relativeUpdatedAt(iso: string, t: CoachT) {
+function relativeUpdatedAt(iso: string, t: CoachT, locale: string) {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
   const diffSec = Math.max(0, Math.round((Date.now() - then) / 1000))
@@ -79,7 +88,7 @@ function relativeUpdatedAt(iso: string, t: CoachT) {
   if (hours < 24) return t('hoursAgo', { count: hours })
   const days = Math.round(hours / 24)
   if (days < 7) return t('daysAgo', { count: days })
-  const short = new Date(iso).toLocaleDateString('en-US', {
+  const short = new Date(iso).toLocaleDateString(locale === 'ar' ? 'ar' : 'en-US', {
     month: 'short',
     day: 'numeric',
   })
@@ -89,6 +98,8 @@ function relativeUpdatedAt(iso: string, t: CoachT) {
 export function AiCoachChat({
   displayName,
   initials,
+  avatarUrl,
+  isGuest = false,
   conversationId: initialConversationId,
   initialMessages,
   initialConversations,
@@ -110,9 +121,23 @@ export function AiCoachChat({
   const [memoryOpen, setMemoryOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const lastAttempt = useRef<string | null>(null)
+  const conversationIdRef = useRef(conversationId)
+  const sendGeneration = useRef(0)
+  const [buildingSplit, setBuildingSplit] = useState(false)
+  const [reviseProposal, setReviseProposal] = useState<SplitProposal | null>(
+    null,
+  )
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })
+    conversationIdRef.current = conversationId
+  }, [conversationId])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      block: 'nearest',
+    })
   }, [messages, pending, reduce])
 
   const showChips = messages.length <= 2
@@ -127,6 +152,8 @@ export function AiCoachChat({
 
   const startNewChat = () => {
     if (pending || switching) return
+    sendGeneration.current += 1
+    setBuildingSplit(false)
     setError(null)
     setSwitching(true)
     startTransition(async () => {
@@ -158,6 +185,8 @@ export function AiCoachChat({
       setHistoryOpen(false)
       return
     }
+    sendGeneration.current += 1
+    setBuildingSplit(false)
     setError(null)
     setSwitching(true)
     startTransition(async () => {
@@ -187,6 +216,18 @@ export function AiCoachChat({
     if (!text || pending || switching) return
     setError(null)
     setInput('')
+    lastAttempt.current = text
+    const targetConversationId = conversationId
+    const generation = ++sendGeneration.current
+    const splitIntent =
+      isSplitBuildIntent(
+        text,
+        messages.map((m) => ({ role: m.role, content: m.content })),
+      ) || Boolean(reviseProposal)
+    setBuildingSplit(splitIntent)
+
+    const revisingId = reviseProposal?.id ?? null
+    const payloadRevise = reviseProposal
 
     const optimisticId = `local-${Date.now()}`
     setMessages((prev) => [
@@ -207,9 +248,13 @@ export function AiCoachChat({
           body: JSON.stringify({
             message: text,
             conversationId,
+            reviseProposal: payloadRevise ?? undefined,
           }),
         })
         const data = await res.json()
+
+        if (generation !== sendGeneration.current) return
+        if (targetConversationId !== conversationIdRef.current) return
 
         if (!res.ok) {
           setError(
@@ -220,12 +265,30 @@ export function AiCoachChat({
           return
         }
 
+        setReviseProposal(null)
+        setBuildingSplit(false)
+
         setConversationId(data.conversationId ?? conversationId)
         syncConversations(data.conversations)
         setMessages((prev) => {
           const withoutOptimistic = prev.filter((m) => m.id !== optimisticId)
+          const withCancelled = revisingId
+            ? withoutOptimistic.map((row) => {
+                if (
+                  row.action?.type === 'split_preview' &&
+                  row.action.status === 'pending' &&
+                  row.action.proposal.id === revisingId
+                ) {
+                  return {
+                    ...row,
+                    action: { ...row.action, status: 'cancelled' as const },
+                  }
+                }
+                return row
+              })
+            : withoutOptimistic
           return [
-            ...withoutOptimistic,
+            ...withCancelled,
             {
               id: data.userMessage.id,
               role: 'user',
@@ -238,12 +301,18 @@ export function AiCoachChat({
               content: data.assistantMessage.content,
               createdAt: data.assistantMessage.createdAt,
               usedTools: Boolean(data.assistantMessage.usedTools),
+              action: data.assistantMessage.action,
             },
           ]
         })
       } catch {
+        if (generation !== sendGeneration.current) return
         setError(t('errNetwork'))
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
+      } finally {
+        if (generation === sendGeneration.current) {
+          setBuildingSplit(false)
+        }
       }
     })
   }
@@ -293,7 +362,7 @@ export function AiCoachChat({
                       {c.title?.trim() || t('newChat')}
                     </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      {relativeUpdatedAt(c.updated_at, t)}
+                      {relativeUpdatedAt(c.updated_at, t, locale)}
                     </p>
                   </button>
                 </li>
@@ -322,17 +391,40 @@ export function AiCoachChat({
     </div>
   )
 
+  if (isGuest) {
+    return (
+      <div className="relative flex min-h-svh flex-col">
+        <DashboardNav
+          userName={displayName}
+          initials={initials}
+          avatarUrl={avatarUrl}
+          isGuest={isGuest}
+        />
+        <GuestBlockedScreen
+          reason="aiCoach"
+          returnPath="/dashboard/ai-coach/chat"
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="relative flex min-h-svh flex-col pb-24 md:pb-0">
+    <div className="relative flex min-h-svh flex-col">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,rgba(232,181,74,0.12),transparent_55%)]" />
         <div className="absolute top-[35%] -end-28 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
         <div className="absolute bottom-[15%] start-[-5rem] h-72 w-72 rounded-full bg-blue/[0.04] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} />
+      <DashboardNav
+        userName={displayName}
+        initials={initials}
+        avatarUrl={avatarUrl}
+        isGuest={isGuest}
+      />
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pt-4 sm:px-6 sm:pt-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col overflow-hidden px-4 pt-4 app-chat-viewport-height sm:px-6 sm:pt-6">
+        <BackToTrainLink className="mb-4 shrink-0" />
         <header className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
@@ -478,6 +570,28 @@ export function AiCoachChat({
                           )}
                           <p className="whitespace-pre-wrap">{msg.content}</p>
                         </div>
+                        {msg.action ? (
+                          <CoachActionCard
+                            messageId={msg.id}
+                            conversationId={conversationId}
+                            action={msg.action}
+                            disabled={switching}
+                            onRevise={(proposal) => {
+                              setReviseProposal(proposal)
+                              setInput(
+                                t('revisePrompt', { name: proposal.name }),
+                              )
+                              inputRef.current?.focus()
+                            }}
+                            onActionChange={(id, next) => {
+                              setMessages((prev) =>
+                                prev.map((row) =>
+                                  row.id === id ? { ...row, action: next } : row,
+                                ),
+                              )
+                            }}
+                          />
+                        ) : null}
                         {hints.length > 0 && (
                           <div className="flex flex-wrap gap-2">
                             {hints.map((hint, i) => (
@@ -537,7 +651,7 @@ export function AiCoachChat({
                   <div
                     className="inline-flex items-center gap-3 rounded-2xl rounded-es-md border border-silver/10 bg-card/80 px-4 py-3"
                     aria-live="polite"
-                    aria-label={t('thinking')}
+                    aria-label={buildingSplit ? t('buildingSplit') : t('thinking')}
                   >
                     <span className="flex items-center gap-1.5">
                       {[0, 1, 2].map((i) => (
@@ -559,11 +673,13 @@ export function AiCoachChat({
                       ))}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {t('thinking')}
+                      {buildingSplit ? t('buildingSplit') : t('thinking')}
                     </span>
                   </div>
                 </motion.div>
               )}
+
+              <CoachSuggestions onAsk={sendMessage} disabled={pending || switching} />
 
               <div ref={bottomRef} />
             </div>
@@ -600,23 +716,45 @@ export function AiCoachChat({
             )}
 
             {error && (
-              <p
+              <div
                 role="alert"
-                className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+                className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive"
               >
-                {error}
-              </p>
+                <p>{error}</p>
+                {lastAttempt.current ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 items-center rounded-full border border-destructive/30 px-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+                    onClick={() => sendMessage(lastAttempt.current ?? '')}
+                  >
+                    {t('retry')}
+                  </button>
+                ) : null}
+              </div>
             )}
 
             <form
-              className="sticky bottom-0 shrink-0 border-t border-silver/10 bg-background/90 p-3 backdrop-blur-xl sm:p-4"
+              data-tour="coach-chat-composer"
+              className="z-10 shrink-0 border-t border-silver/10 bg-background/90 p-3 backdrop-blur-xl sm:p-4"
               onSubmit={(e) => {
                 e.preventDefault()
                 sendMessage(input)
               }}
             >
+              {reviseProposal ? (
+                <p className="mb-2 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold">
+                  {t('editingPlan', { name: reviseProposal.name })}
+                  <button
+                    type="button"
+                    className="ms-2 font-semibold underline-offset-2 hover:underline"
+                    onClick={() => setReviseProposal(null)}
+                  >
+                    {t('cancelEdit')}
+                  </button>
+                </p>
+              ) : null}
               <div className="flex items-end gap-2">
-                <textarea
+              <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

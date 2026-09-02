@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { DmThreadChat } from '@/components/dm-thread-chat'
 import { getThreadForUser } from '@/lib/data/social'
 import { getProfile } from '@/lib/data/queries'
@@ -39,7 +41,11 @@ export default async function DmThreadPage({ params }: PageProps) {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
       />
+      <OfflineConnectionGate feature="messages">
+      <GuestPageGate reason="messages" returnPath={`/dashboard/messages/${threadId}`}>
       <DmThreadChat
         threadId={thread.thread.id}
         currentUserId={user.id}
@@ -48,6 +54,8 @@ export default async function DmThreadPage({ params }: PageProps) {
         other={thread.other}
         initialMessages={thread.messages}
       />
+      </GuestPageGate>
+      </OfflineConnectionGate>
     </div>
   )
 }

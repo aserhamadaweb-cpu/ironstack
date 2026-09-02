@@ -6,6 +6,8 @@
     "messages": "MESSAGES",
     "board": "BOARD",
     "splits": "SPLITS",
+    "exercises": "EXERCISES",
+    "homeWorkouts": "HOME WORKOUTS",
     "history": "HISTORY",
     "prs": "PRS",
     "achievements": "ACHIEVEMENTS",
@@ -25,6 +27,98 @@
     "primary": "Primary",
     "allSections": "All sections",
     "siteNav": "Site navigation"
+  },
+  "localeGate": {
+    "navLabel": "Language selection",
+    "kicker": "WELCOME",
+    "title": "Choose your language",
+    "titleSecondary": "اختر لغتك",
+    "subtitle": "Pick one to continue. You can change this anytime in Settings.",
+    "english": "English",
+    "arabic": "العربية",
+    "englishHint": "Left to right",
+    "arabicHint": "Right to left"
+  },
+  "offline": {
+    "badge": "Offline",
+    "syncing": "{count, plural, one {# session syncing…} other {# sessions syncing…}}",
+    "queued": "{count, plural, one {# session waiting to sync} other {# sessions waiting to sync}}",
+    "title": "You're offline",
+    "body": "You can still browse cached splits and log a workout. AI Coach, Messages, Leaderboard, and notifications need a connection.",
+    "retry": "Retry",
+    "openWorkout": "Open Workout",
+    "cachedSplits": "Cached splits",
+    "noCache": "No splits cached yet. Connect once while signed in so your programs are saved on this device.",
+    "floorKicker": "GYM FLOOR · OFFLINE",
+    "floorHey": "Train here, {name}",
+    "floorHomeBody": "No signal. You can still run a cached program, log sets, and finish the session. Finished work queues on this device until you're back online.",
+    "floorStart": "START SESSION",
+    "floorCreate": "CREATE SPLIT",
+    "floorPrograms": "Programs on this device",
+    "floorDays": "{count, plural, one {# day} other {# days}}",
+    "floorLiveKicker": "WORKS OFFLINE",
+    "floorLive1": "Browse cached splits",
+    "floorLive2": "Start and finish a session",
+    "floorLive3": "Log every set locally",
+    "floorPausedKicker": "NEEDS A CONNECTION",
+    "floorPaused1": "AI Coach",
+    "floorPaused2": "Messages & group chats",
+    "floorPaused3": "Leaderboard & challenges",
+    "floorPaused4": "Notifications",
+    "floorPaused5": "Create or edit splits",
+    "splitRequiresConnection": "Creating or editing splits needs a connection. Browse cached programs and log sessions offline — sync split changes when you're back online.",
+    "editSplitNeedsConnection": "needs a connection",
+    "offlineBlocked": {
+      "coach": {
+        "title": "AI Coach needs a connection",
+        "body": "Insights and chat require the network. Browse cached programs and log sessions on the Train tab while offline."
+      },
+      "messages": {
+        "title": "Messages need a connection",
+        "body": "Direct messages and group chats are not available offline. Your cached workouts and session logging still work."
+      },
+      "leaderboard": {
+        "title": "Leaderboard needs a connection",
+        "body": "Rankings and challenges load live. Train from cached programs on the Train tab while offline."
+      },
+      "notifications": {
+        "title": "Notifications need a connection",
+        "body": "Notification settings and alerts require the network. Session logging on cached splits still works offline."
+      },
+      "homeWorkouts": {
+        "title": "Home workouts need a connection",
+        "body": "Adopting home programs saves to your account online. Use cached gym splits on the Train tab while offline."
+      },
+      "splitsManage": {
+        "title": "My Splits needs a connection",
+        "body": "Creating, editing, and managing splits requires the network. Start a cached program from the Train tab while offline."
+      }
+    },
+    "floorTrainTitle": "Your floor",
+    "floorTrainBody": "Pick a cached program and start. Sets write to this phone first — they sync when the gym wifi comes back.",
+    "floorBackHome": "GYM FLOOR HOME",
+    "floorNoCustom": "No custom splits cached on this device yet. Connect once while signed in to save your programs here.",
+    "savedSplitsOnDevice": "Your saved splits on this device",
+    "pickSplitKicker": "START SESSION",
+    "pickSplitTitle": "Choose a split",
+    "pickSplitBody": "Pick one of your saved programs to train with. Only splits cached on this device are shown.",
+    "pickSplitBack": "Back",
+    "pickSplitLoading": "Loading saved splits…",
+    "noSavedSplitsTitle": "No saved splits on this device",
+    "noSavedSplitsBody": "Save a split to your account while online first — open Train or My Splits, then come back offline to start a session.",
+    "floorCachedPrograms": "Cached programs",
+    "libraryLoading": "Loading the exercise library…",
+    "libraryMissing": "The exercise library is not on this device yet. Open IronStack once while online so the 1,300+ exercises can be saved here.",
+    "profileTitle": "Your profile",
+    "profileBody": "Followers, bio edits, and live social stats need a connection. Your name and cached personal records stay on this device.",
+    "retrySync": "Retry sync",
+    "sessionOfflineNote": "You're offline. Sets save on this device and sync when you reconnect.",
+    "orphanSessions": "{count, plural, one {# session from before couldn't be saved and was removed.} other {# sessions from before couldn't be saved and were removed.}}",
+    "orphanSplits": "{count, plural, one {# split from before couldn't be saved and was removed.} other {# splits from before couldn't be saved and were removed.}}",
+    "orphanSorry": "Sorry about that. Tap to dismiss.",
+    "stillSyncingSplit": "This split is saved on this device and is still syncing to your account.",
+    "splitMissingTitle": "Split not on the server yet",
+    "splitMissingBody": "If you created this while offline, keep the app open on this phone and tap Retry sync. It should appear here once the upload finishes."
   },
   "common": {
     "openWorkout": "OPEN WORKOUT",
@@ -95,6 +189,58 @@
     "yesterday": "Yesterday",
     "daysAgo": "{count} days ago"
   },
+  "splitRecommendations": {
+    "kicker": "PROGRAM FINDER",
+    "title": "Recommended programs",
+    "onboardingTitle": "Pick a starting program",
+    "body": "Based on your goals, schedule, and equipment — choose one to set as your primary plan, or browse and build your own later.",
+    "onboardingBody": "We matched a few splits to your profile. Select one to save as your primary program, or skip and decide later.",
+    "loading": "Building recommendations…",
+    "empty": "We couldn't build recommendations yet. Complete your fitness profile or try again from Splits.",
+    "saveFailed": "Could not save that program. Try again.",
+    "matchScore": "{score}% match",
+    "customMatch": "Custom",
+    "warningsTitle": "Adjustments & notes",
+    "aiBuilderTitle": "Build with AI",
+    "aiBuilderBody": "Describe the split you want — days, focus, and equipment — and we'll match it to your profile.",
+    "aiBuilderHint": "Example: 4-day upper/lower with dumbbells only, no overhead pressing.",
+    "aiBuilderPlaceholder": "Describe your ideal program…",
+    "aiBuilderGenerate": "Generate program",
+    "aiBuilderTryAgain": "Try a different description",
+    "aiBuilderClose": "Close AI builder",
+    "aiGenerateFailed": "Could not build that program. Try rephrasing your request.",
+    "backToTrain": "Back to Train",
+    "savedToSplits": "Your program is saved in My Splits and set as your primary plan.",
+    "savedBannerTitle": "Saved to My Splits",
+    "savedBannerBodyNamed": "“{name}” was saved to My Splits and set as your primary program.",
+    "viewYourSplits": "View My Splits",
+    "daysPerWeek": "{days} days per week",
+    "selectProgram": "Add to My Splits",
+    "skipForNow": "Skip for now",
+    "bannerTitle": "Get a personalized program",
+    "bannerBody": "Answer-based split recommendations tailored to your goals and equipment.",
+    "bannerTitleWithPrimary": "Refresh your program options",
+    "bannerBodyWithPrimary": "See updated recommendations based on your latest profile — your active program stays unchanged until you choose a new one.",
+    "workoutSectionTitle": "Personalized programs",
+    "workoutSectionBody": "Built from your goals, schedule, and equipment — expand a card to preview days, then save one as your primary program.",
+    "workoutSectionBodyWithPrimary": "You're on {name}. These alternatives match your latest profile if you want to switch.",
+    "seeAllPrograms": "See all programs",
+    "completeProfileCta": "Complete fitness profile",
+    "medicalDisclaimer": "IronStack offers general fitness guidance only. Exercise swaps based on your notes are not medical advice — consult a clinician for injuries or pain.",
+    "finishOnboardingHint": "You can finish onboarding from the review step anytime."
+  },
+  "createSplitChoice": {
+    "kicker": "NEW SPLIT",
+    "title": "How do you want to create?",
+    "subtitle": "Pick the path that fits — manual builder, AI description, or profile-based suggestions.",
+    "manualTitle": "Create yourself",
+    "manualBody": "Name your split, add training days, and pick exercises from the library.",
+    "aiTitle": "Create with AI",
+    "aiBody": "Describe what you want in your own words and get a custom split generated for you.",
+    "recommendedTitle": "Recommended splits",
+    "recommendedBody": "Browse personalized program suggestions scored from your fitness profile.",
+    "continue": "Continue"
+  },
   "workout": {
     "kicker": "TRAIN",
     "title": "Workout",
@@ -104,10 +250,27 @@
     "liftedSince": "lifted since you joined IronStack",
     "trend": "8-WEEK TREND",
     "journeyStart": "Log your first session to start your journey",
+    "liveReload": "Refreshing your stats…",
+    "liveReloadTimeout": "Could not reload workout stats. Check your connection and try again.",
+    "liveRetry": "Retry",
     "journeyBaseline": "Baseline set — keep logging to see your trend",
-    "loadUp": "Your average load has increased {pct} over the last 8 weeks — your Bench Press and Squat numbers are trending up.",
+    "loadUp": "Your average session volume is up {pct} over the last 8 weeks.",
+    "loadDown": "Your average session volume is down {pct} over the last 8 weeks.",
+    "loadFlat": "Your average session volume has held steady over the last 8 weeks.",
+    "weeklyVolumeCaption": "{weeks} of 8 weeks with logged sessions",
     "primary": "PRIMARY",
-    "yourSplits": "YOUR SPLITS",
+    "activeProgram": "Active program",
+    "activeProgramBadge": "ACTIVE",
+    "yourSplits": "MY SPLITS",
+    "yourSplitsKicker": "MY PROGRAMS",
+    "yourSplitsPageTitle": "My Splits",
+    "yourSplitsPageBody": "All saved programs — set your primary, share, or delete. Up to {max} custom splits.",
+    "trainSplitsHintPrimary": "Your primary program — pick another in My Splits.",
+    "trainSplitsHintLatest": "Your most recently saved program — set a primary in My Splits.",
+    "viewAllSplits": "View all splits ({count})",
+    "manageYourSplits": "My Splits",
+    "setAsPrimary": "Set as primary",
+    "backToTrain": "Back to Train",
     "splitsHint": "Up to {max} custom programs you saved — delete one to free a slot.",
     "recommended": "RECOMMENDED",
     "recommendedForYou": "RECOMMENDED FOR YOU",
@@ -119,7 +282,8 @@
     "recap": "RECAP",
     "history": "RECENT HISTORY",
     "historyKicker": "HISTORY",
-    "historyHint": "Your 3 most recent training sessions.",
+    "historyHint": "Your 2 most recent training sessions.",
+    "viewFullHistory": "View full history",
     "createSplit": "CREATE SPLIT",
     "startSession": "START SESSION",
     "viewSplit": "VIEW SPLIT",
@@ -128,11 +292,14 @@
     "sharedBadge": "SHARED",
     "daysPerWeek": "{count} days / week",
     "custom": "CUSTOM",
-    "customTitle": "Create Your Own Split",
-    "createCustom": "+ Create Custom Split",
-    "createCustomBody": "Build a split tailored exactly to your goals — pick from 800+ exercises. {used}/{max} slots used.",
+    "customTitle": "Create splits",
+    "createCustom": "Create splits.",
+    "createCustomBody": "Build a split tailored exactly to your goals — pick from 1,300+ exercises. {used}/{max} slots used.",
+    "homeWorkoutsTitle": "Home Workouts",
+    "homeWorkoutsBody": "Train at home with bodyweight, bands, dumbbells, and kettlebells — no gym machines.",
+    "openHomeWorkouts": "OPEN HOME WORKOUTS",
     "limitReached": "Split limit reached",
-    "limitBody": "You already have {max} custom splits. Delete one from Your Splits above to create another — still with the full 800+ exercise library.",
+    "limitBody": "You already have {max} custom splits. Delete one from My Splits to create another — still with the full 1,300+ exercise library.",
     "noSplits": "No custom splits yet",
     "noSplitsBody": "Build a plan or save a system program to get started.",
     "noSessionsRecap": "No sessions logged yet",
@@ -150,6 +317,9 @@
     "lastNSessions": "Last {count} sessions",
     "lastNSessionsPct": "Last {count} sessions · {pct}",
     "sessionBlurb": "Logged and locked in — every session compounds.",
+    "systemPrograms": "SYSTEM PROGRAMS",
+    "noSystemPrograms": "No system splits available.",
+    "mySplitsFooter": "Open a split to train, share, or edit days and exercises.",
     "system": "System",
     "program": "Program",
     "minutes": "{count} min",
@@ -158,6 +328,25 @@
     "deleteConfirm": "Delete “{name}”? This frees a slot so you can create another split (max {max}).",
     "deleteAria": "Delete {name}",
     "dayFallback": "Day"
+  },
+  "activeWorkout": {
+    "kicker": "WORKOUT IN PROGRESS",
+    "title": "Workout in progress",
+    "resume": "Resume session",
+    "inProgress": "In progress",
+    "elapsed": "Elapsed {time}",
+    "exerciseProgress": "Exercise {current} of {total}",
+    "setsLogged": "{count} sets logged",
+    "alreadyActiveTitle": "A session is already in progress",
+    "alreadyActiveBody": "Finish or discard “{name}” before starting another workout.",
+    "discard": "Discard session",
+    "discardConfirm": "Discard this unfinished workout? Progress will be removed and it will not count as a completed session.",
+    "discardConfirmAction": "Yes, discard session",
+    "discarding": "Discarding…",
+    "discardFailed": "Could not discard that session.",
+    "keepSession": "Keep session",
+    "stayHere": "Stay here",
+    "finishHint": "Open the session to finish it from there."
   },
   "settings": {
     "kicker": "ACCOUNT",
@@ -170,6 +359,19 @@
     "themeLight": "Light",
     "themeDarkHint": "Ink background",
     "themeLightHint": "Chalk background",
+    "themeSystem": "System",
+    "themeSystemHint": "Match device",
+    "fitnessProfile": "FITNESS PROFILE",
+    "fitnessProfileTitle": "Training preferences",
+    "fitnessProfileHint": "Goals, schedule, equipment, and safety notes from onboarding.",
+    "editFitnessProfile": "Edit fitness profile",
+    "appTour": "APP TOUR",
+    "appTourTitle": "Guided walkthrough",
+    "appTourHint": "Replay the full guided walkthrough of Home, navigation, Workouts, Exercises, sessions, History, AI Coach, Settings, and Messages. Your workouts and sessions are not changed.",
+    "restartAppTour": "Restart App Tour",
+    "offlineSync": "OFFLINE & SYNC",
+    "offlineSyncTitle": "Works on the gym floor",
+    "offlineSyncHint": "Open IronStack once while online so your programs cache on this device. When signal drops, Home and Train switch to cached mode — finished sessions sync when you're back online. Watch the nav bar for Offline or sync status.",
     "language": "LANGUAGE",
     "languageTitle": "Language",
     "languageHint": "English is the default. Arabic enables full RTL layout.",
@@ -243,14 +445,73 @@
     "bodyDeleteWeight": "Delete weight entry",
     "bodyPreview": "Preview: {height} · {weight}"
   },
+  "installTutorial": {
+    "title": "Install IronStack",
+    "stepOf": "Step {current} of {total}",
+    "stepsLabel": "Install steps",
+    "previous": "Previous step",
+    "next": "Next step",
+    "goToStep": "Go to step {step}",
+    "generic": {
+      "body": "Use your browser's install menu (address bar install icon, or Menu → Install app). Chrome and Edge support one-tap install when available."
+    },
+    "ios": {
+      "step1": {
+        "title": "Tap the Share button",
+        "caption": "Tap the Share icon in Safari's toolbar."
+      },
+      "step2": {
+        "title": "Tap 'Add to Home Screen'",
+        "caption": "Scroll down and tap 'Add to Home Screen.'"
+      }
+    },
+    "android": {
+      "step1": {
+        "title": "Open the browser menu",
+        "caption": "Tap the menu icon in Chrome's toolbar."
+      },
+      "step2": {
+        "title": "Install the app",
+        "caption": "Tap Install app or Add to Home screen."
+      }
+    },
+    "windows": {
+      "step1": {
+        "title": "Use the install icon",
+        "caption": "Click the install icon in the address bar (Chrome or Edge)."
+      },
+      "step2": {
+        "title": "Confirm install",
+        "caption": "Click Install to add IronStack to your apps."
+      }
+    }
+  },
   "auth": {
     "signIn": "SIGN IN",
     "signUp": "SIGN UP",
     "email": "EMAIL",
     "password": "PASSWORD",
     "username": "Username",
+    "usernamePlaceholder": "your_handle",
+    "usernameHint": "Required. 3–30 characters: lowercase letters, numbers, underscores.",
+    "usernameRequired": "Username is required.",
+    "usernameAvailable": "Username looks available.",
+    "usernameTaken": "That username is already taken.",
+    "usernameFormat": "Username must be 3–30 characters: lowercase letters, numbers, underscores.",
+    "profilePhoto": "Profile photo",
+    "profilePhotoOptional": "optional",
+    "profilePhotoHint": "Upload a photo, or pick a preset below. JPG, PNG, or WebP · max 5MB.",
+    "choosePhoto": "Choose profile photo",
+    "removePhoto": "Remove photo",
+    "choosePresetAvatar": "Or choose a preset",
+    "presetAvatarHint": "Presets work without uploading a photo. You can change this anytime in Profile.",
+    "avatarUploadFailed": "Photo couldn’t upload — your account was still created. You can add a photo later in Profile.",
+    "avatarProcessFailed": "Could not process that image. Try another file.",
     "displayName": "DISPLAY NAME",
     "displayNamePlaceholder": "Your name",
+    "displayNameRequired": "Display name must be at least 2 characters.",
+    "claimProfileTitle": "Choose your name",
+    "claimProfileBody": "Pick a display name and username so others can find you. Upload a photo or choose a preset avatar — optional.",
     "continueWith": "Or continue with",
     "joinUs": "JOIN US",
     "welcomeBack": "WELCOME BACK",
@@ -271,14 +532,34 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "socialFailed": "Social sign-in failed. Please try again.",
-    "checkEmail": "Check your email to confirm your account before signing in.",
+    "callbackErrorTitle": "Couldn’t finish signing you in",
+    "callbackErrorKicker": "AUTH LINK",
+    "callbackWorkingTitle": "Signing you in",
+    "callbackWorking": "Confirming your account and opening IronStack…",
+    "callbackFailed": "That confirmation or sign-in link didn’t complete. Request a new email or try signing in again.",
+    "callbackExpired": "This confirmation link is invalid or has expired. Request a new confirmation email from the login screen.",
+    "callbackMissingCode": "This link is missing the confirmation code. Open the newest email from IronStack and try again.",
+    "backToLogin": "Back to login",
+    "checkEmail": "Check your email and open the confirmation link to finish creating your account.",
     "checkEmailTitle": "Check your email",
     "checkEmailKicker": "ALMOST THERE",
-    "checkEmailBody": "We sent a confirmation link to {email}. Confirm your account, then sign in.",
+    "checkEmailBody": "We sent a confirmation link to {email}. Open it to continue into IronStack — you won’t need to sign in again.",
+    "checkEmailSpamTipLabel": "Tip",
+    "checkEmailSpamTip1": "If you don’t see it after a minute or two, check your Spam or Junk folder — new senders sometimes land there.",
+    "checkEmailSpamTip2": "If you find it, mark it as “Not Spam” (don’t just open it) so future IronStack emails reach your inbox.",
     "haveAccount": "Already have an account?",
     "noAccount": "New here?",
     "invalidCredentials": "Invalid credentials. Check your email and password and try again.",
-    "confirmEmail": "Please confirm your email first — check your inbox for the verification link.",
+    "invalidEmail": "Enter a valid email address.",
+    "weakPassword": "Password must be at least 6 characters.",
+    "passwordMismatch": "Passwords do not match.",
+    "network": "Network error. Check your connection and try again.",
+    "oauthCancelled": "Sign-in was cancelled. Try again when you're ready.",
+    "rateLimited": "Too many attempts. Please wait a moment and try again.",
+    "generic": "Something went wrong. Please try again.",
+    "confirmEmail": "Confirm your email first — use the link we sent, or resend it below.",
+    "signupNoSession": "Could not start your session after sign-up. Please try again.",
+    "signinNoSession": "Sign-in succeeded but no session was established. Please try again.",
     "resendConfirmation": "Resend confirmation email",
     "confirmationResent": "Confirmation email sent — check your inbox.",
     "resendWait": "Resend in {seconds}s",
@@ -318,11 +599,228 @@
     "verifyBack": "Back to sign in",
     "verifyNeedsSession": "Account created, but we could not start a session. Please sign in, then verify your email.",
     "verifySendFailed": "Could not send the verification code. Try Resend code.",
-    "continueAsGuest": "Continue as Guest"
+    "continueAsGuest": "Continue as Guest",
+    "switchToSignIn": "Already have an account? Sign in",
+    "switchToSignUp": "New here? Create an account",
+    "resetPasswordTitle": "Reset your password",
+    "resetPasswordKicker": "ACCOUNT RECOVERY",
+    "resetPasswordBody": "Enter your email and we'll send a link to choose a new password.",
+    "resetPasswordSubmit": "Send reset link",
+    "resetPasswordSuccess": "If an account exists for that email, a reset link is on its way.",
+    "resetPasswordBack": "Back to sign in",
+    "updatePasswordTitle": "Choose a new password",
+    "updatePasswordKicker": "NEW PASSWORD",
+    "updatePasswordBody": "Enter a new password for your IronStack account.",
+    "updatePasswordSubmit": "Update password",
+    "updatePasswordSuccess": "Password updated. Redirecting…",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "pwa": {
+      "bannerLabel": "IronStack app",
+      "openInAppTitle": "Continue in the IronStack app",
+      "openInAppCta": "Open in IronStack",
+      "openInAppBodyAndroid": "Your confirmation is finishing in the browser. Tap below — on Android, Chrome may open your installed IronStack app to this page.",
+      "openInAppBodyIos": "Your confirmation is finishing in Safari. Leave Safari, open IronStack from your Home Screen to continue in the app. (Safari and the installed app keep separate sessions on iPhone.)",
+      "openInAppBodyGeneric": "Your confirmation is finishing in the browser. Open IronStack from your home screen or app drawer to continue in the installed app.",
+      "installTitle": "Install IronStack for the full app experience",
+      "installCta": "Install IronStack",
+      "installBodyAndroid": "Add IronStack to your home screen so confirmation links and workouts open in the app next time.",
+      "installBodyIos": "Tap Share → Add to Home Screen. Installed IronStack opens full-screen like a native app.",
+      "installBodyGeneric": "Install IronStack on this device so links open in the app instead of the browser."
+    }
+  },
+  "onboarding": {
+    "kicker": "GET STARTED",
+    "editKicker": "FITNESS PROFILE",
+    "stepOf": "Step {current} of {total}",
+    "progressLabel": "Onboarding progress",
+    "optional": "optional",
+    "continue": "Continue",
+    "back": "Back",
+    "skip": "Skip for now",
+    "finish": "Create My Plan",
+    "continueToRecommendations": "See my program options",
+    "recommendationsNextHint": "Next: personalized split recommendations based on your answers.",
+    "saveChanges": "Save changes",
+    "retry": "Retry save",
+    "saveFailed": "Could not save. Check your connection and try again.",
+    "backToSettings": "Back to settings",
+    "goDashboard": "Go to Dashboard",
+    "exploreWorkouts": "Explore Workouts",
+    "reviewTitle": "You're all set",
+    "reviewEditTitle": "Review your profile",
+    "reviewBody": "Nice work, {name}. Here's a quick summary based on what you shared.",
+    "athleteFallback": "Athlete",
+    "errors": {
+      "displayName": "Enter a display name between 2 and 40 characters.",
+      "usernameFormat": "Username must be 3–30 characters: lowercase letters, numbers, underscores.",
+      "usernameTaken": "That username is already taken.",
+      "primaryGoal": "Choose a primary fitness goal to continue.",
+      "fitnessLevel": "Choose your fitness level.",
+      "daysPerWeek": "Choose how many days you can train each week.",
+      "duration": "Choose a preferred workout duration.",
+      "location": "Choose where you usually train.",
+      "height": "Enter a height between 100 and 250 cm (or equivalent).",
+      "weight": "Enter a weight between 30 and 300 kg (or equivalent)."
+    },
+    "step1": {
+      "title": "Let's personalize IronStack",
+      "body": "Tell us how to greet you, add an optional profile photo, and choose how the app should look.",
+      "displayName": "Display name",
+      "username": "Username",
+      "usernameHint": "Public handle. Letters, numbers, and underscores only.",
+      "usernameAvailable": "Username looks available.",
+      "appearance": "Appearance",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "step2": {
+      "title": "A little about you",
+      "body": "Optional details help tailor suggestions. Skip anything you prefer not to share.",
+      "age": "Age range",
+      "gender": "Gender",
+      "language": "Language"
+    },
+    "step3": {
+      "title": "Body details",
+      "body": "Height and weight are optional. They can improve general training suggestions — not medical advice.",
+      "units": "Units",
+      "metric": "Metric",
+      "imperial": "Imperial",
+      "height": "Height",
+      "weight": "Weight",
+      "feet": "Feet",
+      "inches": "Inches",
+      "disclaimer": "IronStack provides general fitness guidance only and is not medical advice."
+    },
+    "step4": {
+      "title": "What's your main goal?",
+      "body": "Pick one primary focus. You can add secondary goals if you like.",
+      "secondary": "Secondary goals"
+    },
+    "step5": {
+      "title": "Experience & schedule",
+      "body": "We'll use this to keep sessions realistic for your week.",
+      "level": "Fitness level",
+      "days": "Days per week",
+      "duration": "Preferred workout length",
+      "preferredDays": "Preferred training days"
+    },
+    "step6": {
+      "title": "Where do you train?",
+      "body": "Home, gym, or both — then pick the equipment you can use.",
+      "location": "Training location",
+      "equipment": "Equipment available"
+    },
+    "step7": {
+      "title": "Preferences & safety",
+      "body": "Everything here is optional. Share only what you're comfortable with.",
+      "medicalDisclaimer": "IronStack offers general fitness guidance. It does not diagnose, treat, or replace professional medical advice. Talk to a qualified clinician about injuries or pain.",
+      "styles": "Preferred training styles",
+      "muscles": "Favorite muscle groups",
+      "avoid": "Exercises or equipment to avoid",
+      "avoidPlaceholder": "e.g. overhead press, treadmill…",
+      "limitations": "Injuries, limitations, or restrictions",
+      "limitationsPlaceholder": "e.g. sensitive lower back…"
+    },
+    "summary": {
+      "goal": "You want to {goal}.",
+      "schedule": "You train about {days} days per week ({duration}) as a {level} athlete.",
+      "place": "You train {place} with {equipment}.",
+      "noEquipment": "whatever equipment you have"
+    },
+    "goals": {
+      "build_muscle": "Build muscle",
+      "lose_fat": "Lose fat",
+      "get_stronger": "Get stronger",
+      "endurance": "Improve fitness / endurance",
+      "stay_active": "Stay healthy and active",
+      "athletic": "Improve athletic performance",
+      "other": "Other"
+    },
+    "ageRanges": {
+      "under_18": "Under 18",
+      "18_24": "18–24",
+      "25_34": "25–34",
+      "35_44": "35–44",
+      "45_54": "45–54",
+      "55_plus": "55+",
+      "prefer_not": "Prefer not to say"
+    },
+    "gender": {
+      "male": "Male",
+      "female": "Female",
+      "prefer_not": "Prefer not to say"
+    },
+    "languages": {
+      "en": "English",
+      "ar": "العربية"
+    },
+    "levels": {
+      "beginner": "Beginner",
+      "beginnerHint": "New to structured training or returning after a long break.",
+      "intermediate": "Intermediate",
+      "intermediateHint": "Comfortable with common lifts and consistent training.",
+      "advanced": "Advanced",
+      "advancedHint": "Experienced with programming, intensity, and recovery."
+    },
+    "durations": {
+      "under_30": "Under 30 minutes",
+      "30_45": "30–45 minutes",
+      "45_60": "45–60 minutes",
+      "over_60": "More than 60 minutes"
+    },
+    "weekdays": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "locations": {
+      "home": "At home",
+      "gym": "At a gym",
+      "both": "Both"
+    },
+    "equipment": {
+      "bodyweight": "No equipment / bodyweight",
+      "dumbbells": "Dumbbells",
+      "bands": "Resistance bands",
+      "kettlebells": "Kettlebells",
+      "bench": "Bench",
+      "pullup_bar": "Pull-up bar",
+      "barbell": "Barbell",
+      "machines": "Machines / cables",
+      "other": "Other"
+    },
+    "styles": {
+      "full_body": "Full body",
+      "ppl": "Push / Pull / Legs",
+      "upper_lower": "Upper / Lower",
+      "cardio": "Cardio",
+      "strength": "Strength training",
+      "mobility": "Flexibility / mobility",
+      "no_preference": "No preference"
+    },
+    "muscles": {
+      "chest": "Chest",
+      "back": "Back",
+      "shoulders": "Shoulders",
+      "arms": "Arms",
+      "core": "Core",
+      "legs": "Legs",
+      "glutes": "Glutes",
+      "full_body": "Full body"
+    }
   },
   "guest": {
     "banner": "You're browsing as a guest — progress stays on this device until you create an account.",
     "saveProgress": "SAVE YOUR PROGRESS — CREATE AN ACCOUNT",
+    "createAccountCta": "CREATE ACCOUNT",
+    "browseHome": "Back to home",
     "upgradeTitle": "Upgrade your account",
     "upgradeBody": "Add an email and password to keep your sessions, splits, and PRs forever.",
     "upgradePasswordHint": "Password must be at least 6 characters.",
@@ -333,7 +831,21 @@
     "completeSubmit": "CONTINUE",
     "accountLabel": "Guest account",
     "messagesLocked": "Create an account to send messages",
-    "messagesLockedCta": "CREATE ACCOUNT"
+    "messagesLockedCta": "CREATE ACCOUNT",
+    "blocked": {
+      "startSession": "Create an account to start a workout session and save your progress.",
+      "createSplit": "Create an account to build your own splits.",
+      "editSplit": "Create an account to edit splits.",
+      "aiCoach": "Create an account to chat with AI Coach.",
+      "sessionCoach": "Create an account to use in-workout coaching.",
+      "shareSplit": "Create an account to share splits with friends.",
+      "saveSplit": "Create an account to save splits to your library.",
+      "messages": "Create an account to send messages.",
+      "challenges": "Create an account to challenge friends.",
+      "editProfile": "Create an account to edit your profile.",
+      "social": "Create an account to follow friends and connect.",
+      "generic": "Create an account to use this feature."
+    }
   },
   "profile": {
     "kicker": "PROFILE",
@@ -427,7 +939,55 @@
     "save": "Save to my splits",
     "saved": "Saved to your splits",
     "alreadySaved": "Already saved",
+    "openSaved": "Open in My Splits",
     "couldNotSave": "Could not save that split."
+  },
+  "splitShare": {
+    "kicker": "SHARE SPLIT",
+    "close": "Close",
+    "meta": "{days} days / week · {category}",
+    "customCategory": "Custom",
+    "sendToMessages": "Send to Messages",
+    "sendToMessagesHint": "Pick friends or group chats",
+    "shareExternally": "Share externally",
+    "shareExternallyHint": "WhatsApp, social apps, or copy link",
+    "copyLink": "COPY LINK",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Failed",
+    "preparingLink": "Preparing link…",
+    "shareText": "Check out my workout split: {name}",
+    "shareFailed": "Could not open the share sheet.",
+    "back": "← Back",
+    "optionalNote": "OPTIONAL NOTE",
+    "optionalNotePlaceholder": "Try this push day…",
+    "pickConversations": "PICK CONVERSATIONS",
+    "noConversations": "No friends or group chats yet. Add friends from your profile to share splits.",
+    "sent": "Sent",
+    "sending": "Sending…",
+    "sendCount": "{count, plural, one {Send to # chat} other {Send to # chats}}",
+    "sharedSplit": "SPLIT",
+    "daysPerWeek": "{count} days / week",
+    "exerciseOne": "1 exercise",
+    "exerciseOther": "{count} exercises",
+    "viewSplit": "View split",
+    "saveToSplits": "Save to My Splits",
+    "saved": "Saved",
+    "couldNotSave": "Could not save that split.",
+    "publicKicker": "Shared workout split",
+    "sharedWithYou": "shared a workout split",
+    "athleteFallback": "Athlete",
+    "weeklyOverview": "WEEKLY OVERVIEW",
+    "dayLabel": "DAY {number}",
+    "setsReps": "{sets} sets × {reps}",
+    "signUpToSave": "Sign up to save",
+    "alreadyAccount": "Already have an account?",
+    "logIn": "Log in",
+    "openYourSplit": "Open your split",
+    "share": "Share",
+    "shareSplit": "Share split",
+    "inboxPreview": "Shared a split: {name}",
+    "backHome": "Back to home"
   },
   "coach": {
     "kicker": "COACH",
@@ -447,7 +1007,7 @@
     "noInsights": "No coaching tips yet",
     "noInsightsBody": "Complete a session and insights will show up here as cards — headline plus the detail to act on.",
     "readyTitle": "Ready when you are, {name}",
-    "readyBody": "Ask about progress, PRs, warm-ups, or what to focus on this week — I'll pull from your logged data and remember durable notes across chats.",
+    "readyBody": "Ask about progress, PRs, or a new split — I can draft a plan from the real exercise library, then you save it when it looks right.",
     "askPlaceholder": "Ask your coach…",
     "disclaimer": "Not medical advice. For pain or injury, see a doctor or PT.",
     "history": "HISTORY",
@@ -468,6 +1028,60 @@
     "hintStreak": "STREAK",
     "hintLift": "MENTIONED LIFT",
     "hintStreakValue": "{count} days",
+    "retry": "Retry",
+    "planPreview": "PROPOSED PLAN — NOT SAVED",
+    "planSaved": "SAVED TO YOUR SPLITS",
+    "planDays": "{count, plural, one {# day / week} other {# days / week}}",
+    "saveSplit": "Save split",
+    "saveChanges": "Save changes",
+    "buildingSplit": "Building your plan…",
+    "editPlan": "Edit plan",
+    "cancelPlan": "Cancel",
+    "openSplit": "Open split",
+    "planCancelled": "Cancelled — nothing was saved.",
+    "actionFailed": "Could not apply that action.",
+    "actionNetwork": "Network error — try again.",
+    "sessionPreview": "NEEDS YOUR CONFIRMATION",
+    "agentPending": "NEEDS YOUR CONFIRMATION",
+    "agentApplied": "DONE",
+    "agentWillChange": "THIS WILL",
+    "agentCancelled": "Cancelled — nothing changed.",
+    "agentExpired": "This confirmation expired. Ask me again and I'll rebuild it.",
+    "agentFailed": "That didn't go through — nothing changed.",
+    "agentNotUndoable": "This one can't be undone.",
+    "agentUndo": "Undo",
+    "agentUndone": "Undone — put back the way it was.",
+    "agentOpen": "Open",
+    "activityKicker": "COACH ACTIVITY",
+    "activityTitle": "What the coach changed",
+    "activityIntro": "Every change the coach made for you, newest first — including what you asked for and what it did.",
+    "activityEmpty": "The coach hasn't changed anything yet.",
+    "activityEmptyBody": "When you ask it to log a weight, edit a split, or change a setting, it shows up here after you confirm.",
+    "activityYouAsked": "You asked",
+    "activityUndone": "Undone",
+    "activityFailed": "Failed",
+    "activityReverses": "Reverses an earlier change",
+    "activityUndoFailed": "Could not undo that.",
+    "activityView": "Coach activity",
+    "suggestionsKicker": "SUGGESTION",
+    "suggestionsTitle": "Coach suggestions",
+    "suggestionsIntro": "Ideas based on how you've been training. Nothing happens until you ask for it.",
+    "suggestionAsk": "Ask about this",
+    "suggestionDismiss": "Dismiss",
+    "suggestionDismissed": "Dismissed.",
+    "suggestionBadge": "{count, plural, one {# new coach suggestion} other {# new coach suggestions}}",
+    "suggestionBannerTitle": "Your coach has an idea",
+    "suggestionBannerCta": "See it",
+    "suggestionBannerDismiss": "Not now",
+    "sessionFallback": "Workout",
+    "sessionDone": "Done.",
+    "discardSession": "Discard session",
+    "confirmDiscard": "Yes, discard it",
+    "startWorkoutConfirm": "Start workout",
+    "resumeWorkout": "Resume workout",
+    "revisePrompt": "Change \"{name}\": ",
+    "editingPlan": "Editing \"{name}\" — describe what to change, then send.",
+    "cancelEdit": "Cancel edit",
     "errNewChat": "Could not start a new chat.",
     "errNewChatNetwork": "Network error — could not start a new chat.",
     "errLoadChat": "Could not load that chat.",
@@ -475,13 +1089,29 @@
     "errRateLimited": "I'm getting a lot of questions right now — try again in a bit.",
     "errReach": "Could not reach the coach.",
     "errNetwork": "Network error — check your connection and try again.",
+    "errSplitLimit": "You already have 3 custom splits. Delete one from My Splits to add another.",
+    "sessionChat": {
+      "kicker": "COACH",
+      "panelLabel": "Workout coach chat",
+      "open": "Ask coach about this exercise",
+      "close": "Close workout coach",
+      "readyTitle": "Quick help for this set",
+      "readyBody": "Ask about form, alternatives, or what you've logged so far — I know which exercise you're on.",
+      "placeholder": "Ask about form, sets, alternatives…",
+      "hintTooltip": "Ask about this exercise",
+      "suggested": {
+        "0": "Give me a form tip for this movement",
+        "1": "How many sets have I done on this exercise?",
+        "2": "What's a good alternative if equipment is taken?"
+      }
+    },
     "suggested": {
       "0": "How's my bench press progressing?",
       "1": "What should I focus on this week?",
       "2": "Am I plateauing on any lift?",
       "3": "Suggest a warm-up for leg day",
       "4": "What's my current streak?",
-      "5": "Which PR should I chase next?"
+      "5": "Create me a Push Pull Legs split using my best exercises."
     }
   },
   "floating": {
@@ -495,7 +1125,8 @@
     "new_message": "Direct messages",
     "message_request": "Message requests",
     "pr_achievement": "PR celebrations",
-    "split_saved": "Someone saved your split"
+    "split_saved": "Someone saved your split",
+    "unfinished_session": "Unfinished workout reminder (only if browser notifications are already enabled)"
   },
   "empty": {
     "noSessionsMap": "No sessions on the map yet",
@@ -666,10 +1297,11 @@
     "emptyDayTitle": "Nothing here yet",
     "emptyDayBody": "Tap “Add Exercise” to open the library and start building {day}.",
     "reviewTitle": "Review & save",
-    "reviewBody": "Everything look right? Save it to Your Splits and start training.",
+    "reviewBody": "Everything look right? Save it to My Splits and start training.",
     "summaryMeta": "{days} days / week · {exercises} exercises",
     "exerciseCount": "{count, plural, one {# exercise} other {# exercises}}",
     "needOneExercise": "Add at least one exercise before saving.",
+    "limitReached": "You already have {max} custom splits. Delete one before creating another.",
     "saveFailed": "Could not save your split.",
     "saving": "SAVING…",
     "saveSplit": "SAVE SPLIT",
@@ -692,12 +1324,14 @@
     "libraryAria": "Exercise Library",
     "addingTo": "Adding to {day}",
     "addedCount": "{count} added",
+    "addedLive": "Added {name} to {day}",
     "closeLibrary": "Close library",
-    "searchPlaceholder": "Search 800+ exercises…",
+    "searchPlaceholder": "Search 1,300+ exercises…",
     "noMatch": "No exercises match — try a different search or clear the filters.",
     "showingOf": "Showing {shown} of {total} — refine your search to see more.",
     "doneBackTo": "DONE — BACK TO {day}",
     "defaultDescription": "{days} days/week · Custom split",
+    "viewDetails": "DETAILS",
     "muscles": {
       "Chest": "Chest",
       "Back": "Back",
@@ -710,7 +1344,9 @@
       "Calves": "Calves",
       "Abs": "Abs",
       "Forearms": "Forearms",
-      "Traps": "Traps"
+      "Traps": "Traps",
+      "Neck": "Neck",
+      "Cardio": "Cardio"
     }
   },
   "legal": {
@@ -879,11 +1515,403 @@
     "searchPlaceholder": "Search exercises…",
     "category": "CATEGORY",
     "allCategories": "All categories",
+    "equipment": "EQUIPMENT",
+    "allEquipment": "All equipment",
+    "target": "TARGET",
+    "allTargets": "All targets",
     "sort": "SORT",
     "sortName": "A–Z",
     "sortMuscle": "Muscle group",
     "resultCount": "{count, plural, one {# exercise} other {# exercises}}",
     "emptyTitle": "No exercises found",
-    "emptyBody": "Try a different search, clear muscle filters, or pick another category."
+    "emptyBody": "Try a different search, clear muscle filters, or pick another category.",
+    "addToSplit": "Add to split",
+    "added": "Added",
+    "selected": "Selected",
+    "tapForDetails": "Tap to view details",
+    "viewDetailsNamed": "View details for {name}"
+  },
+  "exerciseCatalog": {
+    "kicker": "LIBRARY",
+    "title": "Exercise library",
+    "subtitle": "{count} exercises with local thumbnails and animation GIFs.",
+    "viewDetails": "View details",
+    "backToCatalog": "BACK TO LIBRARY",
+    "gifCaption": "Animation GIF — the primary demonstration for this exercise.",
+    "bodyPart": "BODY PART",
+    "targetMuscle": "TARGET",
+    "muscleGroup": "MUSCLE GROUP",
+    "equipment": "EQUIPMENT",
+    "category": "CATEGORY",
+    "mediaId": "MEDIA ID",
+    "supporting": "SUPPORTING MUSCLES",
+    "instructions": "Instructions",
+    "language": "LANGUAGE",
+    "arabicFallback": "Arabic instructions are not in this dataset. English is shown; every other supplied language is still available in the menu.",
+    "mediaTerms": "Exercise media © Gym visual. Review their terms at",
+    "mediaNotMit": "The GIFs and thumbnails are not MIT or public-domain. Do not remove watermarks or copyright marks.",
+    "addToSplit": "Add to split",
+    "added": "Added",
+    "addingToDay": "Adding to {day}",
+    "loading": "Loading exercise…",
+    "loadError": "Could not load this exercise. Go back and try another.",
+    "closeDetails": "Close",
+    "backToLibrary": "BACK TO EXERCISES"
+  },
+  "homeWorkouts": {
+    "kicker": "TRAIN AT HOME",
+    "title": "Home Workouts",
+    "subtitle": "{count} exercises from the library that you can do at home — bodyweight, bands, dumbbells, kettlebells, and other common home kit. Gym machines stay in the full library.",
+    "pageIntro": "Create a home split, pick one you already saved, or start a program for your goal. {count} home-friendly moves from the same exercise library.",
+    "backHome": "BACK TO WORKOUT",
+    "backToHomeWorkouts": "BACK TO HOME WORKOUTS",
+    "quickCategories": "QUICK START",
+    "equipmentFilters": "EQUIPMENT",
+    "bodyFilters": "FOCUS",
+    "clearFilters": "Clear filters",
+    "noEquipmentNeeded": "No equipment needed",
+    "needsEquipment": "Needs {equipment}",
+    "catalogAll": "All exercises",
+    "catalogHome": "Train at home",
+    "continueSplit": "Continue split",
+    "draftHint": "Adding to {day} · {count, plural, one {# exercise} other {# exercises}} in your draft.",
+    "noDraftHint": "Add to split saves into your current split draft. You can keep browsing here, then continue and save the split.",
+    "addedLive": "Added {name} to {day}.",
+    "browseLibrary": "Full exercise library",
+    "kit": {
+      "none": "No equipment",
+      "bodyweight": "Bodyweight",
+      "bands": "Resistance bands",
+      "dumbbells": "Dumbbells",
+      "kettlebells": "Kettlebells",
+      "other": "Other home kit"
+    },
+    "region": {
+      "full": "Full body",
+      "upper": "Upper body",
+      "lower": "Lower body",
+      "core": "Core"
+    },
+    "pack": {
+      "noEquipmentFull": "No-Equipment Full Body",
+      "quickCore": "Quick Core Workout",
+      "atHomeLegs": "At-Home Legs",
+      "atHomeUpper": "At-Home Upper Body"
+    },
+    "createSplit": "CREATE SPLIT",
+    "chooseSplit": "CHOOSE A SPLIT",
+    "yourSplitsKicker": "YOURS",
+    "yourSplits": "Your splits",
+    "yourSplitsEmpty": "No saved splits yet. Start a home program below or create your own.",
+    "goalsKicker": "YOUR TARGET",
+    "goalsTitle": "Programs for your goal",
+    "goalsBody": "Professional at-home plans built from the same exercise library. Pick a target, then start or save it like any other split.",
+    "libraryKicker": "BUILD YOUR OWN",
+    "libraryTitle": "Home exercise library",
+    "libraryBody": "Filter the catalog and add moves to a split you are creating.",
+    "showDays": "View days",
+    "hideDays": "Hide days",
+    "saveToSplits": "Save to my splits",
+    "adopting": "Saving…",
+    "adoptFailed": "Could not save that home program. Try again.",
+    "goal": {
+      "fatLoss": "Fat loss",
+      "muscleGain": "Muscle gain",
+      "combo": "Combo",
+      "hybrid": "Hybrid athlete"
+    },
+    "program": {
+      "homeFatLoss": {
+        "name": "Home Fat-Loss Engine",
+        "blurb": "4 days. Full-body circuits, short rest, and conditioning finishers you can do with bodyweight plus light home kit."
+      },
+      "homeMuscleGain": {
+        "name": "Home Hypertrophy",
+        "blurb": "4 days. Push / pull / legs plus an upper pump day using dumbbells, pull-ups, and floor work — no machines."
+      },
+      "homeCombo": {
+        "name": "Home Strength + Shape",
+        "blurb": "4 days. Upper/lower mix: heavier compounds, then volume and a short metabolic finisher."
+      },
+      "homeHybrid": {
+        "name": "Home Hybrid Athlete",
+        "blurb": "5 days. Strength, kettlebell engine work, pulling, and athletic core — built for people who train at home and still want to perform."
+      }
+    }
+  },
+  "tour": {
+    "kicker": "APP TOUR",
+    "stepOf": "Step {current} of {total}",
+    "phaseStep": "{phase} phase",
+    "progressLabel": "Tour progress",
+    "loadingStep": "Opening this section…",
+    "targetMissed": "Couldn't highlight this spot — the section may still be loading or isn't visible on your account.",
+    "targetMissedAction": "Continue anyway or skip the tour.",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip Tour",
+    "goDashboard": "Go to Dashboard",
+    "exploreWorkouts": "Explore Workouts",
+    "askCoach": "Ask AI Coach",
+    "deferredTitle": "Finish your workout first",
+    "deferredBody": "You have an active session. We won't interrupt it. Start the tour later from Settings, or begin now only if you're ready to leave this screen.",
+    "startLater": "Start tour later",
+    "startNow": "Start tour now",
+    "expectedTitle": "You should now see",
+    "tipTitle": "Tip",
+    "noteTitle": "Note",
+    "warningTitle": "Heads up",
+    "troubleshootStepTitle": "Troubleshooting",
+    "tryPrompts": "Try copying a prompt",
+    "copyPrompt": "Copy",
+    "copiedPrompt": "Copied",
+    "phases": {
+      "navigate": "Navigate",
+      "train": "Train",
+      "track": "Track",
+      "customize": "Customize"
+    },
+    "intro": {
+      "learnTitle": "WHAT YOU'LL LEARN",
+      "introPart1Title": "Welcome — part 1",
+      "introPart2Title": "Welcome — part 2",
+      "learnItems": [
+        "Navigate with tabs and the ☰ menu",
+        "Get a split — manual, AI, or recommended",
+        "Start a session and review history",
+        "Optional: AI Coach and Settings"
+      ],
+      "learnItemsPart1": [
+        "Navigate with tabs and the menu",
+        "Get a split and start your first session"
+      ],
+      "learnItemsPart2": [
+        "Review history after you finish",
+        "Find AI Coach and Settings when you need them"
+      ],
+      "duration": "We highlight each area on the real page — use Next to continue. This tour never starts a workout or changes your data."
+    },
+    "steps": {
+      "homeHero": {
+        "title": "Your welcome panel",
+        "lead": "The highlighted area is your Home header — name, avatar, and profile link.",
+        "substeps": [
+          "Your display name and @username appear here after onboarding.",
+          "Tap View full profile to edit bio, avatar, and public stats.",
+          "This panel stays at the top every time you return to Home."
+        ],
+        "tip": "Guest accounts see a simplified label instead of email."
+      },
+      "homeShortcuts": {
+        "title": "Quick shortcuts",
+        "lead": "Jump to any major section in one tap from this grid.",
+        "substeps": [
+          "Workout — your splits and training hub.",
+          "History, PRs, and Achievements — progress at a glance.",
+          "AI Coach and Settings — available when signed in."
+        ],
+        "expected": "A grid of tiles linking to Workout, Explore, History, and more."
+      },
+      "navTabs": {
+        "title": "Bottom tab bar",
+        "lead": "On mobile, these tabs are your daily navigation.",
+        "substeps": [
+          "Home · Workout · Messages · Challenges · Profile.",
+          "The active tab is highlighted in gold.",
+          "Messages and social features require a full account."
+        ],
+        "tip": "On desktop, tabs may hide — use the ☰ menu instead."
+      },
+      "navMenu": {
+        "title": "Full app menu",
+        "lead": "Tap ☰ (top-left) to open every section — Exercises, Home Workouts, History, AI Coach, Settings, and Community.",
+        "leadCoachMark": "The ☰ menu lists every section — Exercises, History, Coach, Settings, and more.",
+        "substeps": [
+          "The menu slides in from the left on all screen sizes.",
+          "Gold highlight shows your current page.",
+          "Close with ✕ or tap outside the sidebar."
+        ],
+        "expected": "The ☰ button in the top navigation bar."
+      },
+      "workoutSplits": {
+        "title": "Your splits",
+        "lead": "Your saved training plans live in My Splits — tap this link on Train to open the full list.",
+        "leadCoachMark": "My Splits holds every program you've saved — tap here on Train to browse and manage them.",
+        "substeps": [
+          "Each card shows days per week and focus area.",
+          "Tap a card to open the split and pick a training day.",
+          "Use My Splits to manage every saved program."
+        ],
+        "expected": "Manage your splits link on the Train tab."
+      },
+      "splitRecommendations": {
+        "title": "Recommended splits",
+        "lead": "Profile-based program suggestions live inside Create Split — tap this option to browse scored recommendations.",
+        "substeps": [
+          "On Train, tap Create splits to open this choice screen.",
+          "Recommended splits shows programs scored from your goals, schedule, and equipment.",
+          "Preview days and exercises, then save one to My Splits."
+        ],
+        "expected": "The Recommended splits card on the Create Split choice screen."
+      },
+      "workoutCreate": {
+        "title": "Create a split",
+        "lead": "Pick how you want to build a program — all three paths start here.",
+        "substeps": [
+          "Create yourself: manual builder with days and exercises.",
+          "Create with AI: describe your ideal program in plain language.",
+          "Recommended splits: profile-scored suggestions ready to save."
+        ],
+        "tip": "You need an internet connection to create or save splits."
+      },
+      "exercisesSearch": {
+        "title": "Search & filters",
+        "lead": "Find any movement in the library using search and filters.",
+        "substeps": [
+          "Type a name — results update as you type.",
+          "Filter by category, equipment, muscle group, or sort order.",
+          "Browsing here is safe — it does not start a workout."
+        ],
+        "expected": "Search bar and filter controls at the top of the page."
+      },
+      "exercisesGrid": {
+        "title": "Exercise catalog",
+        "lead": "Tap any exercise to open details — form tips and demo GIF included.",
+        "substeps": [
+          "Scroll the list to explore the full catalog.",
+          "Open a card to read cues and watch the demo.",
+          "Add to Split appears when you're editing a plan."
+        ],
+        "expected": "Scrollable list of exercise cards below the filters."
+      },
+      "homeWorkouts": {
+        "title": "Home workouts",
+        "lead": "Programs for bodyweight, bands, and dumbbells — separate from gym splits.",
+        "substeps": [
+          "Browse home-friendly programs on this page.",
+          "Use Workout for barbell/machine gym plans.",
+          "Logging works the same once you start a home session."
+        ],
+        "note": "Pick the right entry point: gym splits under Workout, home programs here."
+      },
+      "sessionStart": {
+        "title": "Starting a session",
+        "lead": "When you're ready to train, open a split → pick a day → tap Start workout.",
+        "substeps": [
+          "During a session: log weight and reps per set, or skip.",
+          "Use Next exercise to move through your plan.",
+          "Tap Finish workout — volume and duration save to History.",
+          "Resume anytime from the Active workout banner on Home."
+        ],
+        "warning": "If you already have an active session, the tour may defer so it won't interrupt you.",
+        "troubleshoot": "Accidentally started? Finish or Discard from the session menu, then restart the tour from Settings."
+      },
+      "history": {
+        "title": "Workout history",
+        "lead": "Every finished session appears in this list.",
+        "substeps": [
+          "Each row shows date, split name, and total volume.",
+          "Tap a row for full set details and duration.",
+          "New accounts see an empty list until the first workout is finished."
+        ],
+        "tip": "History is read-only here — manage sessions from the detail view."
+      },
+      "coach": {
+        "title": "AI Coach",
+        "lead": "Open chat for training questions, split ideas, and programming advice.",
+        "substeps": [
+          "Tap Open Chat — type at the bottom of the screen.",
+          "Coach may suggest plans — you confirm before anything saves.",
+          "Insights from past sessions appear on this page too."
+        ],
+        "note": "Guest accounts may have limited Coach access.",
+        "prompts": [
+          "Build me a 3-day push/pull/legs split for hypertrophy",
+          "What should I do if my bench press stalls?"
+        ]
+      },
+      "coachAiActions": {
+        "title": "AI that takes action",
+        "lead": "Ask Coach to build a split, tweak your program, or plan your training — you confirm before anything saves.",
+        "substeps": [
+          "Type at the bottom — Coach can propose splits and session tweaks.",
+          "Review action cards before accepting any change.",
+          "Nothing writes to your account until you tap confirm."
+        ],
+        "expected": "Chat composer fixed to the bottom of the screen."
+      },
+      "settingsAppearance": {
+        "title": "Appearance & theme",
+        "lead": "Personalize how IronStack looks and feels.",
+        "substeps": [
+          "Choose Dark, Light, or System theme.",
+          "Change language (EN/AR) and units (kg/lb) in nearby sections.",
+          "Edit fitness profile to update goals and equipment."
+        ],
+        "expected": "Theme picker with three options in the highlighted panel."
+      },
+      "settingsTour": {
+        "title": "Settings hub",
+        "lead": "Theme, language, offline mode, fitness profile, and Restart App Tour all live here.",
+        "substeps": [
+          "Useful after updates or if you skipped the first time.",
+          "Won't start if you have an active workout — finish or defer first."
+        ],
+        "expected": "Restart App Tour button in the highlighted section."
+      },
+      "offlineMode": {
+        "title": "Train offline",
+        "lead": "IronStack keeps cached splits and session logging on this device — finish workouts without signal and they sync when you're back online. AI Coach, Messages, Leaderboard, and creating splits need a connection.",
+        "substeps": [
+          "Works offline: browse cached splits, start and finish sessions, log every set.",
+          "Needs a connection: AI Coach, Messages, Leaderboard, notifications, and create or edit splits.",
+          "The nav bar shows Offline or a sync queue when relevant."
+        ],
+        "expected": "Offline & sync reference panel with two capability columns."
+      },
+      "socialLeaderboard": {
+        "title": "Leaderboard",
+        "lead": "Compare streaks and best lifts with the whole IronStack community.",
+        "substeps": [
+          "Switch between Streak and Best lift sorting at the top.",
+          "Your row is highlighted when you appear in the rankings.",
+          "Tap any athlete to open their public profile."
+        ],
+        "expected": "The full Leaderboard page with rankings and sort controls.",
+        "tip": "A compact leaderboard also appears on Home — this page is the full board."
+      },
+      "socialCircle": {
+        "title": "Training circle",
+        "lead": "See recent activity from people you train with — back on Home.",
+        "substeps": [
+          "Friends' sessions and milestones appear in this feed.",
+          "If you have no friends yet, the Home leaderboard still shows nearby.",
+          "Add friends from Community or Messages."
+        ],
+        "expected": "Training circle feed on Home, or the Home leaderboard as a fallback."
+      },
+      "messages": {
+        "title": "Messages",
+        "lead": "Direct messages and group chats with training partners.",
+        "substeps": [
+          "Open threads from the inbox list.",
+          "Start a new group chat with the + button.",
+          "Messages tab also lives in the bottom navigation."
+        ],
+        "note": "Guest accounts cannot access Messages — create a full account to unlock.",
+        "expected": "Inbox header and conversation list."
+      },
+      "done": {
+        "title": "You're ready to train",
+        "lead": "You've seen the essentials. Pick your first move below.",
+        "checklist": [
+          "Navigate with tabs and ☰ menu",
+          "Get a split — manual, AI, or recommended",
+          "Start a workout from Train",
+          "Finished sessions appear in History",
+          "AI Coach and Settings when you need them"
+        ]
+      }
+    }
   }
 }

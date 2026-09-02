@@ -4,21 +4,16 @@ import { useEffect, useMemo, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { getIsGuestAction } from '@/lib/data/profile-actions'
 import { createClient } from '@/lib/supabase/client'
+import {
+  clearSyncClientCaches,
+  handleAuthUserChanged,
+} from '@/lib/clear-client-user-state'
 
 const GUEST_STORAGE_KEY = 'ironstack:is-guest'
-const PROFILE_OK_KEY = 'ironstack:profile-ok'
-const USERNAME_OK_KEY = 'ironstack:username-ok'
 
-/** Remove leftover guest/onboarding flags from a prior session. */
+/** Remove leftover guest/onboarding flags and per-account browser caches. */
 export function clearIronstackAuthCache() {
-  if (typeof window === 'undefined') return
-  try {
-    sessionStorage.removeItem(GUEST_STORAGE_KEY)
-    sessionStorage.removeItem(PROFILE_OK_KEY)
-    sessionStorage.removeItem(USERNAME_OK_KEY)
-  } catch {
-    /* ignore */
-  }
+  clearSyncClientCaches({ keepDevicePrefs: false })
 }
 
 /** @deprecated Use clearIronstackAuthCache */
@@ -65,6 +60,7 @@ export function useIsGuest() {
     }
 
     const refresh = (user: User | null) => {
+      void handleAuthUserChanged(user?.id ?? null)
       if (!user) {
         applyGuest(false)
         return
@@ -73,19 +69,34 @@ export function useIsGuest() {
         applyGuest(true)
         return
       }
-      void getIsGuestAction().then((guest) => applyGuest(guest))
+      void getIsGuestAction()
+        .then((guest) => applyGuest(guest))
+        .catch(() => applyGuest(readCachedGuest()))
     }
 
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      refresh(user)
-    })
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        refresh(session?.user ?? null)
+      })
+      .catch(() => applyGuest(readCachedGuest()))
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        void handleAuthUserChanged(null)
         clearIronstackAuthCache()
         applyGuest(false)
+        return
+      }
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'USER_UPDATED' ||
+        event === 'TOKEN_REFRESHED' ||
+        event === 'INITIAL_SESSION'
+      ) {
+        refresh(session?.user ?? null)
         return
       }
       refresh(session?.user ?? null)

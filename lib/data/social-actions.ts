@@ -13,13 +13,24 @@ import {
 import { buildSessionSummary } from '@/lib/data/session-summary'
 import type { SessionSummaryData } from '@/lib/data/session-summary'
 import { createClient } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
+import {
+  fetchPublicProfilesByIds,
+  PUBLIC_PROFILES_VIEW,
+} from '@/lib/data/public-profiles'
+import { PUBLIC_PROFILE_COLUMNS } from '@/lib/database.types'
+
+async function guestSocialBlocked() {
+  const error = await rejectIfGuest()
+  return error ? { ok: false as const, error } : null
+}
 
 async function revalidateProfilePaths(userId: string, otherId: string) {
   const supabase = await createClient()
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, username')
-    .in('id', [userId, otherId])
+  const { data: profiles } = await fetchPublicProfilesByIds(supabase, [
+    userId,
+    otherId,
+  ])
   for (const profile of profiles ?? []) {
     if (profile.username) revalidatePath(`/profile/${profile.username}`)
     revalidatePath(`/profile/${profile.id}`)
@@ -28,6 +39,9 @@ async function revalidateProfilePaths(userId: string, otherId: string) {
 }
 
 export async function followUserAction(followedId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -49,11 +63,10 @@ export async function followUserAction(followedId: string) {
     return { ok: false, error: error.message }
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('id', followedId)
-    .maybeSingle()
+  const { data: followed } = await fetchPublicProfilesByIds(supabase, [
+    followedId,
+  ])
+  const profile = followed[0]
   if (profile?.username) revalidatePath(`/profile/${profile.username}`)
   revalidatePath(`/profile/${followedId}`)
   revalidatePath('/dashboard/home')
@@ -61,6 +74,9 @@ export async function followUserAction(followedId: string) {
 }
 
 export async function unfollowUserAction(followedId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -75,11 +91,10 @@ export async function unfollowUserAction(followedId: string) {
 
   if (error) return { ok: false, error: error.message }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('id', followedId)
-    .maybeSingle()
+  const { data: followed } = await fetchPublicProfilesByIds(supabase, [
+    followedId,
+  ])
+  const profile = followed[0]
   if (profile?.username) revalidatePath(`/profile/${profile.username}`)
   revalidatePath(`/profile/${followedId}`)
   revalidatePath('/dashboard/home')
@@ -138,6 +153,9 @@ export async function getFriendshipStatusAction(profileUserId: string): Promise<
 }
 
 export async function sendFriendRequestAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -208,6 +226,9 @@ export async function sendFriendRequestAction(otherUserId: string) {
 }
 
 export async function acceptFriendRequestAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -236,6 +257,9 @@ export async function acceptFriendRequestAction(otherUserId: string) {
 }
 
 export async function declineFriendRequestAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -255,6 +279,9 @@ export async function declineFriendRequestAction(otherUserId: string) {
 }
 
 export async function cancelFriendRequestAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -274,6 +301,9 @@ export async function cancelFriendRequestAction(otherUserId: string) {
 }
 
 export async function unfriendAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -320,6 +350,9 @@ export async function listFriendRequestsAction(): Promise<{
 }
 
 export async function startDmWithUserAction(otherUserId: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -338,6 +371,9 @@ export async function startDmWithUserAction(otherUserId: string) {
 }
 
 export async function startDmByUsernameAction(username: string) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const profile = await getProfileByUsername(username)
   if (!profile) {
     return { ok: false as const, error: 'User not found.', threadId: '' }
@@ -349,6 +385,9 @@ export async function sendDmMessageAction(input: {
   threadId: string
   content: string
 }) {
+  const blocked = await guestSocialBlocked()
+  if (blocked) return blocked
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -470,8 +509,8 @@ export async function searchPeopleAction(
   if (q.length < 1) return { people: [] }
 
   const { data: profiles, error } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url')
+    .from(PUBLIC_PROFILES_VIEW)
+    .select(PUBLIC_PROFILE_COLUMNS)
     .neq('id', user.id)
     .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
     .order('username', { ascending: true })

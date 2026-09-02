@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { PageError } from '@/components/page-states'
 import { SessionDetailView } from '@/components/session-detail-view'
+import { LocalSessionDetailFallback } from '@/components/local-session-detail'
 import {
   getProfile,
   getSessionById,
@@ -50,7 +51,22 @@ export default async function SessionDetailPage({ params }: Params) {
 
   const session = sessionResult.data
   if (!session) {
-    notFound()
+    return (
+      <LocalSessionDetailFallback
+        id={id}
+        displayName={
+          profileResult.data?.display_name ||
+          user.email?.split('@')[0] ||
+          'Athlete'
+        }
+        initials={initialsFrom(
+          profileResult.data?.display_name ||
+            user.email?.split('@')[0] ||
+            'Athlete',
+        )}
+        weightUnit={profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'}
+      />
+    )
   }
 
   // Only the owner should see this — getSessionById already filters by user_id.
@@ -136,6 +152,7 @@ export default async function SessionDetailPage({ params }: Params) {
     <SessionDetailView
       displayName={displayName}
       initials={initialsFrom(displayName)}
+      avatarUrl={profileResult.data?.avatar_url}
       title={`${dayName} • ${splitName}`}
       finishedAt={session.finished_at ?? session.started_at}
       durationSeconds={session.duration_seconds ?? 0}
@@ -146,6 +163,8 @@ export default async function SessionDetailPage({ params }: Params) {
       weightUnit={
         profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'
       }
+      backHref="/dashboard/history"
+      backLabel="BACK TO HISTORY"
     />
   )
 }

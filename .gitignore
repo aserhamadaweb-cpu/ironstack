@@ -15,6 +15,9 @@ node_modules
 .DS_Store
 .vercel
 
+# GitHub exercises-dataset clone (sync copies JSON + media into the app)
+vendor/exercises-dataset/
+
 # next-pwa / Workbox build output (regenerated on `next build --webpack`)
 # Production overwrites public/sw.js; restore push-only SW for local if needed.
 public/sw.js
@@ -27,3 +30,7 @@ public/swe-worker-*.js
 public/swe-worker-*.js.map
 public/fallback-*.js
 .env*
+
+# User-data reset audit dumps (may contain auth IDs)
+scripts/_reset-audit-*.json
+.eslint-report.json

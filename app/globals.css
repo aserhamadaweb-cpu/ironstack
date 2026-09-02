@@ -192,7 +192,55 @@ html[data-theme='light'] {
 
   /* Room for the persistent app tab bar (set by DashboardNav). */
   body.has-app-tabbar {
-    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
+    padding-bottom: var(--app-tabbar-clearance);
+  }
+
+  body.has-app-tabbar .above-app-tabbar {
+    bottom: var(--app-tabbar-clearance);
+  }
+
+  /* Full-viewport chat layouts (header + optional guest banner + tab bar). */
+  .app-chat-viewport-height {
+    height: calc(
+      100svh - var(--app-header-height) - var(--app-tabbar-clearance)
+    );
+    min-height: 0;
+  }
+
+  /* Tour / menu scroll locks — class-based so they don't fight inline styles. */
+  html.tour-scroll-lock,
+  html.tour-scroll-lock body {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+  }
+
+  body.nav-menu-scroll-lock {
+    overflow: hidden !important;
+  }
+
+  /*
+   * Prevent iOS Safari auto-zoom on focus (requires ≥16px).
+   * Below md, override utility text-sm on form controls; desktop keeps text-sm.
+   */
+  @media (max-width: 767px) {
+    textarea,
+    select,
+    input:is(
+      [type='text'],
+      [type='email'],
+      [type='password'],
+      [type='search'],
+      [type='tel'],
+      [type='url'],
+      [type='number'],
+      [type='date'],
+      [type='datetime-local'],
+      [type='month'],
+      [type='week'],
+      [type='time']
+    ) {
+      font-size: 1rem !important;
+    }
   }
 
   /* iOS tap highlight + 300ms delay */
@@ -309,6 +357,57 @@ html[data-theme='light'] {
 
 :root {
   --app-sidebar-width: 20rem;
+  --app-tabbar-clearance: calc(4.25rem + env(safe-area-inset-bottom));
+  --app-nav-height: 3rem;
+  /* Guest banner row (min-h-11 CTA) + py-2 padding block — see .guest-banner */
+  --app-guest-banner-row-height: 2.75rem;
+  --app-guest-banner-padding-block: 1rem;
+  --app-guest-banner-height: 0px;
+  --app-header-height: calc(
+    var(--app-nav-height) + var(--app-guest-banner-height)
+  );
+}
+
+@media (min-width: 640px) {
+  :root {
+    --app-nav-height: 3.5rem;
+  }
+}
+
+body.has-guest-banner {
+  --app-guest-banner-height: calc(
+    var(--app-guest-banner-padding-block) + var(--app-guest-banner-row-height)
+  );
+}
+
+/* Mobile carousel slots — width must live in CSS (Tailwind arbitrary min() commas break). */
+.split-recommendation-carousel-slot {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: min(78vw, 17.5rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+@media (min-width: 768px) {
+  .split-recommendation-carousel-slot {
+    width: auto;
+    max-width: none;
+  }
+}
+
+.split-recommendation-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.split-recommendation-card .rec-copy {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .nav-shell {
@@ -911,6 +1010,15 @@ html {
   }
 }
 
+
+.workout-split-card {
+  min-width: 0;
+}
+
+.workout-split-copy {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

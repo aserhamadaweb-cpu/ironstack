@@ -16,7 +16,7 @@ export function AiCoachDashboard({
   insight,
 }: AiCoachDashboardProps) {
   return (
-    <div className="min-h-svh pb-20 md:pb-0">
+    <div className="min-h-svh">
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}

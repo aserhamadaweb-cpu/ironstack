@@ -4,6 +4,14 @@ import {
   type FunctionCall,
   type Part,
 } from '@google/genai'
+import {
+  isSessionProposal,
+  isSplitProposal,
+  type SessionProposal,
+  type SplitProposal,
+} from '@/lib/ai/action-types'
+import type { AgentToolContext } from '@/lib/ai/agent/tool-bridge'
+import type { AgentPreview } from '@/lib/ai/agent/types'
 import { GEMINI_MODEL, buildCoachSystemPrompt } from '@/lib/ai/prompt'
 import { COACH_TOOL_DECLARATIONS, executeCoachTool } from '@/lib/ai/tools'
 
@@ -63,6 +71,8 @@ export type ChatTurn = {
  */
 export async function runCoachTurn(input: {
   userId: string
+  /** Conversation the turn belongs to — recorded on queued agent actions. */
+  conversationId?: string | null
   history: ChatTurn[]
   userMessage: string
   celebrationContext?: string | null
@@ -70,12 +80,23 @@ export async function runCoachTurn(input: {
   memoryBlock?: string
   /** UI language — coach replies in Arabic when 'ar'. */
   locale?: 'en' | 'ar'
+  /** Pre-fetched split programming context (skips redundant read tools). */
+  splitBuildMode?: boolean
+  /** Pending unsaved split preview the athlete is revising. */
+  revisePendingSplit?: boolean
+  /** In-workout session chat on the live set-logging screen. */
+  liveSessionMode?: boolean
 }): Promise<{ text: string; toolTrace: Array<{ name: string; result: unknown }> }> {
   const ai = getClient()
   const toolTrace: Array<{ name: string; result: unknown }> = []
   const systemInstruction = buildCoachSystemPrompt(
     input.memoryBlock ?? '',
     input.locale ?? 'en',
+    {
+      splitBuildMode: input.splitBuildMode,
+      revisePendingSplit: input.revisePendingSplit,
+      liveSessionMode: input.liveSessionMode,
+    },
   )
 
   const contents: Content[] = []
@@ -102,9 +123,16 @@ export async function runCoachTurn(input: {
       ai,
       model: GEMINI_MODEL,
       contents,
-      userId: input.userId,
+      toolContext: {
+        userId: input.userId,
+        conversationId: input.conversationId ?? null,
+        requestText: input.userMessage,
+      },
       toolTrace,
       systemInstruction,
+      locale: input.locale ?? 'en',
+      splitBuildMode: input.splitBuildMode,
+      revisePendingSplit: input.revisePendingSplit,
     })
     return { text, toolTrace }
   } catch (err) {
@@ -116,16 +144,95 @@ export async function runCoachTurn(input: {
   }
 }
 
+type PendingProposal =
+  | { kind: 'split'; proposal: SplitProposal }
+  | { kind: 'session'; proposal: SessionProposal }
+  | { kind: 'agent'; preview: AgentPreview }
+
+function findPendingProposal(
+  toolTrace: Array<{ name: string; result: unknown }>,
+): PendingProposal | null {
+  for (let i = toolTrace.length - 1; i >= 0; i -= 1) {
+    const result = toolTrace[i].result
+    if (!result || typeof result !== 'object') continue
+    const row = result as {
+      status?: string
+      proposal?: unknown
+      pendingActionId?: string
+      preview?: AgentPreview
+    }
+    if (row.status !== 'pending_confirmation') continue
+    if (isSplitProposal(row.proposal)) {
+      return { kind: 'split', proposal: row.proposal }
+    }
+    if (isSessionProposal(row.proposal)) {
+      return { kind: 'session', proposal: row.proposal }
+    }
+    if (row.pendingActionId && row.preview) {
+      return { kind: 'agent', preview: row.preview }
+    }
+  }
+  return null
+}
+
+function proposalReadyText(pending: PendingProposal, locale: 'en' | 'ar'): string {
+  if (pending.kind === 'agent') {
+    const title = pending.preview.title
+    return locale === 'ar'
+      ? `جهّزت هذا التغيير: ${title}. راجع البطاقة أدناه واضغط تأكيد — لم يُطبَّق شيء بعد.`
+      : `Here's what I'll do: ${title}. Review the card below and tap Confirm — nothing has changed yet.`
+  }
+
+  if (pending.kind === 'split') {
+    const { name, days, kind } = pending.proposal
+    if (locale === 'ar') {
+      const action =
+        kind === 'update_split' ? 'تحديث البرنامج' : 'حفظ البرنامج'
+      return `جهّزت لك "${name}" (${days.length} أيام). راجع البطاقة الذهبية أدناه واضغط ${action} لإضافته إلى برامجك — لم يُحفظ بعد.`
+    }
+    const action = kind === 'update_split' ? 'Save changes' : 'Save split'
+    return `I've built "${name}" (${days.length} days). Review the gold card below and tap ${action} to add it to your programs — it is not saved yet.`
+  }
+
+  const { kind, splitName } = pending.proposal
+  if (locale === 'ar') {
+    if (kind === 'discard_session') {
+      return 'راجع تأكيد إلغاء الجلسة في البطاقة أدناه قبل المتابعة.'
+    }
+    if (kind === 'start_session' || kind === 'resume_session') {
+      return `اضغط فتح في البطاقة أدناه لبدء أو متابعة ${splitName ? `"${splitName}"` : 'البرنامج'}.`
+    }
+    return `اضغط فتح في البطاقة أدناه لفتح ${splitName ? `"${splitName}"` : 'البرنامج'}.`
+  }
+  if (kind === 'discard_session') {
+    return 'Review the discard confirmation in the card below before continuing.'
+  }
+  if (kind === 'start_session' || kind === 'resume_session') {
+    return `Tap Open on the card below to start or resume${splitName ? ` "${splitName}"` : ' the workout'}.`
+  }
+  return `Tap Open on the card below to open${splitName ? ` "${splitName}"` : ' the program'}.`
+}
+
+function loopLimitText(locale: 'en' | 'ar'): string {
+  return locale === 'ar'
+    ? 'استغرق البحث في بياناتك وقتاً أطول من المعتاد. جرّب سؤالاً أقصر، أو اطلب برنامجاً بـ3 أيام فقط.'
+    : 'Looking up your training data took longer than usual. Try a shorter ask, or request a 3-day split first.'
+}
+
 async function generateWithTools(input: {
   ai: GoogleGenAI
   model: string
   contents: Content[]
-  userId: string
+  toolContext: AgentToolContext
   toolTrace: Array<{ name: string; result: unknown }>
   systemInstruction: string
+  locale: 'en' | 'ar'
+  splitBuildMode?: boolean
+  revisePendingSplit?: boolean
 }): Promise<string> {
   const working = [...input.contents]
-  const maxRounds = 5
+  const fastPath = input.splitBuildMode || input.revisePendingSplit
+  const maxRounds = fastPath ? 8 : 14
 
   for (let round = 0; round < maxRounds; round += 1) {
     let response
@@ -136,7 +243,7 @@ async function generateWithTools(input: {
         config: {
           systemInstruction: input.systemInstruction,
           tools: [{ functionDeclarations: COACH_TOOL_DECLARATIONS }],
-          temperature: 0.7,
+          temperature: fastPath ? 0.35 : 0.7,
         },
       })
     } catch (err) {
@@ -156,14 +263,18 @@ async function generateWithTools(input: {
 
       const responseParts: Part[] = []
 
-      for (const call of functionCalls as FunctionCall[]) {
-        const name = call.name ?? ''
-        const args = { ...(call.args ?? {}) } as Record<string, unknown>
-        // Strip any attempted user_id from the model — never trust it.
-        delete args.user_id
-        delete args.userId
+      const toolResults = await Promise.all(
+        (functionCalls as FunctionCall[]).map(async (call) => {
+          const name = call.name ?? ''
+          const args = { ...(call.args ?? {}) } as Record<string, unknown>
+          delete args.user_id
+          delete args.userId
+          const result = await executeCoachTool(input.toolContext, name, args)
+          return { call, name, result }
+        }),
+      )
 
-        const result = await executeCoachTool(input.userId, name, args)
+      for (const { call, name, result } of toolResults) {
         input.toolTrace.push({ name, result })
 
         const functionResponse: Part['functionResponse'] = {
@@ -177,14 +288,32 @@ async function generateWithTools(input: {
       }
 
       working.push({ role: 'user', parts: responseParts })
+
+      const pending = findPendingProposal(input.toolTrace)
+      if (pending) {
+        return proposalReadyText(pending, input.locale)
+      }
+
       continue
     }
 
     const text = response.text?.trim()
     if (text) return text
 
-    return "I've got your question — try asking again with a bit more detail."
+    const pending = findPendingProposal(input.toolTrace)
+    if (pending) {
+      return proposalReadyText(pending, input.locale)
+    }
+
+    return input.locale === 'ar'
+      ? 'فهمت سؤالك — جرّب إعادة صياغته بمزيد من التفاصيل.'
+      : "I've got your question — try asking again with a bit more detail."
   }
 
-  return 'I ran into a loop looking up your training data. Try a shorter question.'
+  const pending = findPendingProposal(input.toolTrace)
+  if (pending) {
+    return proposalReadyText(pending, input.locale)
+  }
+
+  return loopLimitText(input.locale)
 }

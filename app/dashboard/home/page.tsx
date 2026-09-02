@@ -1,16 +1,15 @@
+import { after } from 'next/server'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { HomeDashboard } from '@/components/home-dashboard'
-import { PageError } from '@/components/page-states'
 import {
   getAcceptedFriends,
   getCompletedSessions,
   getLeaderboard,
   getProfile,
 } from '@/lib/data/queries'
-import { getCachedCoachInsight } from '@/lib/ai/insights'
+import { refreshSuggestions } from '@/lib/ai/suggestions'
 import { ltrEmbed } from '@/lib/bidi'
-import { getChallengesHomeSummary } from '@/lib/data/challenges'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { fetchStreakStatus } from '@/lib/data/streak'
 import { isSameLocalDay } from '@/lib/session-store'
@@ -31,42 +30,88 @@ export default async function HomePage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, sessionsResult, friendsResult, globalResult, insight, streakStatus, challengeSummary] =
-    await Promise.all([
-      getProfile(userId),
+  let profileResult: Awaited<ReturnType<typeof getProfile>> = {
+    data: null,
+    error: null,
+  }
+  let sessionsResult: Awaited<ReturnType<typeof getCompletedSessions>> = {
+    data: [],
+    error: null,
+  }
+  let friendsResult: Awaited<ReturnType<typeof getAcceptedFriends>> = {
+    data: [],
+    error: null,
+  }
+  let globalResult: Awaited<ReturnType<typeof getLeaderboard>> = {
+    data: [],
+    error: null,
+  }
+  let streakStatus = { streakDays: 0, hoursLeft: null as number | null }
+
+  try {
+    const profileProbe = await getProfile(userId)
+    const unreachable = Boolean(
+      profileProbe.error &&
+        /reach the server|fetch failed|failed to fetch/i.test(profileProbe.error),
+    )
+
+    if (unreachable) {
+      throw new Error('offline')
+    }
+
+    const fetched = await Promise.all([
+      Promise.resolve(profileProbe),
       getCompletedSessions(userId, 21),
       getAcceptedFriends(userId),
       getLeaderboard({ limit: 20 }),
-      getCachedCoachInsight(userId),
       fetchStreakStatus(userId),
-      getChallengesHomeSummary(userId),
     ])
+    profileResult = fetched[0]
+    sessionsResult = fetched[1]
+    friendsResult = fetched[2]
+    globalResult = fetched[3]
+    streakStatus = fetched[4]
+  } catch {
+    /* Offline / unreachable Supabase — render Home with cached client data. */
+  }
+
+  // Home is the post-login landing page, so this is where proactive coach
+  // suggestions get generated. Deferred so it never blocks the render, and
+  // internally rate-limited, so most loads are a no-op.
+  after(async () => {
+    try {
+      await refreshSuggestions(userId)
+    } catch {
+      /* A missing nudge is not worth surfacing. */
+    }
+  })
 
   const friends = friendsResult.data ?? []
   const friendIds = friends.map(({ profile }) => profile.id)
 
-  const friendsBoardResult =
-    friendIds.length === 0
-      ? { data: [] as NonNullable<typeof globalResult.data>, error: null }
-      : await getLeaderboard({
-          userIds: [...friendIds, userId],
-          limit: 20,
-        })
-
-  const error =
-    profileResult.error ||
-    sessionsResult.error ||
-    friendsResult.error ||
-    globalResult.error ||
-    friendsBoardResult.error
-
-  if (error) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError message={error} />
-      </main>
-    )
+  let friendsBoardResult: Awaited<ReturnType<typeof getLeaderboard>> = {
+    data: [],
+    error: null,
   }
+  if (friendIds.length > 0) {
+    try {
+      friendsBoardResult = await getLeaderboard({
+        userIds: [...friendIds, userId],
+        limit: 20,
+      })
+    } catch {
+      friendsBoardResult = { data: [], error: null }
+    }
+  }
+
+  const liveDegraded = Boolean(
+    profileResult.error ||
+      sessionsResult.error ||
+      friendsResult.error ||
+      globalResult.error ||
+      friendsBoardResult.error ||
+      !profileResult.data,
+  )
 
   const profile = profileResult.data
   const sessions = sessionsResult.data ?? []
@@ -162,14 +207,13 @@ export default async function HomePage() {
       friends={friendAvatars}
       currentUserId={userId}
       weightUnit={unit}
-      challenges={challengeSummary}
       leaderboard={{
         globalRows: (globalResult.data ?? []).map(mapRow),
         friendsRows,
         friendCount: friendIds.length,
       }}
-      insight={insight}
       avatarUrl={profile?.avatar_url}
+      liveDegraded={liveDegraded}
     />
   )
 }

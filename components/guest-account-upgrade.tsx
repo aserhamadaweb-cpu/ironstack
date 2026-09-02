@@ -4,12 +4,14 @@ import { FormEvent, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { EmailVerifyForm } from '@/components/email-verify-form'
 import { clearProfileOnboardingCache } from '@/components/choose-username-gate'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
-import { sendVerificationCode } from '@/lib/email-verification'
 import { createClient } from '@/lib/supabase/client'
 
+/**
+ * Guest → permanent email/password upgrade.
+ * Does not require a custom 6-digit verification step; Confirm email is off.
+ */
 export function GuestAccountUpgrade() {
   const t = useTranslations('guest')
   const tAuth = useTranslations('auth')
@@ -21,11 +23,10 @@ export function GuestAccountUpgrade() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  const [step, setStep] = useState<'form' | 'verify'>('form')
-  const [verifyEmail, setVerifyEmail] = useState('')
 
   function submitUpgrade(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (pending) return
     setError(null)
 
     const nextEmail = email.trim()
@@ -35,53 +36,27 @@ export function GuestAccountUpgrade() {
     }
 
     startTransition(async () => {
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { data, error: updateError } = await supabase.auth.updateUser({
         email: nextEmail,
         password,
+        data: {
+          is_guest: false,
+        },
       })
       if (updateError) {
         setError(updateError.message)
         return
       }
-
-      try {
-        await sendVerificationCode(supabase)
-      } catch (err) {
-        setVerifyEmail(nextEmail)
-        setStep('verify')
-        setError(
-          err instanceof Error && err.message
-            ? err.message
-            : tAuth('verifySendFailed'),
-        )
+      if (!data.user) {
+        setError(tAuth('generic'))
         return
       }
 
-      setVerifyEmail(nextEmail)
-      setStep('verify')
+      clearIronstackAuthCache()
+      clearProfileOnboardingCache()
+      router.push('/dashboard/home')
+      router.refresh()
     })
-  }
-
-  if (step === 'verify') {
-    return (
-      <div className="is-panel p-5">
-        <EmailVerifyForm
-          email={verifyEmail}
-          skipInitialCooldown={false}
-          initialError={error}
-          onBack={() => {
-            setStep('form')
-            setError(null)
-          }}
-          onVerified={() => {
-            clearIronstackAuthCache()
-            clearProfileOnboardingCache()
-            router.push('/dashboard/home')
-            router.refresh()
-          }}
-        />
-      </div>
-    )
   }
 
   return (

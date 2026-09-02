@@ -9,6 +9,7 @@ import {
   Check,
   ChevronRight,
   Clock3,
+  CloudOff,
   Dumbbell,
   Flag,
   Layers,
@@ -18,15 +19,37 @@ import {
   Weight,
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 import { DashboardNav } from '@/components/dashboard-nav'
-import { ExerciseThumb } from '@/components/exercise-thumb'
+import { ExerciseDemoGif } from '@/components/exercise-demo-gif'
+import { SessionCoachChat } from '@/components/session-coach-chat'
 import { CelebrationBanner } from '@/components/celebration-banner'
 import { EASE } from '@/components/reveal'
+import { resolveSessionUserId } from '@/lib/offline/cache'
 import {
-  finishSessionAction,
-  logSetAction,
-  startSessionAction,
-} from '@/lib/data/session-actions'
+  createLocalSession,
+  ensureCompletedLocalSession,
+  getActiveLocalSession,
+  getLocalSession,
+  saveSessionProgress,
+  upsertLocalLog,
+  upsertLocalLogs,
+} from '@/lib/offline/session-store'
+import { awaitSessionSync, queueSessionSync } from '@/lib/offline/sync'
+import { discardPendingSession } from '@/lib/offline/discard-session'
+import { useOfflineStatus } from '@/lib/offline/provider'
+import { getActiveSessionAction } from '@/lib/data/session-actions'
+import { offlineLog, offlineWarn } from '@/lib/offline/debug'
+import type { LocalLiftLog } from '@/lib/offline/db'
+import {
+  buildProgressPayload,
+  clearUnfinishedWorkoutReminder,
+  notifyUnfinishedWorkout,
+  viewFromLocalSession,
+  type ActiveWorkoutView,
+} from '@/lib/active-workout'
+import { ActiveWorkoutConflict } from '@/components/active-workout-conflict'
+import { buildSessionCoachContext } from '@/lib/ai/session-context'
 import type { SplitDetail } from '@/lib/split-data'
 import { formatClock, formatVolume } from '@/lib/session-store'
 import {
@@ -48,6 +71,7 @@ type ActiveSessionProps = {
   split: SplitDetail
   displayName: string
   initials: string
+  avatarUrl?: string | null
   isFirstEver: boolean
   /** Map of lift_type_id → best-ever completed set (weights in kg). */
   previousBests: Record<string, PreviousBest>
@@ -64,11 +88,13 @@ type SetEntry = {
   missWeight: boolean
   missReps: boolean
   missDuration: boolean
-  /** True once the set has been written to lift_logs. */
+  /** True once the set has been written locally. */
   saved: boolean
+  logId?: string
 }
 
 type LoggedExercise = {
+  slotId: string
   name: string
   muscle: string
   liftTypeId: string
@@ -85,6 +111,40 @@ type LoggedExercise = {
 }
 
 type Stage = 'pick' | 'lift' | 'done' | 'summary'
+
+function liftKeyFor(exercise: {
+  liftTypeId?: string
+  id: string
+  name: string
+}) {
+  return exercise.liftTypeId?.trim() || exercise.id || exercise.name
+}
+
+function logsFromLoggedExercises(
+  exercises: LoggedExercise[],
+  existingLogs: LocalLiftLog[] = [],
+): LocalLiftLog[] {
+  const byKey = new Map(
+    existingLogs.map((log) => [`${log.liftTypeId}:${log.setNumber}`, log]),
+  )
+  const logs: LocalLiftLog[] = []
+  for (const ex of exercises) {
+    for (const set of ex.sets) {
+      const previous = byKey.get(`${ex.liftTypeId}:${set.setNumber}`)
+      logs.push({
+        id: previous?.id ?? crypto.randomUUID(),
+        liftTypeId: ex.liftTypeId,
+        setNumber: set.setNumber,
+        weight: set.weight,
+        reps: set.reps,
+        durationSeconds: set.durationSeconds ?? null,
+        isSkipped: !set.completed,
+        loggedAt: previous?.loggedAt ?? new Date().toISOString(),
+      })
+    }
+  }
+  return logs
+}
 
 function makeEntries(count: number): SetEntry[] {
   return Array.from({ length: count }, () => ({
@@ -104,12 +164,15 @@ export function ActiveSession({
   split,
   displayName,
   initials,
+  avatarUrl,
   isFirstEver,
   previousBests,
   weightUnit = 'kg',
 }: ActiveSessionProps) {
   const router = useRouter()
   const reduce = useReducedMotion()
+  const tOffline = useTranslations('offline')
+  const { online, hydrated } = useOfflineStatus()
 
   const [stage, setStage] = useState<Stage>('pick')
   const [dayIndex, setDayIndex] = useState(0)
@@ -120,17 +183,65 @@ export function ActiveSession({
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [celebrations, setCelebrations] = useState<
+  const userIdRef = useRef<string | null>(null)
+  const [celebrations] = useState<
     Array<{ id: string; title: string; body: string | null }>
   >([])
   const [starting, setStarting] = useState(false)
   const [persisting, setPersisting] = useState(false)
+  const [hydrating, setHydrating] = useState(true)
+  const [foreignActive, setForeignActive] = useState<ActiveWorkoutView | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [coachOpen, setCoachOpen] = useState(false)
 
   const startRef = useRef<number | null>(null)
   const finalSecRef = useRef(0)
   const missTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   /** Keep a sync copy so Finish Session never reads a stale React state snapshot. */
   const loggedExercisesRef = useRef<LoggedExercise[]>([])
+  const writesRef = useRef(Promise.resolve())
+  const startedAtRef = useRef<string | null>(null)
+  const reminderSentRef = useRef(false)
+  const sessionIdRef = useRef<string | null>(null)
+  const sessionClosedRef = useRef(false)
+  const stageRef = useRef(stage)
+  const dayIndexRef = useRef(dayIndex)
+  const exerciseIndexRef = useRef(exerciseIndex)
+  const entriesRef = useRef(entries)
+  stageRef.current = stage
+  dayIndexRef.current = dayIndex
+  exerciseIndexRef.current = exerciseIndex
+  entriesRef.current = entries
+  const persistProgress = async (nextSessionId?: string | null) => {
+    if (sessionClosedRef.current) return
+    const id = nextSessionId ?? sessionIdRef.current
+    if (!id) return
+    const currentStage = stageRef.current
+    if (currentStage === 'pick' || currentStage === 'summary') return
+    await saveSessionProgress(
+      id,
+      buildProgressPayload({
+        splitName: split.name,
+        dayIndex: dayIndexRef.current,
+        dayId: split.schedule[dayIndexRef.current]?.id ?? '',
+        dayName: split.schedule[dayIndexRef.current]?.focus ?? '',
+        exerciseIndex: exerciseIndexRef.current,
+        totalExercises: split.schedule[dayIndexRef.current]?.exercises.length ?? 0,
+        stage: currentStage,
+        loggedExercises: loggedExercisesRef.current,
+        currentEntries: entriesRef.current,
+        reminderSent: reminderSentRef.current,
+      }),
+    ).catch(() => undefined)
+  }
+
+  const enqueueWrite = (work: Promise<unknown>) => {
+    writesRef.current = writesRef.current
+      .then(() => work)
+      .then(() => undefined)
+      .catch(() => undefined)
+    return writesRef.current
+  }
 
   useEffect(() => {
     if (stage !== 'lift' && stage !== 'done') return
@@ -145,30 +256,276 @@ export function ActiveSession({
   const day = split.schedule[dayIndex]
   const exercise = day?.exercises[exerciseIndex]
 
+  useEffect(() => {
+    if (stage !== 'lift' && coachOpen) setCoachOpen(false)
+  }, [stage, coachOpen])
+
+  const sessionCoachContext = useMemo(() => {
+    if (stage !== 'lift' || !day || !exercise) return null
+    const liftKey = liftKeyFor(exercise)
+    const previousBest = exercise.liftTypeId
+      ? previousBests[exercise.liftTypeId]
+      : previousBests[liftKey]
+    return buildSessionCoachContext({
+      splitName: split.name,
+      dayName: day.focus,
+      dayNote: day.note || undefined,
+      exerciseIndex,
+      totalExercises: day.exercises.length,
+      elapsedSeconds: elapsed,
+      exercise,
+      entries,
+      loggedExercises,
+      previousBest: previousBest ?? null,
+      toKg: (displayWeight) => displayToKg(displayWeight, weightUnit),
+    })
+  }, [
+    stage,
+    day,
+    exercise,
+    split.name,
+    exerciseIndex,
+    elapsed,
+    entries,
+    loggedExercises,
+    previousBests,
+    weightUnit,
+  ])
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const userId = await resolveSessionUserId().catch(() => null)
+        if (userId) userIdRef.current = userId
+        const active = await getActiveLocalSession(userId)
+        if (cancelled) return
+        if (!active) {
+          if (typeof navigator !== 'undefined' && navigator.onLine) {
+            const remote = await getActiveSessionAction()
+            if (cancelled) return
+            const remoteSession = remote.data
+            if (remoteSession?.splitId === split.slug && userId) {
+              await createLocalSession({
+                id: remoteSession.id,
+                userId,
+                splitId: remoteSession.splitId,
+                splitDayId: remoteSession.splitDayId,
+                startedAt: remoteSession.startedAt,
+              })
+              startedAtRef.current = remoteSession.startedAt
+              startRef.current = new Date(remoteSession.startedAt).getTime()
+              setSessionId(remoteSession.id)
+              sessionIdRef.current = remoteSession.id
+              const dayIdx = split.schedule.findIndex(
+                (row) => row.id === remoteSession.splitDayId,
+              )
+              setDayIndex(dayIdx >= 0 ? dayIdx : 0)
+              setStage('pick')
+            }
+          }
+          setHydrating(false)
+          return
+        }
+        if (active.splitId !== split.slug) {
+          setForeignActive(viewFromLocalSession(active))
+          setHydrating(false)
+          return
+        }
+        const progress = active.progress
+        const dayIdx =
+          progress?.dayIndex ??
+          split.schedule.findIndex((row) => row.id === active.splitDayId)
+        const safeDay = dayIdx >= 0 ? dayIdx : 0
+        const dayRow = split.schedule[safeDay]
+        if (!dayRow?.exercises?.length) {
+          setHydrating(false)
+          return
+        }
+        startedAtRef.current = active.startedAt
+        startRef.current = new Date(active.startedAt).getTime()
+        setElapsed(
+          Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)),
+        )
+        setSessionId(active.id)
+        sessionIdRef.current = active.id
+        setDayIndex(safeDay)
+        reminderSentRef.current = Boolean(progress?.reminderSent)
+        if (progress?.loggedExercises?.length) {
+          loggedExercisesRef.current = progress.loggedExercises
+          setLoggedExercises(progress.loggedExercises)
+        }
+        const exIdx = Math.min(
+          progress?.exerciseIndex ?? 0,
+          Math.max((dayRow?.exercises.length ?? 1) - 1, 0),
+        )
+        setExerciseIndex(exIdx)
+        const restoredEntries = progress?.currentEntries
+        setEntries(
+          restoredEntries?.length
+            ? restoredEntries
+            : makeEntries(dayRow?.exercises[exIdx]?.sets ?? 0),
+        )
+        const nextStage =
+          progress?.stage === 'summary'
+            ? 'done'
+            : progress?.stage && progress.stage !== 'pick'
+              ? progress.stage
+              : 'lift'
+        setStage(nextStage)
+      } finally {
+        if (!cancelled) setHydrating(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per split slug; schedule read inside effect
+  }, [split.slug])
+
+  useEffect(() => {
+    if (hydrating || !sessionId || stage === 'pick' || stage === 'summary') return
+    void persistProgress()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistProgress identity would re-save every render
+  }, [hydrating, sessionId, stage, dayIndex, exerciseIndex, entries, loggedExercises])
+
+  useEffect(() => {
+    if (!sessionId || stage === 'pick' || stage === 'summary') return
+    const onHide = () => {
+      if (sessionClosedRef.current) return
+      void persistProgress()
+      if (document.visibilityState === 'hidden' && !reminderSentRef.current) {
+        notifyUnfinishedWorkout()
+        reminderSentRef.current = true
+        void persistProgress()
+      }
+    }
+    const onPageHide = () => {
+      if (sessionClosedRef.current) return
+      void persistProgress()
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- event listeners; omit persistProgress to avoid re-bind loops
+  }, [sessionId, stage, dayIndex, exerciseIndex, entries])
+
   const startSession = async (index: number) => {
     setActionError(null)
     setStarting(true)
+    sessionClosedRef.current = false
     const dayRow = split.schedule[index]
-    const result = await startSessionAction({
-      splitId: split.slug,
-      splitDayId: dayRow.id,
-    })
-    setStarting(false)
+    const sessionIdLocal = crypto.randomUUID()
+    const startedAt = new Date().toISOString()
 
-    if (result.error || !result.data) {
-      setActionError(result.error ?? 'Could not start the session.')
-      return
+    try {
+      const userId = await resolveSessionUserId()
+      if (!userId) {
+        setActionError('You must be signed in to start a session.')
+        return
+      }
+      userIdRef.current = userId
+
+      const existing = await getActiveLocalSession(userId)
+      if (existing && existing.splitId !== split.slug) {
+        setForeignActive(viewFromLocalSession(existing))
+        return
+      }
+      if (!dayRow?.exercises?.length) {
+        setActionError('This training day has no exercises yet.')
+        return
+      }
+      if (existing && existing.splitId === split.slug) {
+        startedAtRef.current = existing.startedAt
+        startRef.current = new Date(existing.startedAt).getTime()
+        setElapsed(
+          Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)),
+        )
+        setSessionId(existing.id)
+        sessionIdRef.current = existing.id
+        const progress = existing.progress
+        const dayIdx =
+          progress?.dayIndex ??
+          split.schedule.findIndex((row) => row.id === existing.splitDayId)
+        const safeDay = dayIdx >= 0 ? dayIdx : index
+        const resumeDay = split.schedule[safeDay] ?? dayRow
+        setDayIndex(safeDay)
+        reminderSentRef.current = Boolean(progress?.reminderSent)
+        if (progress?.loggedExercises?.length) {
+          loggedExercisesRef.current = progress.loggedExercises
+          setLoggedExercises(progress.loggedExercises)
+        }
+        const exIdx = Math.min(
+          progress?.exerciseIndex ?? 0,
+          Math.max((resumeDay?.exercises.length ?? 1) - 1, 0),
+        )
+        setExerciseIndex(exIdx)
+        const restoredEntries = progress?.currentEntries
+        setEntries(
+          restoredEntries?.length
+            ? restoredEntries
+            : makeEntries(resumeDay?.exercises[exIdx]?.sets ?? 0),
+        )
+        const nextStage =
+          progress?.stage === 'summary'
+            ? 'done'
+            : progress?.stage && progress.stage !== 'pick'
+              ? progress.stage
+              : 'lift'
+        setStage(nextStage)
+        return
+      }
+
+      const local = await createLocalSession({
+        id: sessionIdLocal,
+        userId,
+        splitId: split.slug,
+        splitDayId: dayRow.id,
+        startedAt,
+      })
+      startedAtRef.current = startedAt
+      offlineLog('session.start.local', {
+        id: local.id,
+        userId,
+        splitId: split.slug,
+        dayId: dayRow.id,
+      })
+      queueSessionSync(local)
+
+      setSessionId(sessionIdLocal)
+      sessionIdRef.current = sessionIdLocal
+      setDayIndex(index)
+      setExerciseIndex(0)
+      setEntries(makeEntries(dayRow.exercises[0]?.sets ?? 0))
+      loggedExercisesRef.current = []
+      setLoggedExercises([])
+      startRef.current = Date.now()
+      setElapsed(0)
+      setStage('lift')
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Could not start the session.',
+      )
+    } finally {
+      setStarting(false)
     }
+  }
 
-    setSessionId(result.data.id)
-    setDayIndex(index)
-    setExerciseIndex(0)
-    setEntries(makeEntries(dayRow.exercises[0]?.sets ?? 0))
-    loggedExercisesRef.current = []
-    setLoggedExercises([])
-    startRef.current = Date.now()
-    setElapsed(0)
-    setStage('lift')
+  const persistLog = async (log: LocalLiftLog) => {
+    if (!sessionId) return
+    await enqueueWrite(
+      upsertLocalLog(sessionId, log).then((local) => {
+        if (local) queueSessionSync(local)
+        return local
+      }),
+    )
   }
 
   /**
@@ -176,65 +533,79 @@ export function ActiveSession({
    * "Finish exercise" so we never race and re-save completed sets as skipped.
    */
   const toggleSet = (index: number) => {
-    const entry = entries[index]
-    if (!entry || entry.saved) return
-    const isCardio = isCardioCategory(exercise?.category)
+    setEntries((prev) => {
+      const entry = prev[index]
+      if (!entry || entry.saved) return prev
+      const cardio = isCardioCategory(exercise?.category)
+      if (entry.done) {
+        return prev.map((e, i) => (i === index ? { ...e, done: false } : e))
+      }
 
-    if (entry.done) {
-      setEntries((prev) =>
-        prev.map((e, i) => (i === index ? { ...e, done: false } : e)),
-      )
-      return
-    }
-
-    const missDuration = !(Number.parseFloat(entry.durationMinutes) > 0)
-    const missWeight = !(Number.parseFloat(entry.weight) > 0)
-    const missReps = !(Number.parseInt(entry.reps, 10) > 0)
-
-    if (isCardio ? missDuration : missWeight || missReps) {
-      setEntries((prev) =>
-        prev.map((e, i) =>
+      const missDuration = !(Number.parseFloat(entry.durationMinutes) > 0)
+      const missWeight = !(Number.parseFloat(entry.weight) > 0)
+      const missReps = !(Number.parseInt(entry.reps, 10) > 0)
+      if (cardio ? missDuration : missWeight || missReps) {
+        const existing = missTimersRef.current.get(index)
+        if (existing) clearTimeout(existing)
+        missTimersRef.current.set(
+          index,
+          setTimeout(() => {
+            setEntries((current) =>
+              current.map((e, i) =>
+                i === index
+                  ? { ...e, missWeight: false, missReps: false, missDuration: false }
+                  : e,
+              ),
+            )
+          }, 1400),
+        )
+        return prev.map((e, i) =>
           i === index
             ? {
                 ...e,
-                missDuration: isCardio ? missDuration : false,
-                missWeight: isCardio ? false : missWeight,
-                missReps: isCardio ? false : missReps,
+                missDuration: cardio ? missDuration : false,
+                missWeight: cardio ? false : missWeight,
+                missReps: cardio ? false : missReps,
               }
             : e,
-        ),
-      )
-      const existing = missTimersRef.current.get(index)
-      if (existing) clearTimeout(existing)
-      missTimersRef.current.set(
-        index,
-        setTimeout(() => {
-          setEntries((prev) =>
-            prev.map((e, i) =>
-              i === index
-                ? { ...e, missWeight: false, missReps: false, missDuration: false }
-                : e,
-            ),
-          )
-        }, 1400),
-      )
-      return
-    }
+        )
+      }
 
-    setEntries((prev) =>
-      prev.map((e, i) =>
+      const logId = entry.logId ?? crypto.randomUUID()
+      if (exercise) {
+        const minutes = Number.parseFloat(entry.durationMinutes)
+        const weight = Number.parseFloat(entry.weight)
+        const reps = Number.parseInt(entry.reps, 10)
+        void persistLog({
+          id: logId,
+          liftTypeId: liftKeyFor(exercise),
+          setNumber: index + 1,
+          weight: cardio ? 0 : displayToKg(weight, weightUnit),
+          reps: cardio ? 0 : reps,
+          durationSeconds:
+            cardio && Number.isFinite(minutes)
+              ? Math.round(minutes * 60)
+              : null,
+          isSkipped: false,
+          loggedAt: new Date().toISOString(),
+        })
+      }
+
+      return prev.map((e, i) =>
         i === index
           ? {
               ...e,
               done: true,
               skipped: false,
+              saved: true,
+              logId,
               missWeight: false,
               missReps: false,
               missDuration: false,
             }
           : e,
-      ),
-    )
+      )
+    })
   }
 
   const updateEntry = (index: number, patch: Partial<SetEntry>) => {
@@ -244,160 +615,190 @@ export function ActiveSession({
   }
 
   const finishExercise = async () => {
-    if (!sessionId || !exercise?.liftTypeId || persisting) return
-    setActionError(null)
+    if (persisting) return
+    if (!sessionId) {
+      setActionError('Session is not ready yet. Start the session again.')
+      return
+    }
+    if (!exercise) return
+
     setPersisting(true)
+    const liftTypeId = liftKeyFor(exercise)
+    setActionError(null)
 
     const isCardio = isCardioCategory(exercise.category)
     const nextEntries = entries.map((entry) => ({ ...entry }))
     const persistedSets: LoggedExercise['sets'] = []
+    const logs: LocalLiftLog[] = []
 
-    try {
-      for (let i = 0; i < nextEntries.length; i += 1) {
-        const entry = nextEntries[i]
+    for (let i = 0; i < nextEntries.length; i += 1) {
+      const entry = nextEntries[i]
 
-        if (isCardio) {
-          const minutes = Number.parseFloat(entry.durationMinutes)
-          const hasDuration = Number.isFinite(minutes) && minutes > 0
-          const durationSeconds = hasDuration ? Math.round(minutes * 60) : 0
+      if (isCardio) {
+        const minutes = Number.parseFloat(entry.durationMinutes)
+        const hasDuration = Number.isFinite(minutes) && minutes > 0
+        const durationSeconds = hasDuration ? Math.round(minutes * 60) : 0
 
-          if (entry.done) {
-            if (!hasDuration) {
-              setActionError(`Set ${i + 1} is checked but missing duration.`)
-              return
-            }
-            const result = await logSetAction({
-              sessionId,
-              liftTypeId: exercise.liftTypeId,
-              durationSeconds,
-              setNumber: i + 1,
-              isSkipped: false,
-            })
-            if (result.error) {
-              setActionError(result.error)
-              return
-            }
-            nextEntries[i] = { ...entry, saved: true, skipped: false }
-            persistedSets.push({
-              setNumber: i + 1,
-              weight: 0,
-              reps: 0,
-              durationSeconds,
-              completed: true,
-            })
-            continue
-          }
-
-          if (!hasDuration) continue
-
-          const result = await logSetAction({
-            sessionId,
-            liftTypeId: exercise.liftTypeId,
-            durationSeconds,
-            setNumber: i + 1,
-            isSkipped: true,
-          })
-          if (result.error) {
-            setActionError(result.error)
+        if (entry.done) {
+          if (!hasDuration) {
+            setActionError(`Set ${i + 1} is checked but missing duration.`)
+            setPersisting(false)
             return
           }
-          nextEntries[i] = { ...entry, skipped: true, saved: true }
+          const logId = entry.logId ?? crypto.randomUUID()
+          logs.push({
+            id: logId,
+            liftTypeId,
+            setNumber: i + 1,
+            weight: 0,
+            reps: 0,
+            durationSeconds,
+            isSkipped: false,
+            loggedAt: new Date().toISOString(),
+          })
+          nextEntries[i] = { ...entry, saved: true, skipped: false, logId }
           persistedSets.push({
             setNumber: i + 1,
             weight: 0,
             reps: 0,
             durationSeconds,
-            completed: false,
-          })
-          continue
-        }
-
-        const weight = Number.parseFloat(entry.weight)
-        const reps = Number.parseInt(entry.reps, 10)
-        const hasValues =
-          Number.isFinite(weight) && weight > 0 && Number.isFinite(reps) && reps > 0
-
-        if (entry.done) {
-          if (!hasValues) {
-            setActionError(`Set ${i + 1} is checked but missing weight or reps.`)
-            return
-          }
-          const weightKg = displayToKg(weight, weightUnit)
-          const result = await logSetAction({
-            sessionId,
-            liftTypeId: exercise.liftTypeId,
-            weight: weightKg,
-            reps,
-            setNumber: i + 1,
-            isSkipped: false,
-          })
-          if (result.error) {
-            setActionError(result.error)
-            return
-          }
-          nextEntries[i] = { ...entry, saved: true, skipped: false }
-          persistedSets.push({
-            setNumber: i + 1,
-            weight: weightKg,
-            reps,
             completed: true,
           })
           continue
         }
 
-        if (!hasValues) continue
+        if (!hasDuration) continue
 
+        const logId = entry.logId ?? crypto.randomUUID()
+        logs.push({
+          id: logId,
+          liftTypeId,
+          setNumber: i + 1,
+          weight: 0,
+          reps: 0,
+          durationSeconds,
+          isSkipped: true,
+          loggedAt: new Date().toISOString(),
+        })
+        nextEntries[i] = { ...entry, skipped: true, saved: true, logId }
+        persistedSets.push({
+          setNumber: i + 1,
+          weight: 0,
+          reps: 0,
+          durationSeconds,
+          completed: false,
+        })
+        continue
+      }
+
+      const weight = Number.parseFloat(entry.weight)
+      const reps = Number.parseInt(entry.reps, 10)
+      const hasValues =
+        Number.isFinite(weight) && weight > 0 && Number.isFinite(reps) && reps > 0
+
+      if (entry.done) {
+        if (!hasValues) {
+            setActionError(`Set ${i + 1} is checked but missing weight or reps.`)
+            setPersisting(false)
+            return
+          }
         const weightKg = displayToKg(weight, weightUnit)
-        const result = await logSetAction({
-          sessionId,
-          liftTypeId: exercise.liftTypeId,
+        const logId = entry.logId ?? crypto.randomUUID()
+        logs.push({
+          id: logId,
+          liftTypeId,
+          setNumber: i + 1,
           weight: weightKg,
           reps,
-          setNumber: i + 1,
-          isSkipped: true,
+          durationSeconds: null,
+          isSkipped: false,
+          loggedAt: new Date().toISOString(),
         })
-        if (result.error) {
-          setActionError(result.error)
-          return
-        }
-        nextEntries[i] = { ...entry, skipped: true, saved: true }
+        nextEntries[i] = { ...entry, saved: true, skipped: false, logId }
         persistedSets.push({
           setNumber: i + 1,
           weight: weightKg,
           reps,
-          completed: false,
+          completed: true,
         })
+        continue
       }
 
-      setEntries(nextEntries)
+      if (!hasValues) continue
 
-      const logged: LoggedExercise = {
-        name: exercise.name,
-        muscle: exercise.muscle,
-        liftTypeId: exercise.liftTypeId,
-        isCardio,
-        targetSets: exercise.sets,
-        targetReps: exercise.reps,
-        sets: persistedSets,
-      }
-      loggedExercisesRef.current = [...loggedExercisesRef.current, logged]
-      setLoggedExercises(loggedExercisesRef.current)
-
-      if (exerciseIndex + 1 < day.exercises.length) {
-        setExerciseIndex(exerciseIndex + 1)
-        setEntries(makeEntries(day.exercises[exerciseIndex + 1].sets))
-      } else {
-        setStage('done')
-      }
-    } finally {
-      setPersisting(false)
+      const weightKg = displayToKg(weight, weightUnit)
+      const logId = entry.logId ?? crypto.randomUUID()
+      logs.push({
+        id: logId,
+        liftTypeId,
+        setNumber: i + 1,
+        weight: weightKg,
+        reps,
+        durationSeconds: null,
+        isSkipped: true,
+        loggedAt: new Date().toISOString(),
+      })
+      nextEntries[i] = { ...entry, skipped: true, saved: true, logId }
+      persistedSets.push({
+        setNumber: i + 1,
+        weight: weightKg,
+        reps,
+        completed: false,
+      })
     }
+
+    const logged: LoggedExercise = {
+      slotId: exercise.id,
+      name: exercise.name,
+      muscle: exercise.muscle,
+      liftTypeId,
+      isCardio,
+      targetSets: exercise.sets,
+      targetReps: exercise.reps,
+      sets: persistedSets,
+    }
+    loggedExercisesRef.current = [
+      ...loggedExercisesRef.current.filter((row) => row.slotId !== logged.slotId),
+      logged,
+    ]
+    setLoggedExercises(loggedExercisesRef.current)
+
+    if (exerciseIndex + 1 < (day?.exercises.length ?? 0)) {
+      setExerciseIndex(exerciseIndex + 1)
+      setEntries(makeEntries(day.exercises[exerciseIndex + 1].sets))
+    } else {
+      setStage('done')
+    }
+
+    const sessionIdLocal = sessionId
+    void enqueueWrite(
+      upsertLocalLogs(sessionIdLocal, logs).then((local) => {
+        if (local) {
+          offlineLog('session.logs.local', {
+            sessionId: sessionIdLocal,
+            logs: logs.length,
+          })
+          queueSessionSync(local)
+        } else {
+          offlineWarn('session.logs.missing-row', { sessionId: sessionIdLocal })
+        }
+        return local
+      }),
+    ).catch((err) => {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : 'Sets are on this device but could not be queued.',
+      )
+    })
+    setPersisting(false)
   }
 
   const finishSession = async () => {
-    if (!sessionId || persisting) return
+    if (!sessionId || persisting || sessionClosedRef.current) return
     setActionError(null)
     setPersisting(true)
+    sessionClosedRef.current = true
     finalSecRef.current =
       startRef.current !== null
         ? Math.floor((Date.now() - startRef.current) / 1000)
@@ -431,25 +832,63 @@ export function ActiveSession({
       }
     }
 
-    // Totals are computed server-side from lift_logs — don't trust client math.
-    const result = await finishSessionAction({
-      sessionId,
-      durationSeconds: finalSecRef.current,
-      prs,
-    })
-
-    setPersisting(false)
-
-    if (result.error) {
-      setActionError(result.error)
-      return
+    try {
+      await writesRef.current.catch(() => undefined)
+      const userId =
+        userIdRef.current || (await resolveSessionUserId().catch(() => null))
+      if (!userId) {
+        sessionClosedRef.current = false
+        setActionError('Could not save this session on this device.')
+        offlineWarn('session.finish.no-user', { sessionId })
+        return
+      }
+      userIdRef.current = userId
+      const dayRow = split.schedule[dayIndex]
+      const existing = await getLocalSession(sessionId)
+      const local = await ensureCompletedLocalSession({
+        id: sessionId,
+        userId,
+        splitId: split.slug,
+        splitDayId: dayRow?.id ?? sessionId,
+        startedAt: startedAtRef.current ?? new Date().toISOString(),
+        durationSeconds: finalSecRef.current,
+        logs: logsFromLoggedExercises(exercises, existing?.logs ?? []),
+        prs,
+      })
+      if (local.status !== 'completed') {
+        sessionClosedRef.current = false
+        setActionError('Could not save this session on this device.')
+        return
+      }
+      offlineLog('session.finish.local', {
+        id: local.id,
+        userId: local.userId,
+        logs: local.logs.length,
+        syncStatus: local.syncStatus,
+      })
+      try {
+        await awaitSessionSync(local)
+      } catch (err) {
+        offlineWarn('session.finish.sync', {
+          sessionId,
+          message: err instanceof Error ? err.message : String(err),
+        })
+        queueSessionSync(local)
+      }
+      clearUnfinishedWorkoutReminder()
+      setStage('summary')
+    } catch (err) {
+      sessionClosedRef.current = false
+      offlineWarn('session.finish.failed', {
+        sessionId,
+        message: err instanceof Error ? err.message : String(err),
+      })
+      setActionError(
+        err instanceof Error ? err.message : 'Could not save this session on this device.',
+      )
+    } finally {
+      setPersisting(false)
     }
-
-    if ('celebrations' in result && Array.isArray(result.celebrations)) {
-      setCelebrations(result.celebrations)
-    }
-
-    setStage('summary')
   }
 
   const summary = useMemo(() => {
@@ -506,12 +945,58 @@ export function ActiveSession({
   const handleSave = () => {
     if (saving) return
     setSaving(true)
-    router.push('/dashboard/workout')
+    sessionClosedRef.current = true
+    setSessionId(null)
+    sessionIdRef.current = null
+    router.replace('/dashboard/workout')
     router.refresh()
   }
 
+  const leaveWorkout = async () => {
+    await persistProgress()
+    router.push('/dashboard/workout')
+  }
+
+  const discardWorkout = async () => {
+    if (!sessionId || persisting || sessionClosedRef.current) return
+    setPersisting(true)
+    setActionError(null)
+    sessionClosedRef.current = true
+    try {
+      const result = await discardPendingSession(sessionId)
+      if (result.error) {
+        sessionClosedRef.current = false
+        setActionError(result.error)
+        setPersisting(false)
+        return
+      }
+      clearUnfinishedWorkoutReminder()
+      setConfirmDiscard(false)
+      setSessionId(null)
+      sessionIdRef.current = null
+      router.replace('/dashboard/workout')
+      router.refresh()
+    } catch (err) {
+      sessionClosedRef.current = false
+      setActionError(
+        err instanceof Error ? err.message : 'Could not discard this session.',
+      )
+      setPersisting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!confirmDiscard) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !persisting) setConfirmDiscard(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmDiscard, persisting])
+
   const uncheckedCount = entries.filter((e) => !e.done && !e.skipped).length
   const isLastExercise = exerciseIndex === (day?.exercises.length ?? 0) - 1
+  const sessionOffline = hydrated && !online && stage !== 'pick'
 
   return (
     <div className="relative min-h-svh overflow-x-clip pb-24 md:pb-10">
@@ -521,25 +1006,90 @@ export function ActiveSession({
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} />
+      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
-      {(stage === 'lift' || stage === 'done') && (
-        <div className="sticky top-14 z-40 border-b border-silver/10 bg-background/90 backdrop-blur-xl sm:top-16">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      {sessionOffline ? (
+        <div className="border-b border-gold/30 bg-gold/10 px-4 py-2.5 text-center text-xs font-semibold text-gold">
+          <span className="inline-flex items-center justify-center gap-1.5">
+            <CloudOff className="size-3.5 shrink-0" aria-hidden="true" />
+            {tOffline('sessionOfflineNote')}
+          </span>
+        </div>
+      ) : null}
+
+      {hydrating ? (
+        <main className="mx-auto max-w-3xl px-4 py-16 text-sm text-muted-foreground">
+          Restoring your workout…
+        </main>
+      ) : null}
+
+      {foreignActive ? (
+        <ActiveWorkoutConflict
+          active={foreignActive}
+          onResolved={() => setForeignActive(null)}
+          onStay={() => setForeignActive(null)}
+        />
+      ) : null}
+
+      {confirmDiscard ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-session-title"
+          aria-describedby="discard-session-body"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-background/70 p-4 sm:items-center"
+        >
+          <div className="is-panel w-full max-w-md p-5">
+            <h2 id="discard-session-title" className="font-heading text-xl font-bold">
+              Discard this session?
+            </h2>
+            <p id="discard-session-body" className="mt-2 text-sm text-muted-foreground">
+              This unfinished workout and its unsaved progress will be removed. It will not count as a completed workout.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={persisting}
+                onClick={() => void discardWorkout()}
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-destructive px-4 text-sm font-bold tracking-[0.12em] text-destructive-foreground disabled:opacity-60"
+              >
+                {persisting ? 'Discarding…' : 'Discard session'}
+              </button>
+              <button
+                type="button"
+                disabled={persisting}
+                onClick={() => setConfirmDiscard(false)}
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-silver/20 px-4 text-sm font-semibold"
+              >
+                Keep session
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {(stage === 'lift' || stage === 'done') && !hydrating && day && (
+        <div className="sticky top-[var(--app-header-height)] z-40 border-b border-silver/10 bg-background/90 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold tracking-[0.25em] text-gold">
                 {day.focus.toUpperCase()}
               </p>
               <p className="truncate text-xs text-muted-foreground">{split.name}</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              {stage === 'lift' && (
+                <span className="text-[10px] font-semibold tracking-[0.18em] text-muted-foreground sm:hidden">
+                  {exerciseIndex + 1}/{day.exercises.length}
+                </span>
+              )}
               {stage === 'lift' && (
                 <span className="hidden text-[10px] font-semibold tracking-[0.18em] text-muted-foreground sm:inline">
                   EXERCISE {exerciseIndex + 1} OF {day.exercises.length}
                 </span>
               )}
               <span
-                className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-4 py-2 font-heading text-lg font-bold tabular-nums text-gold"
+                className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 font-heading text-base font-bold tabular-nums text-gold sm:px-4 sm:py-2 sm:text-lg"
                 aria-label="Session timer"
               >
                 <Clock3 className="size-4" aria-hidden="true" />
@@ -547,12 +1097,28 @@ export function ActiveSession({
               </span>
             </div>
           </div>
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 px-4 pb-3 sm:px-6">
+            <button
+              type="button"
+              onClick={() => void leaveWorkout()}
+              className="inline-flex min-h-11 items-center rounded-full border border-silver/20 px-4 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+            >
+              Leave workout
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDiscard(true)}
+              className="inline-flex min-h-11 items-center rounded-full border border-destructive/30 px-4 text-[11px] font-semibold tracking-[0.12em] text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+            >
+              Discard session
+            </button>
+          </div>
           {stage === 'lift' && (
             <div className="h-1 w-full bg-muted" aria-hidden="true">
               <div
                 className="h-full bg-gold transition-all duration-500"
                 style={{
-                  width: `${((exerciseIndex + 1) / day.exercises.length) * 100}%`,
+                  width: `${((exerciseIndex + 1) / Math.max(day.exercises.length, 1)) * 100}%`,
                 }}
               />
             </div>
@@ -560,6 +1126,7 @@ export function ActiveSession({
         </div>
       )}
 
+      {!hydrating ? (
       <main className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 md:pt-10">
         {actionError && (
           <div
@@ -663,14 +1230,7 @@ export function ActiveSession({
                 transition={{ duration: 0.3, ease: EASE }}
               >
                 <div className="glass-card rounded-2xl border border-silver/10 p-4 sm:p-6">
-                  <div className="flex items-center gap-4">
-                    <ExerciseThumb
-                      muscle={exercise.muscle}
-                      image={exercise.image}
-                      name={exercise.name}
-                      className="size-20 sm:size-24"
-                    />
-                    <div className="min-w-0">
+                  <div>
                       <h1 className="font-heading text-xl font-bold text-foreground sm:text-2xl">
                         {exercise.name}
                       </h1>
@@ -682,8 +1242,14 @@ export function ActiveSession({
                       <span className="mt-2 inline-block rounded-full border border-silver/20 bg-background/60 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground">
                         {exercise.muscle.toUpperCase()}
                       </span>
-                    </div>
                   </div>
+                  <ExerciseDemoGif
+                    name={exercise.name}
+                    muscle={exercise.muscle}
+                    image={exercise.image}
+                    gif={exercise.gif}
+                    reduceMotion={Boolean(reduce)}
+                  />
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2.5">
@@ -700,7 +1266,7 @@ export function ActiveSession({
                             : 'border-silver/10 bg-card/50'
                         }`}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-3">
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-foreground">
                               Set {index + 1}
@@ -716,7 +1282,7 @@ export function ActiveSession({
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
                             {isCardio ? (
                               <label className="flex items-center gap-1.5">
                                 <span className="sr-only">
@@ -814,7 +1380,11 @@ export function ActiveSession({
 
                             <button
                               type="button"
-                              onClick={() => toggleSet(index)}
+                              onClick={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                toggleSet(index)
+                              }}
                               disabled={entry.saved}
                               aria-pressed={entry.done}
                               aria-label={
@@ -822,7 +1392,7 @@ export function ActiveSession({
                                   ? `Set ${index + 1} completed — tap to undo`
                                   : `Mark set ${index + 1} complete`
                               }
-                              className={`flex size-11 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 disabled:cursor-default ${
+                              className={`relative z-10 flex size-11 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 disabled:cursor-default ${
                                 entry.done
                                   ? 'border-success bg-success text-background'
                                   : 'border-silver/20 bg-background/60 text-muted-foreground hover:border-gold/40 hover:text-gold'
@@ -968,9 +1538,9 @@ export function ActiveSession({
                       these are your starting numbers.
                     </p>
                     <div className="mt-4 space-y-2">
-                      {summary.baselines.map((baseline) => (
+                      {summary.baselines.map((baseline, index) => (
                         <div
-                          key={baseline.exercise}
+                          key={`${baseline.exercise}-${index}`}
                           className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-silver/10 bg-background/50 px-4 py-2.5 text-sm"
                         >
                           <span className="min-w-0 truncate text-muted-foreground">
@@ -992,9 +1562,9 @@ export function ActiveSession({
                 )
               ) : summary.prs.length > 0 ? (
                 <div className="mt-4 space-y-2">
-                  {summary.prs.map((pr) => (
+                  {summary.prs.map((pr, index) => (
                     <div
-                      key={pr.exercise}
+                      key={`${pr.exercise}-${index}`}
                       className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-2.5 text-sm"
                     >
                       <span className="inline-flex min-w-0 items-center gap-2">
@@ -1027,9 +1597,9 @@ export function ActiveSession({
                 Exercise breakdown
               </h2>
               <div className="mt-3 flex flex-col gap-3">
-                {loggedExercises.map((logged) => (
+                {loggedExercises.map((logged, index) => (
                   <article
-                    key={logged.liftTypeId + logged.name}
+                    key={logged.slotId || `${logged.liftTypeId}-${index}`}
                     className="rounded-2xl border border-silver/10 bg-card/50 p-4"
                   >
                     <div className="flex items-center gap-3">
@@ -1086,6 +1656,16 @@ export function ActiveSession({
           </motion.section>
         )}
       </main>
+      ) : null}
+
+      {stage === 'lift' && sessionCoachContext ? (
+        <SessionCoachChat
+          open={coachOpen}
+          onOpenChange={setCoachOpen}
+          displayName={displayName}
+          sessionContext={sessionCoachContext}
+        />
+      ) : null}
     </div>
   )
 }

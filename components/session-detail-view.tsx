@@ -35,6 +35,7 @@ export type SessionDetailLift = {
 export type SessionDetailViewProps = {
   displayName: string
   initials: string
+  avatarUrl?: string | null
   title: string
   finishedAt: string
   durationSeconds: number
@@ -43,11 +44,14 @@ export type SessionDetailViewProps = {
   setsSkipped: number
   lifts: SessionDetailLift[]
   weightUnit?: WeightUnit
+  backHref?: string
+  backLabel?: string
 }
 
 export function SessionDetailView({
   displayName,
   initials,
+  avatarUrl,
   title,
   finishedAt,
   durationSeconds,
@@ -56,27 +60,29 @@ export function SessionDetailView({
   setsSkipped,
   lifts,
   weightUnit = 'kg',
+  backHref = '/dashboard/history',
+  backLabel = 'BACK TO HISTORY',
 }: SessionDetailViewProps) {
   const badge = formatRelativeFinishedAt(finishedAt)
   const dateLabel = formatSessionDate(finishedAt)
 
   return (
-    <div className="relative min-h-svh overflow-x-clip pb-24 md:pb-10">
+    <div className="relative min-h-svh overflow-x-clip">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,rgba(198,40,40,0.12),transparent_60%)]" />
         <div className="absolute top-[35%] -right-40 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} />
+      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       <main className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 md:pt-10">
         <Link
-          href="/dashboard/workout"
-          className="mb-6 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
+          href={backHref}
+          className="mb-6 inline-flex min-h-11 items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          BACK TO WORKOUT
+          {backLabel}
         </Link>
 
         <div className="mb-2 flex flex-wrap items-center gap-2">

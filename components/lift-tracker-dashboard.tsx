@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { History } from 'lucide-react'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { LogLiftForm, type LogLiftPayload } from '@/components/log-lift-form'
 import {
   MOCK_PRS,
@@ -72,6 +73,7 @@ export function LiftTrackerDashboard() {
       <DashboardNav />
 
       <main className="mx-auto max-w-7xl px-6 py-8 md:py-10">
+        <BackToTrainLink className="mb-6" />
         <div className="fade-up mb-8 flex flex-col gap-2 md:mb-10">
           <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
             LIFT TRACKER

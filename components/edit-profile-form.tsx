@@ -4,10 +4,12 @@ import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Camera, Loader2, Trash2 } from 'lucide-react'
+import { AvatarPresetPicker } from '@/components/avatar-preset-picker'
 import {
   removeAvatarAction,
   updateProfileAction,
 } from '@/lib/data/profile-actions'
+import { isAvatarPresetPath } from '@/lib/avatar-presets'
 import { compressAvatarImage } from '@/lib/compress-avatar'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { initialsFrom } from '@/lib/dashboard-utils'
@@ -20,12 +22,14 @@ type EditProfileFormProps = {
     displayName: string
     bio: string
     avatarUrl: string | null
+    usernameChangeCount?: number
   }
   onCancel?: () => void
   onSuccess?: (username: string) => void
 }
 
 const BIO_MAX = 160
+const USERNAME_CHANGE_LIMIT = 2
 
 export function EditProfileForm({
   userId,
@@ -47,6 +51,10 @@ export function EditProfileForm({
   const preview = previewUrl || avatarUrl
   const bioLeft = BIO_MAX - bio.length
   const busy = pending || processing
+  const changeCount = initial.usernameChangeCount ?? 0
+  const usernameLocked =
+    Boolean(initial.username.trim()) && changeCount >= USERNAME_CHANGE_LIMIT
+  const changesLeft = Math.max(0, USERNAME_CHANGE_LIMIT - changeCount)
 
   const clearPreview = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -82,6 +90,22 @@ export function EditProfileForm({
       setProcessing(false)
     }
   }
+
+  const onPickPreset = (path: string | null) => {
+    clearPreview()
+    setErrors((e) => {
+      const next = { ...e }
+      delete next.avatar
+      return next
+    })
+    setAvatarUrl(path)
+  }
+
+  const selectedPreset = file
+    ? null
+    : isAvatarPresetPath(avatarUrl)
+      ? avatarUrl
+      : null
 
   const uploadAvatar = async (): Promise<string | null> => {
     if (!file) return null
@@ -210,6 +234,13 @@ export function EditProfileForm({
             Ready to upload · {(file.size / 1024).toFixed(0)} KB · 512×512
           </p>
         )}
+        <div className="w-full max-w-md">
+          <AvatarPresetPicker
+            value={selectedPreset}
+            onChange={onPickPreset}
+            disabled={busy}
+          />
+        </div>
         {errors.avatar && (
           <p className="text-sm text-destructive">{errors.avatar}</p>
         )}
@@ -245,15 +276,24 @@ export function EditProfileForm({
               setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
             }
             maxLength={30}
-            className={`${fieldClass} pl-7`}
+            className={`${fieldClass} pl-7 ${usernameLocked ? 'opacity-70' : ''}`}
             required
+            disabled={busy || usernameLocked}
+            readOnly={usernameLocked}
           />
         </div>
         {errors.username ? (
           <p className="mt-1.5 text-sm text-destructive">{errors.username}</p>
+        ) : usernameLocked ? (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Username locked — you already used both changes.
+          </p>
         ) : (
           <p className="mt-1.5 text-xs text-muted-foreground">
             3–30 chars · lowercase letters, numbers, underscores
+            {initial.username.trim()
+              ? ` · ${changesLeft} change${changesLeft === 1 ? '' : 's'} left`
+              : ''}
           </p>
         )}
       </div>

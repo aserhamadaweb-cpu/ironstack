@@ -6,6 +6,7 @@ import { Navbar } from '@/components/navbar'
 import { StandaloneRedirect } from '@/components/standalone-redirect'
 import { WhyIronStack } from '@/components/why-ironstack'
 import Link from 'next/link'
+import { buildAuthEntryHref } from '@/lib/auth-entry'
 
 export default function Page() {
   return (
@@ -28,7 +29,7 @@ export default function Page() {
           </p>
           <div className="flex w-full flex-col items-center gap-4">
             <Link
-              href="/login"
+              href={buildAuthEntryHref()}
               className="cta-pulse btn-pill min-h-14 bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] transition-transform duration-200 active:scale-[0.98]"
             >
               SIGN IN

@@ -11,6 +11,7 @@ import {
   type EarnedAchievement,
 } from '@/lib/achievements'
 import { createClient } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
 
 function oneRelation<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) return null
@@ -103,6 +104,9 @@ export async function listRawUserAchievementRows(
 export async function reorderAchievementsAction(
   orderedAchievementIds: string[],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const supabase = await createClient()
   const {
     data: { user },

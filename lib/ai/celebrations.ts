@@ -60,6 +60,7 @@ export async function createPrCelebrations(input: {
 export async function getUnshownBannerCelebrations(
   userId: string,
 ): Promise<AiCelebration[]> {
+  try {
   const supabase = await createClient()
   const { data } = await supabase
     .from('ai_celebrations')
@@ -72,6 +73,9 @@ export async function getUnshownBannerCelebrations(
     .limit(10)
 
   return (data ?? []) as AiCelebration[]
+  } catch {
+    return []
+  }
 }
 
 export async function markCelebrationsBannerShown(

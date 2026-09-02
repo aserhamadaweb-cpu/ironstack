@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "sourceCount": 1324,
+  "importedCount": 1324,
+  "uniqueIds": 1324,
+  "duplicateIds": [],
+  "missingNames": [],
+  "missingImages": 0,
+  "missingGifs": 0,
+  "mediaMismatch": 0,
+  "droppedFields": 0,
+  "missingLangs": 0,
+  "publicImages": 1324,
+  "publicGifs": 1324,
+  "slimCount": 1324,
+  "brokenSlim": [],
+  "oldCatalogKept": 873,
+  "matchedOldExercises": 141,
+  "newExercises": 1183,
+  "unmatchedOldExercises": 732,
+  "oldCatalogSafeToDelete": false,
+  "database": {
+    "existingBefore": 881,
+    "matchedExisting": 142,
+    "insertedNew": 1182,
+    "imageUpdated": 142,
+    "errors": 0,
+    "uuidsChanged": 0,
+    "rowsDeleted": 0
+  },
+  "notes": [
+    "Old catalog data/data/exercises.json was not deleted and should stay until a later cleanup.",
+    "Existing lift_types UUIDs were not changed or deleted.",
+    "142 existing rows were matched by slug/name; only image_url was updated to local thumbnails.",
+    "1182 new lift_types rows were inserted for unmatched catalog exercises.",
+    "732 old catalog names have no 1:1 match in the new dataset; their lift_types rows remain intact."
+  ]
+}

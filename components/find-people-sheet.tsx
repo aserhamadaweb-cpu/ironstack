@@ -96,7 +96,10 @@ export function FindPeopleSheet({ open, onClose }: FindPeopleSheetProps) {
     const [search, incoming] = await Promise.all([
       query.trim().length > 0
         ? searchPeopleAction(query.trim())
-        : Promise.resolve({ people: [] as DiscoverPerson[] }),
+        : Promise.resolve({
+            people: [] as DiscoverPerson[],
+            error: undefined as string | undefined,
+          }),
       listFriendRequestsAction(),
     ])
     setPeople(search.people)

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Dumbbell } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
+import { buildAuthEntryHref } from '@/lib/auth-entry'
 
 type LegalDocumentProps = {
   title: string
@@ -49,7 +50,7 @@ export async function LegalDocument({
             </span>
           </Link>
           <Link
-            href="/login"
+            href={buildAuthEntryHref()}
             className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold tracking-[0.14em] text-muted-foreground transition hover:border-gold/40 hover:text-gold"
           >
             {t('joinUs')}

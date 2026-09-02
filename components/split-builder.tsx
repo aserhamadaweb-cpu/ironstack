@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -12,7 +12,6 @@ import {
   Minus,
   Plus,
   Trash2,
-  X,
 } from 'lucide-react'
 import {
   AnimatePresence,
@@ -24,14 +23,12 @@ import {
 import { useLocale, useTranslations } from 'next-intl'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseCard } from '@/components/exercise-card'
-import { ExercisePicker } from '@/components/exercise-picker'
-import { ExerciseThumb } from '@/components/exercise-thumb'
+import { ExerciseLibraryOverlay } from '@/components/exercise-library-overlay'
 import { EASE } from '@/components/reveal'
 import { saveCustomSplit, updateCustomSplit } from '@/lib/data/save-split'
-import {
-  libraryToCatalogItem,
-  type ExerciseCatalogItem,
-} from '@/lib/exercise-catalog'
+import { isNetworkFailure } from '@/lib/log'
+import { saveSplitOffline } from '@/lib/offline/split-store'
+import { queueSplitSync } from '@/lib/offline/sync'
 import type { LibraryExercise } from '@/lib/exercise-library'
 import { isCardioCategory } from '@/lib/units'
 
@@ -62,6 +59,9 @@ export type SplitBuilderInitial = {
   daysPerWeek: number
   days: BuilderDay[]
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const STEP_KEYS = ['stepBasics', 'stepDays', 'stepBuild', 'stepSave'] as const
 
@@ -95,24 +95,29 @@ type SplitBuilderProps = {
   library: LibraryExercise[]
   displayName: string
   initials: string
+  avatarUrl?: string | null
   customSplitCount?: number
   maxCustomSplits?: number
   mode?: 'create' | 'edit'
   editSplitId?: string
   initial?: SplitBuilderInitial
+  defaultHomeLibrary?: boolean
 }
 
 export function SplitBuilder({
   library,
   displayName,
   initials,
+  avatarUrl,
   customSplitCount = 0,
   maxCustomSplits = 3,
   mode = 'create',
   editSplitId,
   initial,
+  defaultHomeLibrary = false,
 }: SplitBuilderProps) {
   const t = useTranslations('splitBuilder')
+  const tOffline = useTranslations('offline')
   const locale = useLocale()
   const isRtl = locale === 'ar'
   const router = useRouter()
@@ -153,6 +158,98 @@ export function SplitBuilder({
   const [savedSplitId, setSavedSplitId] = useState<string | null>(
     editSplitId ?? null,
   )
+  const [draftReady, setDraftReady] = useState(false)
+  const savingRef = useRef(false)
+  const createIdRef = useRef<string | null>(null)
+
+  const draftKey =
+    isEdit && editSplitId
+      ? `ironstack.split-builder.draft.edit.${editSplitId}`
+      : 'ironstack.split-builder.draft.create'
+
+  const initialFingerprint = JSON.stringify(
+    (initial?.days ?? []).map((day) =>
+      day.exercises.map((entry) => entry.exercise.id),
+    ),
+  )
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey)
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          step?: number
+          activeDay?: number
+          splitName?: string
+          description?: string
+          daysPerWeek?: number
+          days?: BuilderDay[]
+          baseFingerprint?: string
+        }
+        const draftIsCurrent =
+          !isEdit ||
+          !draft.baseFingerprint ||
+          draft.baseFingerprint === initialFingerprint
+        if (draftIsCurrent && Array.isArray(draft.days) && draft.days.length > 0) {
+          if (typeof draft.splitName === 'string') setSplitName(draft.splitName)
+          if (typeof draft.description === 'string') setDescription(draft.description)
+          if (typeof draft.daysPerWeek === 'number') setDaysPerWeek(draft.daysPerWeek)
+          if (typeof draft.step === 'number') setStep(Math.min(Math.max(draft.step, 0), 3))
+          if (typeof draft.activeDay === 'number') {
+            setActiveDay(Math.min(Math.max(draft.activeDay, 0), draft.days.length - 1))
+          }
+          setDays(draft.days)
+          for (const day of draft.days) {
+            for (const entry of day.exercises) {
+              const numeric = Number(String(entry.uid).replace(/\D/g, ''))
+              if (Number.isFinite(numeric)) {
+                uidRef.current = Math.max(uidRef.current, numeric)
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      /* ignore malformed drafts */
+    }
+    setDraftReady(true)
+  }, [draftKey, initialFingerprint, isEdit])
+
+  useEffect(() => {
+    if (!draftReady || saved) return
+    try {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          step,
+          activeDay,
+          splitName,
+          description,
+          daysPerWeek,
+          days,
+          updatedAt: Date.now(),
+          baseFingerprint: initialFingerprint,
+        }),
+      )
+    } catch {
+      /* quota / private mode */
+    }
+  }, [
+    draftReady,
+    saved,
+    draftKey,
+    step,
+    activeDay,
+    splitName,
+    description,
+    daysPerWeek,
+    days,
+    initialFingerprint,
+  ])
+
+  useEffect(() => {
+    setSaved(false)
+  }, [splitName, description, daysPerWeek, days])
 
   const totalExercises = days.reduce((sum, day) => sum + day.exercises.length, 0)
 
@@ -246,14 +343,35 @@ export function SplitBuilder({
   }
 
   const canLeaveBasics = splitName.trim().length > 0
-  const canSave = totalExercises > 0 && !saving && !saved
+  const canSave = totalExercises > 0 && !saving && !(saved && !isEdit)
+  const atCreateCap = !isEdit && customSplitCount >= maxCustomSplits
 
   const handleSave = async () => {
-    if (!canSave) return
+    if (!canSave || savingRef.current) return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSaveError(tOffline('splitRequiresConnection'))
+      return
+    }
+    if (atCreateCap) {
+      setSaveError(t('limitReached', { max: maxCustomSplits }))
+      return
+    }
     setSaveError(null)
     setSaving(true)
+    savingRef.current = true
 
+    const splitId =
+      (isEdit && editSplitId) ||
+      savedSplitId ||
+      createIdRef.current ||
+      crypto.randomUUID()
+    createIdRef.current = splitId
+    const dayIds = days.map((day) =>
+      UUID_RE.test(day.id) ? day.id : crypto.randomUUID(),
+    )
     const payload = {
+      id: splitId,
+      dayIds,
       name: splitName.trim(),
       description:
         description.trim() ||
@@ -264,32 +382,64 @@ export function SplitBuilder({
         name: day.name.trim() || dayLabel(index + 1),
         subtitle: day.subtitle?.trim() || null,
         exercises: day.exercises.map((entry) => ({
-          libraryId: entry.exercise.id,
+          libraryId: entry.exercise.legacySlug || entry.exercise.id,
           name: entry.exercise.name,
           muscles: entry.exercise.muscles,
           image: entry.exercise.image,
           sets: entry.sets,
+          reps: entry.reps,
           category: entry.exercise.category,
           equipment: entry.exercise.equipment,
         })),
       })),
     }
 
-    const result =
-      isEdit && editSplitId
-        ? await updateCustomSplit(editSplitId, payload)
-        : await saveCustomSplit(payload)
+    try {
+      const local = await saveSplitOffline({
+        kind: isEdit && editSplitId ? 'update' : 'create',
+        splitId,
+        payload,
+        sync: false,
+      })
+      if (local.error || !local.data) {
+        setSaveError(local.error ?? t('saveFailed'))
+        return
+      }
 
-    setSaving(false)
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const remote =
+          isEdit && editSplitId
+            ? await updateCustomSplit(editSplitId, payload)
+            : await saveCustomSplit(payload)
+        if (remote.error) {
+          queueSplitSync()
+          setSavedSplitId(splitId)
+          setSaveError(remote.error)
+          return
+        }
+      }
 
-    if (result.error || !result.data) {
-      setSaveError(result.error ?? t('saveFailed'))
-      return
+      queueSplitSync()
+      setSavedSplitId(splitId)
+      setSaved(true)
+      try {
+        sessionStorage.removeItem(draftKey)
+      } catch {
+        /* ignore */
+      }
+      router.refresh()
+    } catch (err) {
+      if (isNetworkFailure(err)) {
+        queueSplitSync()
+        setSavedSplitId(splitId)
+        setSaved(true)
+      } else {
+        setSaveError(err instanceof Error ? err.message : t('saveFailed'))
+      }
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
-
-    setSavedSplitId(result.data.id)
-    setSaved(true)
-    router.refresh()
   }
 
   const activeDayName =
@@ -303,16 +453,16 @@ export function SplitBuilder({
         <div className="absolute bottom-[20%] start-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} />
+      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
-      <main className="mx-auto max-w-3xl px-6 pt-8 pb-24 md:pt-12">
+      <main className="mx-auto max-w-3xl px-6 pt-8 md:pt-12">
         <Link
           href={
             isEdit && editSplitId
               ? `/dashboard/splits/${editSplitId}`
               : '/dashboard/workout'
           }
-          className="mb-6 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
+          className="mb-6 inline-flex min-h-11 items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
         >
           <ArrowLeft className="size-4 rtl-flip" aria-hidden="true" />
           {isEdit ? t('backToSplit') : t('backToWorkout')}
@@ -517,7 +667,8 @@ export function SplitBuilder({
                       key={day.id}
                       type="button"
                       onClick={() => setActiveDay(index)}
-                      className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.1em] transition-all ${
+                      aria-pressed={index === activeDay}
+                      className={`inline-flex min-h-11 shrink-0 items-center rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.1em] transition-all ${
                         index === activeDay
                           ? 'border-gold/60 bg-gold/15 text-gold'
                           : 'border-silver/15 bg-card/50 text-muted-foreground hover:border-gold/30 hover:text-foreground'
@@ -661,7 +812,7 @@ export function SplitBuilder({
                   <motion.button
                     type="button"
                     onClick={handleSave}
-                    disabled={!canSave && !saved}
+                    disabled={!canSave}
                     aria-live="polite"
                     className={`relative flex h-12 items-center justify-center gap-2 overflow-hidden rounded-full px-10 text-sm font-bold tracking-[0.18em] transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-40 ${
                       saved
@@ -751,12 +902,13 @@ export function SplitBuilder({
 
       <AnimatePresence>
         {libraryOpen && (
-          <ExerciseLibrary
+          <ExerciseLibraryOverlay
             library={library}
             dayName={activeDayName}
             addedCount={days[activeDay].exercises.length}
             onAdd={addExercise}
             onClose={() => setLibraryOpen(false)}
+            initialHomeOnly={defaultHomeLibrary}
           />
         )}
       </AnimatePresence>
@@ -837,7 +989,7 @@ function ExerciseRow({
                 step={1}
                 value={entry.reps}
                 onChange={(e) => onUpdate(entry.uid, { reps: e.target.value })}
-                className="h-8 w-20 rounded-full border border-silver/15 bg-background/60 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition focus:border-gold focus:ring-1 focus:ring-gold/25"
+                className="h-11 w-20 rounded-full border border-silver/15 bg-background/60 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition focus:border-gold focus:ring-1 focus:ring-gold/25"
               />
             </label>
           ) : (
@@ -881,7 +1033,7 @@ function ExerciseRow({
               type="text"
               value={entry.reps}
               onChange={(e) => onUpdate(entry.uid, { reps: e.target.value })}
-              className="h-8 w-20 rounded-full border border-silver/15 bg-background/60 px-3 text-center text-sm font-semibold text-foreground outline-none transition focus:border-gold focus:ring-1 focus:ring-gold/25"
+              className="h-11 w-20 rounded-full border border-silver/15 bg-background/60 px-3 text-center text-sm font-semibold text-foreground outline-none transition focus:border-gold focus:ring-1 focus:ring-gold/25"
             />
           </label>
 
@@ -892,7 +1044,7 @@ function ExerciseRow({
                 type="button"
                 onClick={() => onUpdate(entry.uid, { setType: type.id })}
                 aria-pressed={entry.setType === type.id}
-                className={`rounded-full border px-2.5 py-1 text-[9px] font-bold tracking-[0.12em] transition-all ${
+                className={`min-h-11 rounded-full border px-3 text-[9px] font-bold tracking-[0.12em] transition-all ${
                   entry.setType === type.id
                     ? type.active
                     : 'border-border text-muted-foreground hover:border-border hover:text-muted-foreground'
@@ -907,159 +1059,5 @@ function ExerciseRow({
         </div>
       </ExerciseCard>
     </Reorder.Item>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Exercise Library modal                                              */
-/* ------------------------------------------------------------------ */
-
-function ExerciseLibrary({
-  library,
-  dayName,
-  addedCount,
-  onAdd,
-  onClose,
-}: {
-  library: LibraryExercise[]
-  dayName: string
-  addedCount: number
-  onAdd: (exercise: LibraryExercise) => void
-  onClose: () => void
-}) {
-  const t = useTranslations('splitBuilder')
-  const reduce = useReducedMotion()
-  const [lastAdded, setLastAdded] = useState<string | null>(null)
-
-  const muscleLabel = (muscle: string) => {
-    const key = `muscles.${muscle}` as Parameters<typeof t>[0]
-    return t.has(key) ? t(key) : muscle
-  }
-
-  const catalogItems = useMemo(
-    () => library.map((exercise) => libraryToCatalogItem(exercise)),
-    [library],
-  )
-
-  const handleSelect = (item: ExerciseCatalogItem) => {
-    const exercise = item.source as LibraryExercise
-    onAdd(exercise)
-    setLastAdded(exercise.id)
-  }
-
-  return (
-    <motion.div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm sm:items-center sm:p-6"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
-      onClick={onClose}
-    >
-      <motion.div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('libraryAria')}
-        className="flex h-[92svh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-silver/15 bg-background shadow-2xl sm:h-[85svh] sm:rounded-3xl"
-        initial={{ y: reduce ? 0 : 64, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: reduce ? 0 : 64, opacity: 0 }}
-        transition={{ duration: 0.35, ease: EASE }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-b border-silver/10 p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.25em] text-gold">
-                {t('libraryTitle')}
-              </p>
-              <h2 className="font-heading mt-0.5 text-lg font-bold text-foreground">
-                {t('addingTo', { day: dayName })}
-                <span className="ms-2 text-xs font-semibold text-muted-foreground">
-                  {t('addedCount', { count: addedCount })}
-                </span>
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t('closeLibrary')}
-              className="rounded-full border border-silver/20 p-2 text-muted-foreground transition-colors hover:border-silver/40 hover:text-foreground"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-5">
-          <ExercisePicker
-            items={catalogItems}
-            value={lastAdded}
-            onSelect={handleSelect}
-            variant="grid"
-            maxHeightClassName="max-h-none"
-            listClassName="min-h-0 flex-1"
-            className="flex min-h-0 flex-1 flex-col"
-            renderItem={(item, selected) => {
-              const exercise = item.source as LibraryExercise
-              const justAdded = selected || lastAdded === exercise.id
-              return (
-                <div
-                  className={`group flex h-full flex-col overflow-hidden rounded-2xl border text-start transition-all duration-200 hover:-translate-y-0.5 ${
-                    justAdded
-                      ? 'border-gold/60 shadow-[0_0_22px_-8px_rgba(198,40,40,0.5)]'
-                      : 'border-silver/10 bg-card/50 hover:border-gold/35'
-                  }`}
-                >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-card">
-                    <ExerciseThumb
-                      muscle={exercise.muscles[0] ?? 'Core'}
-                      image={exercise.image}
-                      name={exercise.name}
-                      className="absolute inset-0 !size-full rounded-none border-0"
-                    />
-                    {justAdded && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-gold/25">
-                        <span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          <Check className="size-5" aria-hidden="true" />
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col p-3">
-                    <h3 className="line-clamp-2 text-sm font-semibold text-foreground">
-                      {exercise.name}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {exercise.muscles.slice(0, 2).map((muscle) => (
-                        <span
-                          key={muscle}
-                          className="rounded-full border border-silver/20 bg-background/60 px-2 py-0.5 text-[9px] font-semibold tracking-[0.08em] text-muted-foreground"
-                        >
-                          {muscleLabel(muscle)}
-                        </span>
-                      ))}
-                      <span className="rounded-full border border-gold/25 bg-gold/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.08em] text-gold/90">
-                        {exercise.equipment}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            }}
-          />
-        </div>
-
-        <div className="border-t border-silver/10 p-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-11 w-full items-center justify-center rounded-full bg-primary text-sm font-bold tracking-[0.15em] text-primary-foreground transition-all hover:scale-[1.01] hover:bg-primary/90"
-          >
-            {t('doneBackTo', { day: dayName })}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
   )
 }

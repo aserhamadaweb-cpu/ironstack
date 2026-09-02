@@ -14,6 +14,7 @@ import {
   Share2,
 } from 'lucide-react'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
+import { useGuestGate } from '@/components/guest-gate-provider'
 import { ACCENT, CTA_PRIMARY, toneForFocus } from '@/lib/accent'
 import { saveSharedSplit } from '@/lib/data/save-split'
 import type { SharedSplitCard as SharedSplitCardData } from '@/lib/data/social'
@@ -28,7 +29,9 @@ export function SharedSplitCard({ split, isOwner }: SharedSplitCardProps) {
   const t = useTranslations('sharedSplit')
   const tWorkout = useTranslations('workout')
   const router = useRouter()
+  const { requireAccount } = useGuestGate()
   const [saved, setSaved] = useState(split.alreadySaved)
+  const [savedSplitId, setSavedSplitId] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState(false)
@@ -40,6 +43,7 @@ export function SharedSplitCard({ split, isOwner }: SharedSplitCardProps) {
 
   const handleSave = () => {
     if (saved || pending || isOwner) return
+    requireAccount('saveSplit', () => {
     setError(null)
     startTransition(async () => {
       const result = await saveSharedSplit(split.id)
@@ -49,7 +53,9 @@ export function SharedSplitCard({ split, isOwner }: SharedSplitCardProps) {
       }
       setSaved(true)
       setJustSaved(true)
+      setSavedSplitId(result.data.id)
       router.refresh()
+    })
     })
   }
 
@@ -109,29 +115,39 @@ export function SharedSplitCard({ split, isOwner }: SharedSplitCardProps) {
         </Link>
 
         {!isOwner && (
-          <button
-            type="button"
-            disabled={saved || pending}
-            onClick={handleSave}
-            className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold tracking-[0.14em] transition disabled:opacity-80 ${
-              saved
-                ? 'border border-success/35 bg-success/10 text-success'
-                : CTA_PRIMARY
-            }`}
-          >
-            {pending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : saved ? (
+          saved && savedSplitId ? (
+            <Link
+              href={`/dashboard/splits/${savedSplitId}`}
+              className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold tracking-[0.14em] ${CTA_PRIMARY}`}
+            >
               <BookmarkCheck className="size-4" />
-            ) : (
-              <BookmarkPlus className="size-4" />
-            )}
-            {saved
-              ? justSaved
-                ? t('saved')
-                : t('alreadySaved')
-              : t('save')}
-          </button>
+              {t('openSaved')}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={saved || pending}
+              onClick={handleSave}
+              className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold tracking-[0.14em] transition disabled:opacity-80 ${
+                saved
+                  ? 'border border-success/35 bg-success/10 text-success'
+                  : CTA_PRIMARY
+              }`}
+            >
+              {pending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : saved ? (
+                <BookmarkCheck className="size-4" />
+              ) : (
+                <BookmarkPlus className="size-4" />
+              )}
+              {saved
+                ? justSaved
+                  ? t('saved')
+                  : t('alreadySaved')
+                : t('save')}
+            </button>
+          )
         )}
 
         {justSaved && (

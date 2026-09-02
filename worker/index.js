@@ -1,4 +1,7 @@
-/* IronStack custom service worker — push notifications (merged into next-pwa sw.js in production). */
+/* IronStack custom service worker — push notifications.
+ * Merged into next-pwa's generated sw.js (do not register a second worker).
+ * App-shell / static asset caching lives in next.config.mjs runtimeCaching.
+ */
 
 self.addEventListener('push', (event) => {
   let data = { title: 'IRONSTACK', body: '', link: '/dashboard/home' }
@@ -48,4 +51,74 @@ self.addEventListener('notificationclick', (event) => {
       },
     ),
   )
+})
+
+/* App shell: precache the offline document so a cold launch with no network
+ * can still render. next-pwa only precaches hashed JS/CSS, not HTML routes. */
+const SHELL_CACHE = 'pages'
+const SHELL_URLS = [
+  '/offline',
+  '/offline/exercises.json',
+  '/manifest.json',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+]
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) =>
+      Promise.all(
+        SHELL_URLS.map((url) =>
+          cache
+            .add(new Request(url, { credentials: 'same-origin' }))
+            .catch(() => undefined),
+        ),
+      ),
+    ),
+  )
+})
+
+async function matchCached(request) {
+  const exact = await caches.match(request, { ignoreSearch: true })
+  if (exact) return exact
+  const url = new URL(request.url)
+  return caches.match(url.pathname, { ignoreSearch: true })
+}
+
+async function navigationResponse(request) {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3000)
+    const response = await fetch(request, { signal: controller.signal })
+    clearTimeout(timer)
+    if (response && (response.ok || response.type === 'opaqueredirect')) {
+      if (response.ok) {
+        const cache = await caches.open(SHELL_CACHE)
+        void cache.put(request, response.clone())
+      }
+      return response
+    }
+  } catch {
+    /* offline or timeout */
+  }
+
+  const cached = await matchCached(request)
+  if (cached) return cached
+
+  const offline = await caches.match('/offline', { ignoreSearch: true })
+  if (offline) return offline
+
+  return Response.error()
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request
+  if (request.method !== 'GET') return
+  if (request.mode !== 'navigate') return
+  try {
+    if (new URL(request.url).origin !== self.location.origin) return
+  } catch {
+    return
+  }
+  event.respondWith(navigationResponse(request))
 })

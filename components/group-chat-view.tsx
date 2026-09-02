@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { UserAvatar } from '@/components/user-avatar'
+import { ChatMessageBubble } from '@/components/chat-message-bubble'
 import {
   leaveGroupChatAction,
   removeGroupMemberAction,
@@ -145,7 +146,7 @@ export function GroupChatView({ currentUserId, detail }: GroupChatViewProps) {
   }
 
   return (
-    <div className="relative mx-auto flex h-[calc(100svh-3.5rem)] max-w-2xl flex-col sm:h-[calc(100svh-4rem)]">
+    <div className="relative mx-auto flex app-chat-viewport-height max-w-2xl flex-col">
       <header className="flex items-center gap-3 border-b border-silver/10 px-4 py-3">
         <Link
           href="/dashboard/messages"
@@ -210,13 +211,17 @@ export function GroupChatView({ currentUserId, detail }: GroupChatViewProps) {
                   </p>
                 )}
                 <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                  className={`${
                     mine
                       ? 'rounded-ee-md border border-blue/25 border-e-[3px] border-e-blue bg-card text-foreground'
                       : 'rounded-es-md border border-silver/10 bg-card/80 text-foreground'
                   }`}
                 >
-                  {msg.content}
+                  <ChatMessageBubble
+                    content={msg.content}
+                    mine={mine}
+                    currentUserId={currentUserId}
+                  />
                 </div>
               </div>
             </div>

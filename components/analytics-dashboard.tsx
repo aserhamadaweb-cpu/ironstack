@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Trophy, BarChart3, History, TrendingUp, Zap, Dumbbell } from 'lucide-react'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { MOCK_PRS, type PersonalRecord } from '@/lib/mock-pr-data'
 
 export function AnalyticsDashboard() {
@@ -40,6 +41,7 @@ export function AnalyticsDashboard() {
       <DashboardNav />
 
       <main className="mx-auto max-w-7xl px-6 py-8 md:py-10">
+        <BackToTrainLink className="mb-6" />
         <div className="fade-up mb-8 flex flex-col gap-2 md:mb-10">
           <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
             DEEP-DIVE METRICS
@@ -131,7 +133,7 @@ export function AnalyticsDashboard() {
 
           {/* Pure CSS Bar Chart */}
           <div className="mt-8 flex h-64 items-end gap-3 md:gap-6 pt-6 border-b border-silver/10 pb-4">
-            {analytics.chartData.map((bar, idx) => (
+            {analytics.chartData.map((bar) => (
               <div key={bar.label} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
                 <span className="text-[10px] font-mono text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                   {bar.volume}kg

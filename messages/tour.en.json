@@ -1,0 +1,242 @@
+{
+  "kicker": "APP TOUR",
+  "stepOf": "Step {current} of {total}",
+  "phaseStep": "{phase} phase",
+  "progressLabel": "Tour progress",
+  "loadingStep": "Opening this section…",
+  "next": "Next",
+  "back": "Back",
+  "skip": "Skip Tour",
+  "goDashboard": "Go to Dashboard",
+  "exploreWorkouts": "Explore Workouts",
+  "askCoach": "Ask AI Coach",
+  "deferredTitle": "Finish your workout first",
+  "deferredBody": "You have an active session. We won't interrupt it. Start the tour later from Settings, or begin now only if you're ready to leave this screen.",
+  "startLater": "Start tour later",
+  "startNow": "Start tour now",
+  "expectedTitle": "You should now see",
+  "tipTitle": "Tip",
+  "noteTitle": "Note",
+  "warningTitle": "Heads up",
+  "troubleshootStepTitle": "Troubleshooting",
+  "tryPrompts": "Try copying a prompt",
+  "copyPrompt": "Copy",
+  "copiedPrompt": "Copied",
+  "phases": {
+    "navigate": "Navigate",
+    "train": "Train",
+    "track": "Track",
+    "customize": "Customize"
+  },
+  "intro": {
+    "learnTitle": "WHAT YOU'LL LEARN",
+    "learnItems": [
+      "Navigate with tabs and the ☰ menu",
+      "Build splits, browse exercises, and start sessions",
+      "Track history, use AI Coach, and customize settings",
+      "Connect via leaderboard, training circle, and Messages"
+    ],
+    "duration": "We highlight each area on the real page — use Next to continue. This tour never starts a workout or changes your data."
+  },
+  "steps": {
+    "homeHero": {
+      "title": "Your welcome panel",
+      "lead": "The highlighted area is your Home header — name, avatar, and profile link.",
+      "substeps": [
+        "Your display name and @username appear here after onboarding.",
+        "Tap View full profile to edit bio, avatar, and public stats.",
+        "This panel stays at the top every time you return to Home."
+      ],
+      "tip": "Guest accounts see a simplified label instead of email."
+    },
+    "homeShortcuts": {
+      "title": "Quick shortcuts",
+      "lead": "Jump to any major section in one tap from this grid.",
+      "substeps": [
+        "Workout — your splits and training hub.",
+        "History, PRs, and Achievements — progress at a glance.",
+        "AI Coach and Settings — available when signed in."
+      ],
+      "expected": "A grid of tiles linking to Workout, Explore, History, and more."
+    },
+    "navTabs": {
+      "title": "Bottom tab bar",
+      "lead": "On mobile, these tabs are your daily navigation.",
+      "substeps": [
+        "Home · Workout · Messages · Challenges · Profile.",
+        "The active tab is highlighted in gold.",
+        "Messages and social features require a full account."
+      ],
+      "tip": "On desktop, tabs may hide — use the ☰ menu instead."
+    },
+    "navMenu": {
+      "title": "Full app menu",
+      "lead": "Tap ☰ (top-left) to open every section — Exercises, Home Workouts, History, AI Coach, Settings, and Community.",
+      "substeps": [
+        "The menu slides in from the left on all screen sizes.",
+        "Gold highlight shows your current page.",
+        "Close with ✕ or tap outside the sidebar."
+      ],
+      "expected": "The ☰ button in the top navigation bar."
+    },
+    "workoutSplits": {
+      "title": "Your splits",
+      "lead": "Splits are training plans. This section lists plans you own or saved.",
+      "substeps": [
+        "Each card shows days per week and focus area.",
+        "Tap a card to open the split and pick a training day.",
+        "Use My Splits to manage every saved program."
+      ],
+      "expected": "Split cards or an empty state with Create Split."
+    },
+    "workoutCreate": {
+      "title": "Create a split",
+      "lead": "Start a new plan from Train — this opens the choice screen with three paths.",
+      "substeps": [
+        "Create yourself: manual builder with days and exercises.",
+        "Create with AI: describe your ideal program in plain language.",
+        "Recommended splits: profile-scored suggestions (next step)."
+      ],
+      "tip": "You need an internet connection to create or save splits."
+    },
+    "splitRecommendations": {
+      "title": "Recommended splits",
+      "lead": "Profile-based suggestions are one of three Create Split options — tap here to browse scored programs.",
+      "substeps": [
+        "Programs are scored from your goals, schedule, and equipment.",
+        "Tap a card to preview days and exercises before saving.",
+        "Saved splits appear under My Splits on the Train tab."
+      ],
+      "expected": "The Recommended splits card on the Create Split choice screen."
+    },
+    "exercisesSearch": {
+      "title": "Search & filters",
+      "lead": "Find any movement in the library using search and filters.",
+      "substeps": [
+        "Type a name — results update as you type.",
+        "Filter by category, equipment, muscle group, or sort order.",
+        "Browsing here is safe — it does not start a workout."
+      ],
+      "expected": "Search bar and filter controls at the top of the page."
+    },
+    "exercisesGrid": {
+      "title": "Exercise catalog",
+      "lead": "Tap any exercise to open details — form tips and demo GIF included.",
+      "substeps": [
+        "Scroll the list to explore the full catalog.",
+        "Open a card to read cues and watch the demo.",
+        "Add to Split appears when you're editing a plan."
+      ],
+      "expected": "Scrollable list of exercise cards below the filters."
+    },
+    "homeWorkouts": {
+      "title": "Home workouts",
+      "lead": "Programs for bodyweight, bands, and dumbbells — separate from gym splits.",
+      "substeps": [
+        "Browse home-friendly programs on this page.",
+        "Use Workout for barbell/machine gym plans.",
+        "Logging works the same once you start a home session."
+      ],
+      "note": "Pick the right entry point: gym splits under Workout, home programs here."
+    },
+    "sessionStart": {
+      "title": "Starting a session",
+      "lead": "When you're ready to train, open a split → pick a day → tap Start workout.",
+      "substeps": [
+        "During a session: log weight and reps per set, or skip.",
+        "Use Next exercise to move through your plan.",
+        "Tap Finish workout — volume and duration save to History.",
+        "Resume anytime from the Active workout banner on Home."
+      ],
+      "warning": "If you already have an active session, the tour may defer so it won't interrupt you.",
+      "troubleshoot": "Accidentally started? Finish or Discard from the session menu, then restart the tour from Settings."
+    },
+    "history": {
+      "title": "Workout history",
+      "lead": "Every finished session appears in this list.",
+      "substeps": [
+        "Each row shows date, split name, and total volume.",
+        "Tap a row for full set details and duration.",
+        "New accounts see an empty list until the first workout is finished."
+      ],
+      "tip": "History is read-only here — manage sessions from the detail view."
+    },
+    "coach": {
+      "title": "AI Coach",
+      "lead": "Open chat for training questions, split ideas, and programming advice.",
+      "substeps": [
+        "Tap Open Chat — type at the bottom of the screen.",
+        "Coach may suggest plans — you confirm before anything saves.",
+        "Insights from past sessions appear on this page too."
+      ],
+      "note": "Guest accounts may have limited Coach access.",
+      "prompts": [
+        "Build me a 3-day push/pull/legs split for hypertrophy",
+        "What should I do if my bench press stalls?"
+      ]
+    },
+    "settingsAppearance": {
+      "title": "Appearance & theme",
+      "lead": "Personalize how IronStack looks and feels.",
+      "substeps": [
+        "Choose Dark, Light, or System theme.",
+        "Change language (EN/AR) and units (kg/lb) in nearby sections.",
+        "Edit fitness profile to update goals and equipment."
+      ],
+      "expected": "Theme picker with three options in the highlighted panel."
+    },
+    "settingsTour": {
+      "title": "Restart this tour",
+      "lead": "Come back anytime — Restart App Tour replays this walkthrough from step one.",
+      "substeps": [
+        "Useful after updates or if you skipped the first time.",
+        "Won't start if you have an active workout — finish or defer first."
+      ],
+      "expected": "Restart App Tour button in the highlighted section."
+    },
+    "socialLeaderboard": {
+      "title": "Leaderboard",
+      "lead": "Compare streaks and best lifts with the whole IronStack community.",
+      "substeps": [
+        "Switch between Streak and Best lift sorting at the top.",
+        "Your row is highlighted when you appear in the rankings.",
+        "Tap any athlete to open their public profile."
+      ],
+      "expected": "The full Leaderboard page with rankings and sort controls.",
+      "tip": "A compact leaderboard also appears on Home — this page is the full board."
+    },
+    "socialCircle": {
+      "title": "Training circle",
+      "lead": "See recent activity from people you train with — back on Home.",
+      "substeps": [
+        "Friends' sessions and milestones appear in this feed.",
+        "If you have no friends yet, the Home leaderboard still shows nearby.",
+        "Add friends from Community or Messages."
+      ],
+      "expected": "Training circle feed on Home, or the Home leaderboard as a fallback."
+    },
+    "messages": {
+      "title": "Messages",
+      "lead": "Direct messages and group chats with training partners.",
+      "substeps": [
+        "Open threads from the inbox list.",
+        "Start a new group chat with the + button.",
+        "Messages tab also lives in the bottom navigation."
+      ],
+      "note": "Guest accounts cannot access Messages — create a full account to unlock.",
+      "expected": "Inbox header and conversation list."
+    },
+    "done": {
+      "title": "You're ready to train",
+      "lead": "You've toured every major area. Pick your first move below.",
+      "checklist": [
+        "Navigate with tabs and ☰ menu",
+        "Start workouts from your splits",
+        "Browse exercises and home programs",
+        "Log sessions and review history",
+        "Ask AI Coach — confirm before saving plans",
+        "Customize settings and connect socially"
+      ]
+    }
+  }
+}

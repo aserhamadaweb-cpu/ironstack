@@ -1,153 +1,111 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Layers, Plus } from 'lucide-react'
+import { getTranslations } from 'next-intl/server'
+import { Plus } from 'lucide-react'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
-import { EmptyState } from '@/components/page-states'
+import { MySplitsCustomSection } from '@/components/my-splits-custom-section'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
+import { OfflineCreateSplitLink } from '@/components/offline-create-split-link'
+import { SplitRecommendationsBanner } from '@/components/split-recommendations-banner'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
+import { formatSplitSavedDate, sortSplitsByRecentSaved } from '@/lib/split-display'
+import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
+import { createSplitChoiceHref } from '@/lib/split-create-paths'
 import { getAuthIdentity } from '@/lib/supabase/server'
 
-export const metadata = {
-  title: 'My Splits — IRONSTACK',
-  description: 'Your training plans and system programs.',
+export async function generateMetadata() {
+  const t = await getTranslations('workout')
+  return {
+    title: `${t('yourSplitsPageTitle')} — IRONSTACK`,
+    description: t('yourSplitsPageBody', { max: MAX_CUSTOM_SPLITS }),
+  }
 }
 
 export default async function MySplitsPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
+  const t = await getTranslations('workout')
+  const tCommon = await getTranslations('common')
   const [profileResult, splitsResult] = await Promise.all([
     getProfile(userId),
     getSplitsForUser(userId),
   ])
 
   const displayName =
-    profileResult.data?.display_name || email?.split('@')[0] || 'Athlete'
+    profileResult.data?.display_name || email?.split('@')[0] || tCommon('athlete')
+  const locale = profileResult.data?.language === 'ar' ? 'ar' : 'en'
+  const primarySplitId = profileResult.data?.primary_split_id ?? null
+
   const splits = splitsResult.data ?? []
-  const mine = splits.filter((s) => s.user_id === userId)
-  const system = splits.filter((s) => s.is_system || s.user_id == null)
+  const customSplits = sortSplitsByRecentSaved(
+    splits.filter((s) => s.user_id === userId && !s.is_system),
+  )
+
+  const customCards = customSplits.map((split) => ({
+    id: split.id,
+    slug: split.id,
+    name: split.name,
+    days: split.days_per_week,
+    focus: split.category || t('custom'),
+    description: split.description,
+    isShared: Boolean(split.is_shared),
+    savedDate: formatSplitSavedDate(split, locale),
+  }))
 
   return (
     <>
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
         profileHref={profileHref(profileResult.data?.username, userId)}
       />
-      <main className="mx-auto max-w-3xl space-y-8 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
+      <OfflineConnectionGate feature="splitsManage">
+      <main className="mx-auto min-w-0 max-w-3xl space-y-8 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8">
+        <BackToTrainLink />
+
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="section-kicker">TRAINING PLANS</p>
+          <div className="min-w-0">
+            <p className="section-kicker">{t('yourSplitsKicker')}</p>
             <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">
-              My Splits
+              {t('yourSplitsPageTitle')}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your custom plans plus system programs available to everyone.
+              {t('yourSplitsPageBody', { max: MAX_CUSTOM_SPLITS })}
             </p>
           </div>
-          <Link href="/dashboard/splits/create" className={CTA_PRIMARY}>
+          <OfflineCreateSplitLink
+            href={createSplitChoiceHref()}
+            className={`${CTA_PRIMARY} inline-flex min-h-11 shrink-0 items-center gap-2`}
+          >
             <Plus className="size-4" aria-hidden="true" />
-            CREATE
-          </Link>
+            {t('createSplit')}
+          </OfflineCreateSplitLink>
         </header>
 
-        {splitsResult.error && (
+        <SplitRecommendationsBanner />
+
+        {splitsResult.error ? (
           <p role="alert" className="text-sm text-destructive">
             {splitsResult.error}
           </p>
-        )}
+        ) : null}
 
-        {splits.length === 0 ? (
-          <EmptyState
-            icon={Layers}
-            title="No splits yet"
-            body="Create a custom split or start from a system program on Workout."
-            actionLabel="CREATE SPLIT"
-            actionHref="/dashboard/splits/create"
-            tone="gold"
+        <section>
+          <MySplitsCustomSection
+            splits={customCards}
+            primarySplitId={primarySplitId}
           />
-        ) : (
-          <>
-            <section>
-              <h2 className="mb-3 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground">
-                YOURS
-              </h2>
-              {mine.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No custom splits yet — create one to own your programming.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {mine.map((split) => (
-                    <li key={split.id}>
-                      <Link
-                        href={`/dashboard/splits/${split.id}`}
-                        className="is-row flex w-full flex-col gap-1 px-4 py-4 text-left"
-                      >
-                        <p className="font-heading text-base font-semibold text-foreground">
-                          {split.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {split.days_per_week} days/week
-                          {split.category ? ` · ${split.category}` : ''}
-                          {split.is_shared ? ' · Shared' : ''}
-                        </p>
-                        {split.description && (
-                          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                            {split.description}
-                          </p>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+        </section>
 
-            <section>
-              <h2 className="mb-3 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground">
-                SYSTEM PROGRAMS
-              </h2>
-              {system.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No system splits available.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {system.map((split) => (
-                    <li key={split.id}>
-                      <Link
-                        href={`/dashboard/splits/${split.id}`}
-                        className="is-row flex w-full flex-col gap-1 px-4 py-4 text-left"
-                      >
-                        <p className="font-heading text-base font-semibold text-foreground">
-                          {split.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {split.days_per_week} days/week
-                          {split.category ? ` · ${split.category}` : ''}
-                          {' · System'}
-                        </p>
-                        {split.description && (
-                          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                            {split.description}
-                          </p>
-                        )}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </>
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          Open a split to train, share, or edit days and exercises.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('mySplitsFooter')}</p>
       </main>
+      </OfflineConnectionGate>
     </>
   )
 }

@@ -27,8 +27,8 @@ export const ACCENT = {
 } as const
 
 /** Focus / split category → semantic tone */
-export function toneForFocus(focus: string): AccentTone {
-  const key = focus.trim().toLowerCase()
+export function toneForFocus(focus?: string | null): AccentTone {
+  const key = (focus ?? '').trim().toLowerCase()
   if (key.includes('strength')) return 'blue'
   if (key.includes('athletic') || key.includes('power')) return 'green'
   return 'amber'

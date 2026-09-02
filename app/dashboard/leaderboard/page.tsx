@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { LeaderboardPageClient } from '@/components/leaderboard-page'
 import { PageError } from '@/components/page-states'
 import { getLeaderboard, getProfile } from '@/lib/data/queries'
@@ -14,7 +15,7 @@ export const metadata = {
 
 export default async function LeaderboardPage() {
   const { userId, email } = await getAuthIdentity()
-  if (!userId) redirect('/login')
+  if (!userId) redirect('/login?next=/dashboard/leaderboard')
 
   const [profileResult, boardResult] = await Promise.all([
     getProfile(userId),
@@ -30,6 +31,7 @@ export default async function LeaderboardPage() {
             profileResult.data?.display_name || email?.split('@')[0] || 'A',
           )}
           profileHref={profileHref(profileResult.data?.username, userId)}
+          avatarUrl={profileResult.data?.avatar_url}
         />
         <main className="mx-auto max-w-3xl px-4 py-10">
           <PageError message={boardResult.error} />
@@ -47,15 +49,18 @@ export default async function LeaderboardPage() {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
         profileHref={profileHref(profileResult.data?.username, userId)}
       />
-      <main className="pb-24 md:pb-8">
-        <LeaderboardPageClient
-          rows={boardResult.data ?? []}
-          currentUserId={userId}
-          unit={unit}
-        />
-      </main>
+      <OfflineConnectionGate feature="leaderboard">
+        <main>
+          <LeaderboardPageClient
+            rows={boardResult.data ?? []}
+            currentUserId={userId}
+            unit={unit}
+          />
+        </main>
+      </OfflineConnectionGate>
     </>
   )
 }

@@ -63,8 +63,11 @@ export type CompressedAvatar = {
  * Resize (cover-crop to square) and compress an image for avatar upload.
  */
 export async function compressAvatarImage(file: File): Promise<CompressedAvatar> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('Please choose an image file.')
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Please choose a JPG, PNG, or WebP image.')
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image must be 5MB or smaller.')
   }
 
   const img = await loadImage(file)

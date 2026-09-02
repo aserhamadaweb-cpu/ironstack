@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { StreakFlame } from '@/components/streak-flame'
 import { checkTop10AchievementAction } from '@/lib/data/achievements'
 import type { LeaderboardEntry } from '@/lib/database.types'
@@ -53,7 +54,11 @@ export function LeaderboardPageClient({
   }, [rows, sort])
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+    <div
+      className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8"
+      data-tour="page-leaderboard"
+    >
+      <BackToTrainLink />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="section-kicker">{t('kicker')}</p>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getIsGuestAction } from '@/lib/data/profile-actions'
 import type { ThemePreference } from '@/lib/theme'
 
 export async function updateThemePreferenceAction(
@@ -17,6 +18,10 @@ export async function updateThemePreferenceAction(
   } = await supabase.auth.getUser()
   if (!user) {
     // Guests persist via localStorage only — not an error.
+    return { ok: true }
+  }
+
+  if (await getIsGuestAction()) {
     return { ok: true }
   }
 

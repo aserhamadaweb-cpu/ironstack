@@ -133,12 +133,6 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
           </p>
         )}
 
-        {state?.success && (
-          <p className="rounded-lg border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
-            {state.success}
-          </p>
-        )}
-
         <Button
           type="submit"
           disabled={pending}

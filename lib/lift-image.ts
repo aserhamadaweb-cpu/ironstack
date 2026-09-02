@@ -16,6 +16,15 @@ export function resolveLiftImageUrl(
     return raw
   }
 
+  if (raw.startsWith('/exercises/')) {
+    return raw
+  }
+
+  if (raw.startsWith('/')) {
+    if (/^\/\d+\.(jpg|jpeg|png|gif|webp)$/i.test(raw)) return null
+    return raw
+  }
+
   // Relative free-exercise-db path: "Barbell_Curl/0.jpg"
   if (raw.includes('/') && !raw.startsWith('/')) {
     return `${FREE_EXERCISE_IMAGE_BASE}${raw.replace(/^\.?\//, '')}`

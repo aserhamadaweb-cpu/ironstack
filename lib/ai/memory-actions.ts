@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { deactivateMemory, getActiveMemories } from '@/lib/ai/memory'
 import { createClient } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
 
 export async function listActiveMemoriesAction() {
   const supabase = await createClient()
@@ -24,6 +25,9 @@ export async function listActiveMemoriesAction() {
 }
 
 export async function deactivateMemoryAction(memoryId: string) {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const supabase = await createClient()
   const {
     data: { user },

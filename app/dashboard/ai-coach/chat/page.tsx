@@ -1,5 +1,9 @@
 import { redirect } from 'next/navigation'
 import { AiCoachChat } from '@/components/ai-coach-chat'
+import { DashboardNav } from '@/components/dashboard-nav'
+import { GuestBlockedScreen } from '@/components/guest-blocked-screen'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { PageError } from '@/components/page-states'
 import {
   getUnmentionedChatCelebrations,
@@ -13,6 +17,7 @@ import {
 } from '@/lib/ai/conversations'
 import { getActiveMemories } from '@/lib/ai/memory'
 import { getProfile } from '@/lib/data/queries'
+import { getIsGuestAction } from '@/lib/data/profile-actions'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
 
@@ -29,6 +34,25 @@ export default async function AiCoachPage() {
 
   if (!user) {
     redirect('/login')
+  }
+
+  if (await getIsGuestAction()) {
+    const profileResult = await getProfile(user.id)
+    const displayName =
+      profileResult.data?.display_name ||
+      user.email?.split('@')[0] ||
+      'Athlete'
+    return (
+      <>
+        <DashboardNav
+          userName={displayName}
+          initials={initialsFrom(displayName)}
+          avatarUrl={profileResult.data?.avatar_url}
+          isGuest
+        />
+        <GuestBlockedScreen reason="aiCoach" returnPath="/dashboard/ai-coach/chat" />
+      </>
+    )
   }
 
   const profileResult = await getProfile(user.id)
@@ -106,9 +130,13 @@ export default async function AiCoachPage() {
     }
 
     return (
+      <OfflineConnectionGate feature="coach">
+      <GuestPageGate reason="aiCoach" returnPath="/dashboard/ai-coach/chat">
       <AiCoachChat
         displayName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
         conversationId={conversation.id}
         initialMessages={chatMessages}
         initialConversations={(
@@ -125,6 +153,8 @@ export default async function AiCoachPage() {
           updatedAt: m.updated_at,
         }))}
       />
+      </GuestPageGate>
+      </OfflineConnectionGate>
     )
   } catch (err) {
     console.error('[ai-coach page]', err)

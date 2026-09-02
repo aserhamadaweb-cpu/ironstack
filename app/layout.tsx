@@ -1,13 +1,12 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Noto_Sans_Arabic, Oswald } from 'next/font/google'
-import Script from 'next/script'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import { NavTransitionOverlay } from '@/components/nav-transition-overlay'
 import { ThemeProvider } from '@/components/theme-provider'
 import { localeDir, type AppLocale } from '@/lib/i18n'
-import { getServerThemePreference } from '@/lib/theme-server'
+import { getServerAppearanceMode, getServerThemePreference } from '@/lib/theme-server'
 import './globals.css'
 
 const oswald = Oswald({
@@ -65,16 +64,14 @@ export const viewport: Viewport = {
   ],
 }
 
-/** Theme + locale before paint (guests / first paint). */
-const bootScript = `(function(){try{var r=document.documentElement;var t=localStorage.getItem('ironstack-theme');if(t!=='light'&&t!=='dark')t='dark';r.dataset.theme=t;r.classList.toggle('dark',t==='dark');r.classList.toggle('light',t==='light');r.style.colorScheme=t;var l=localStorage.getItem('ironstack-locale');if(l!=='ar'&&l!=='en'){var m=document.cookie.match(/(?:^|; )ironstack-locale=([^;]*)/);l=m?decodeURIComponent(m[1]):'en';}if(l!=='ar'&&l!=='en')l='en';r.lang=l;r.dir=l==='ar'?'rtl':'ltr';r.dataset.locale=l;}catch(e){}})();`
-
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const [serverTheme, locale, messages] = await Promise.all([
+  const [serverTheme, serverAppearance, locale, messages] = await Promise.all([
     getServerThemePreference(),
+    getServerAppearanceMode(),
     getLocale(),
     getMessages(),
   ])
@@ -90,18 +87,16 @@ export default async function RootLayout({
       data-theme="dark"
       data-locale={appLocale}
     >
-      <head>
-        <Script id="ironstack-boot" strategy="beforeInteractive">
-          {bootScript}
-        </Script>
-      </head>
       <body
         className={`antialiased ${
           appLocale === 'ar' ? 'font-arabic' : 'font-sans'
         }`}
       >
         <NextIntlClientProvider locale={appLocale} messages={messages}>
-          <ThemeProvider initialTheme={serverTheme}>
+          <ThemeProvider
+            initialTheme={serverTheme}
+            initialAppearance={serverAppearance}
+          >
             <NavTransitionOverlay />
             {children}
           </ThemeProvider>

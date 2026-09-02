@@ -5,6 +5,8 @@ export type AppShortcut = {
   href: string
   label: string
   icon: LucideIcon
+  /** Optional tour spotlight anchor on the icon tile only. */
+  tourIcon?: string
 }
 
 export function AppShortcutGrid({ items }: { items: AppShortcut[] }) {
@@ -17,7 +19,15 @@ export function AppShortcutGrid({ items }: { items: AppShortcut[] }) {
           prefetch
           className="is-row flex min-h-14 items-center gap-2.5 px-3 py-3 text-foreground active:opacity-80 sm:gap-3 sm:px-3.5"
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-gold/25 bg-gold/10 text-gold sm:size-11">
+          <span
+            {...(item.tourIcon
+              ? {
+                  'data-tour': item.tourIcon,
+                  'data-tour-spotlight': 'icon',
+                }
+              : {})}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-gold/25 bg-gold/10 text-gold sm:size-11"
+          >
             <item.icon className="size-5" aria-hidden="true" />
           </span>
           <span className="min-w-0 text-[12px] font-semibold leading-snug break-words [overflow-wrap:anywhere] sm:text-sm">

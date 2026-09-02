@@ -1,8 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { BrainCircuit, MessageSquare } from 'lucide-react'
+import { BrainCircuit, MessageSquare, ScrollText } from 'lucide-react'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { EmptyState } from '@/components/page-states'
 import { LtrIsolate } from '@/components/ltr-isolate'
 import { listAiInsights } from '@/lib/ai/insights'
@@ -44,10 +47,17 @@ export default async function AiCoachPage() {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
         profileHref={profileHref(profileResult.data?.username, userId)}
         isGuest={profileResult.data?.is_guest === true}
       />
-      <main className="mx-auto max-w-3xl space-y-8 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
+      <OfflineConnectionGate feature="coach">
+      <GuestPageGate reason="aiCoach" returnPath="/dashboard/ai-coach">
+      <main
+        data-tour="page-coach"
+        className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 sm:py-8"
+      >
+        <BackToTrainLink />
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="section-kicker">{t('kicker')}</p>
@@ -58,10 +68,23 @@ export default async function AiCoachPage() {
               {t('insightsIntro')}
             </p>
           </div>
-          <Link href="/dashboard/ai-coach/chat" className={CTA_PRIMARY}>
-            <MessageSquare className="size-4" aria-hidden="true" />
-            {t('openChat')}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/ai-coach/chat"
+              className={CTA_PRIMARY}
+              data-tour="coach-chat"
+            >
+              <MessageSquare className="size-4" aria-hidden="true" />
+              {t('openChat')}
+            </Link>
+            <Link
+              href="/dashboard/ai-coach/activity"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-silver/25 px-4 text-xs font-semibold tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+            >
+              <ScrollText className="size-4" aria-hidden="true" />
+              {t('activityView')}
+            </Link>
+          </div>
         </header>
 
         <section>
@@ -102,6 +125,8 @@ export default async function AiCoachPage() {
           )}
         </section>
       </main>
+      </GuestPageGate>
+      </OfflineConnectionGate>
     </>
   )
 }

@@ -1,16 +1,28 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, Loader2, LogOut, Moon, Shield, Sun } from 'lucide-react'
+import {
+  CloudOff,
+  FileText,
+  Loader2,
+  LogOut,
+  Monitor,
+  Moon,
+  Shield,
+  Sun,
+} from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { signOut } from '@/app/login/actions'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
+import { setUnfinishedAlertsEnabled } from '@/lib/active-workout'
 import { NotificationSettings } from '@/components/notification-settings'
 import { BodyStatsSettings } from '@/components/body-stats-settings'
 import { GuestAccountUpgrade } from '@/components/guest-account-upgrade'
 import { useTheme } from '@/components/theme-provider'
+import { useAppTour } from '@/components/app-tour/app-tour-provider'
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   type BodyWeightLog,
@@ -32,9 +44,10 @@ import {
 import {
   LOCALE_STORAGE_KEY,
   localeDir,
+  markLocaleChosen,
   type AppLocale,
 } from '@/lib/i18n'
-import type { ThemePreference } from '@/lib/theme'
+import type { AppearanceMode } from '@/lib/theme'
 import type { WeightUnit } from '@/lib/units'
 
 type SettingsPageClientProps = {
@@ -127,6 +140,7 @@ export function SettingsPageClient({
   const t = useTranslations('settings')
   const tCommon = useTranslations('common')
   const tNotif = useTranslations('notifPrefs')
+  const tOffline = useTranslations('offline')
   const router = useRouter()
   const localeFromIntl = useLocale()
   const language = (
@@ -137,7 +151,9 @@ export function SettingsPageClient({
         : 'en'
   ) as AppLocale
 
-  const { theme, setTheme, pending: themePending } = useTheme()
+  const { appearance, setAppearance, pending: themePending } = useTheme()
+  const { restartTour } = useAppTour()
+  const [tourBusy, setTourBusy] = useState(false)
   const [unit, setUnit] = useState<WeightUnit>(preferredUnit)
   const [unitMsg, setUnitMsg] = useState<string | null>(null)
   const [prefs, setPrefs] = useState<NotificationPreferences>(() => ({
@@ -162,14 +178,18 @@ export function SettingsPageClient({
   const [langMsg, setLangMsg] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
+  useEffect(() => {
+    setUnfinishedAlertsEnabled(prefs.unfinished_session)
+  }, [prefs.unfinished_session])
+
   const saveLanguage = (next: AppLocale) => {
     if (next === language) return
     setLangMsg(null)
-    applyLocaleToDocument(next)
+    markLocaleChosen(next)
     startTransition(async () => {
       const result = await updateLanguagePreferenceAction(next)
       if (!result.ok) {
-        applyLocaleToDocument(language)
+        markLocaleChosen(language)
         setLangMsg(result.error)
         return
       }
@@ -243,7 +263,11 @@ export function SettingsPageClient({
   ) as Array<keyof NotificationPreferences>
 
   return (
-    <div className="mx-auto max-w-3xl space-y-10 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
+    <div
+      data-tour="page-settings"
+      className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:px-6 sm:py-8"
+    >
+      <BackToTrainLink />
       <header>
         <p className="section-kicker">{t('kicker')}</p>
         <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">
@@ -252,7 +276,8 @@ export function SettingsPageClient({
         <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
       </header>
 
-      <section className="space-y-3" aria-labelledby="appearance-heading">
+      {!isGuest ? (
+      <section className="space-y-3" aria-labelledby="appearance-heading" data-tour="settings-appearance">
         <h2
           id="appearance-heading"
           className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
@@ -263,35 +288,41 @@ export function SettingsPageClient({
           <p className="text-sm text-foreground">{t('theme')}</p>
           <p className="mt-1 text-xs text-muted-foreground">{t('themeHint')}</p>
           <div
-            className="mt-4 grid grid-cols-2 gap-3"
+            className="mt-4 grid grid-cols-3 gap-3"
             role="group"
             aria-label={t('theme')}
           >
             {(
               [
                 {
-                  value: 'dark' as ThemePreference,
+                  value: 'dark' as AppearanceMode,
                   label: t('themeDark'),
                   hint: t('themeDarkHint'),
                   Icon: Moon,
                 },
                 {
-                  value: 'light' as ThemePreference,
+                  value: 'light' as AppearanceMode,
                   label: t('themeLight'),
                   hint: t('themeLightHint'),
                   Icon: Sun,
                 },
+                {
+                  value: 'system' as AppearanceMode,
+                  label: t('themeSystem'),
+                  hint: t('themeSystemHint'),
+                  Icon: Monitor,
+                },
               ] as const
             ).map(({ value, label, hint, Icon }) => {
-              const selected = theme === value
+              const selected = appearance === value
               return (
                 <button
                   key={value}
                   type="button"
                   disabled={themePending}
                   aria-pressed={selected}
-                  onClick={() => setTheme(value)}
-                  className={`flex min-h-[5.5rem] flex-col items-start gap-2 rounded-xl border px-4 py-3 text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50 ${
+                  onClick={() => setAppearance(value)}
+                  className={`flex min-h-[5.5rem] flex-col items-start gap-2 rounded-xl border px-3 py-3 text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50 ${
                     selected
                       ? 'border-gold/45 bg-gold-tint text-gold'
                       : 'border-border bg-background/60 text-muted-foreground hover:border-gold/30 hover:text-foreground'
@@ -310,7 +341,108 @@ export function SettingsPageClient({
           </div>
         </div>
       </section>
+      ) : null}
 
+      {!isGuest ? (
+        <section className="space-y-3" aria-labelledby="fitness-profile-heading">
+          <h2
+            id="fitness-profile-heading"
+            className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
+          >
+            {t('fitnessProfile')}
+          </h2>
+          <div className="is-panel p-5">
+            <p className="text-sm text-foreground">{t('fitnessProfileTitle')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('fitnessProfileHint')}
+            </p>
+            <Link
+              href="/onboarding?edit=1"
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-gold/35 bg-gold/10 px-4 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+            >
+              {t('editFitnessProfile')}
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {!isGuest ? (
+        <section className="space-y-3" aria-labelledby="app-tour-heading" data-tour="settings-restart-tour">
+          <h2
+            id="app-tour-heading"
+            className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
+          >
+            {t('appTour')}
+          </h2>
+          <div className="is-panel p-5">
+            <p className="text-sm text-foreground">{t('appTourTitle')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t('appTourHint')}</p>
+            <button
+              type="button"
+              disabled={tourBusy}
+              onClick={() => {
+                setTourBusy(true)
+                void restartTour().finally(() => setTourBusy(false))
+              }}
+              className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-gold/35 bg-gold/10 px-4 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50"
+            >
+              {tourBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t('restartAppTour')}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        className="space-y-3"
+        aria-labelledby="offline-sync-heading"
+        data-tour="settings-offline"
+      >
+        <h2
+          id="offline-sync-heading"
+          className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
+        >
+          {t('offlineSync')}
+        </h2>
+        <div className="is-panel space-y-4 p-5">
+          <div>
+            <p className="text-sm text-foreground">{t('offlineSyncTitle')}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('offlineSyncHint')}
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <article className="rounded-2xl border border-gold/25 bg-gold/5 p-4">
+              <p className="text-[10px] font-bold tracking-[0.18em] text-gold">
+                {tOffline('floorLiveKicker')}
+              </p>
+              <ul className="mt-3 space-y-1.5 text-sm text-foreground">
+                <li>{tOffline('floorLive1')}</li>
+                <li>{tOffline('floorLive2')}</li>
+                <li>{tOffline('floorLive3')}</li>
+              </ul>
+            </article>
+            <article className="rounded-2xl border border-silver/20 bg-card/50 p-4">
+              <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.18em] text-muted-foreground">
+                <CloudOff className="size-3" aria-hidden="true" />
+                {tOffline('floorPausedKicker')}
+              </p>
+              <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                <li>{tOffline('floorPaused1')}</li>
+                <li>{tOffline('floorPaused2')}</li>
+                <li>{tOffline('floorPaused3')}</li>
+                <li>{tOffline('floorPaused4')}</li>
+                <li>{tOffline('floorPaused5')}</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      {!isGuest ? (
+      <>
       <section className="space-y-3" aria-labelledby="language-heading">
         <h2
           id="language-heading"
@@ -523,6 +655,8 @@ export function SettingsPageClient({
         </h2>
         <NotificationSettings embedded />
       </section>
+      </>
+      ) : null}
 
       <section className="space-y-3" aria-labelledby="account-heading">
         <h2
@@ -647,12 +781,31 @@ export function SettingsPageClient({
                     onClick={() => {
                       setDeleteMsg(null)
                       startTransition(async () => {
-                        const result = await deleteAccountAction(deleteConfirm)
-                        if (!result.ok) {
-                          setDeleteMsg(result.error)
-                          return
+                        try {
+                          const result = await deleteAccountAction(deleteConfirm)
+                          if (!result || typeof result !== 'object' || !('ok' in result)) {
+                            setDeleteMsg('Could not delete the account. Please try again.')
+                            return
+                          }
+                          if (!result.ok) {
+                            const raw =
+                              typeof result.error === 'string' ? result.error.trim() : ''
+                            const message =
+                              raw && raw !== '{}' && raw !== 'null'
+                                ? raw
+                                : 'Could not delete the account.'
+                            setDeleteMsg(message)
+                            return
+                          }
+                          clearIronstackAuthCache()
+                          router.replace('/login')
+                        } catch (err) {
+                          setDeleteMsg(
+                            err instanceof Error
+                              ? err.message
+                              : 'Could not delete the account.',
+                          )
                         }
-                        router.replace('/login')
                       })
                     }}
                     className="inline-flex min-h-11 items-center rounded-full bg-destructive px-5 text-xs font-bold tracking-[0.14em] text-foreground disabled:opacity-50"
@@ -745,6 +898,10 @@ export function SettingsPageClient({
                     startTransition(async () => {
                       try {
                         clearIronstackAuthCache()
+                        const { handleAuthUserChanged } = await import(
+                          '@/lib/clear-client-user-state'
+                        )
+                        await handleAuthUserChanged(null)
                         await signOut()
                       } catch {
                         setSignOutMsg(t('signOutFailed'))

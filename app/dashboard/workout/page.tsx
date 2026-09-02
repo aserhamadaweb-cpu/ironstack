@@ -1,9 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { PageError } from '@/components/page-states'
 import { WorkoutDashboard } from '@/components/workout-dashboard'
 import { getUnshownBannerCelebrations } from '@/lib/ai/celebrations'
-import { getCachedCoachInsight } from '@/lib/ai/insights'
 import {
   getCompletedSessions,
   getProfile,
@@ -11,7 +9,14 @@ import {
   getSplitsForUser,
   getTotalVolume,
 } from '@/lib/data/queries'
+import {
+  getPrimarySplitSummary,
+} from '@/lib/data/split-recommendations-server'
 import { ltrEmbed } from '@/lib/bidi'
+import {
+  computeWeeklyVolumeTrend,
+  formatLoadChangePct,
+} from '@/lib/volume-trend'
 import {
   formatRelativeFinishedAt,
   formatSessionDate,
@@ -20,10 +25,14 @@ import {
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { profileHref } from '@/lib/profile-path'
 import { formatLiftLabel, isCardioCategory } from '@/lib/units'
+import {
+  formatSplitSavedDate,
+  sortSplitsByRecentSaved,
+} from '@/lib/split-display'
 
 export const metadata = {
   title: 'Workout — IRONSTACK',
-  description: 'Your splits, last session recap, and recommended programs.',
+  description: 'Your splits, last session recap, and training programs.',
 }
 
 export default async function WorkoutPage() {
@@ -31,35 +40,38 @@ export default async function WorkoutPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
+  const profileProbe = await getProfile(userId)
+  const unreachable = Boolean(
+    profileProbe.error &&
+      /reach the server|fetch failed|failed to fetch|session expired|jwt|sign in|not authenticated/i.test(
+        profileProbe.error,
+      ),
+  )
+
   const [
     profileResult,
     splitsResult,
     sessionsResult,
     volumeResult,
-    insight,
     celebrations,
-  ] = await Promise.all([
-    getProfile(userId),
-    getSplitsForUser(userId),
-    getCompletedSessions(userId, 8),
-    getTotalVolume(userId),
-    getCachedCoachInsight(userId),
-    getUnshownBannerCelebrations(userId),
-  ])
-
-  const error =
-    profileResult.error ||
-    splitsResult.error ||
-    sessionsResult.error ||
-    volumeResult.error
-
-  if (error) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError message={error} />
-      </main>
-    )
-  }
+    primarySplit,
+  ] = unreachable
+    ? [
+        profileProbe,
+        { data: [] as never[], error: null },
+        { data: [] as never[], error: null },
+        { data: 0, error: null },
+        [] as never[],
+        { id: null, name: null },
+      ]
+    : await Promise.all([
+        Promise.resolve(profileProbe),
+        getSplitsForUser(userId),
+        getCompletedSessions(userId, 100),
+        getTotalVolume(userId),
+        getUnshownBannerCelebrations(userId).catch(() => []),
+        getPrimarySplitSummary(userId),
+      ])
 
   const profile = profileResult.data
   const tCommon = await getTranslations('common')
@@ -72,46 +84,41 @@ export default async function WorkoutPage() {
   const sessions = sessionsResult.data ?? []
   const journeyVolume = volumeResult.data ?? 0
 
-  const yourSplits = splits
-    .filter((s) => s.user_id === userId && !s.is_system)
-    .slice(0, 3)
-    .map((split) => ({
-      id: split.id,
-      slug: split.id,
-      name: split.name,
-      days: split.days_per_week,
-      lastUsed: t('custom'),
-      focus: split.category || t('custom'),
-      description: split.description,
-      isShared: Boolean(split.is_shared),
-    }))
+  const customSplits = sortSplitsByRecentSaved(
+    splits.filter((s) => s.user_id === userId && !s.is_system),
+  )
 
-  const recommendedSplits = splits
-    .filter((s) => s.user_id === null || s.is_system)
-    .filter(
-      (split, index, arr) => arr.findIndex((s) => s.id === split.id) === index,
-    )
-    .map((split) => ({
-      id: split.id,
-      slug: split.id,
-      name: split.name,
-      days: split.days_per_week,
-      lastUsed: t('system'),
-      focus: split.category || t('program'),
-      description: split.description,
-    }))
+  const resolvedPrimaryId =
+    primarySplit.id ?? profile?.primary_split_id ?? null
+
+  const featuredRow =
+    (resolvedPrimaryId
+      ? customSplits.find((s) => s.id === resolvedPrimaryId)
+      : null) ?? customSplits[0] ?? null
+
+  const featuredSplit = featuredRow
+    ? {
+        id: featuredRow.id,
+        slug: featuredRow.id,
+        name: featuredRow.name,
+        days: featuredRow.days_per_week,
+        focus: featuredRow.category || t('custom'),
+        description: featuredRow.description,
+        isShared: Boolean(featuredRow.is_shared),
+        savedDate: formatSplitSavedDate(
+          featuredRow,
+          locale,
+        ),
+      }
+    : null
+
+  const totalCustomSplits = customSplits.length
 
   const latest = sessions[0] ?? null
   let lastSession = null
   if (latest) {
     const logsResult = await getSessionLiftLogs(latest.id)
-    if (logsResult.error) {
-      return (
-        <main className="mx-auto max-w-3xl px-6 py-16">
-          <PageError message={logsResult.error} />
-        </main>
-      )
-    }
+    if (!logsResult.error) {
     const logs = (logsResult.data ?? []).filter((log) => !log.is_skipped)
     const byLift = new Map<
       string,
@@ -200,9 +207,10 @@ export default async function WorkoutPage() {
       sets: String(latest.total_sets_completed ?? 0),
       standouts,
     }
+    }
   }
 
-  const historySessions = sessions.slice(0, 3).map((session) => ({
+  const historySessions = sessions.slice(0, 2).map((session) => ({
     id: session.id,
     date: formatSessionDate(session.started_at),
     name: `${session.split_days?.name ?? t('dayFallback')} · ${session.splits?.name ?? t('title')}`,
@@ -241,20 +249,30 @@ export default async function WorkoutPage() {
           })(),
   }
 
+  const journeyTrend = computeWeeklyVolumeTrend(
+    sessions.map((s) => ({
+      started_at: s.started_at,
+      finished_at: s.finished_at,
+      total_volume: s.total_volume,
+    })),
+  )
+
   return (
     <WorkoutDashboard
       displayName={displayName}
-      yourSplits={yourSplits}
-      recommendedSplits={recommendedSplits}
+      featuredSplit={featuredSplit}
+      totalCustomSplits={totalCustomSplits}
+      primarySplitId={resolvedPrimaryId}
       lastSession={lastSession}
       historySessions={historySessions}
       journeyVolume={journeyVolume}
       weightUnit={unit}
       volumeTrend={volumeTrend}
-      insight={insight}
+      journeyTrend={journeyTrend}
       avatarUrl={profile?.avatar_url}
       profileHref={profileHref(profile?.username, userId)}
       isGuest={profile?.is_guest === true}
+      liveDegraded={unreachable || !profile}
       celebrations={celebrations.map((c) => ({
         id: c.id,
         title: c.title,

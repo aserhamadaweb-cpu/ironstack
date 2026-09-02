@@ -1,23 +1,29 @@
 import { redirect } from 'next/navigation'
+import { OfflineProfilePage } from '@/components/offline-profile-page'
+import { getProfile } from '@/lib/data/queries'
+import { isNetworkFailure } from '@/lib/log'
 import { profileHref } from '@/lib/profile-path'
-import { createClient, getAuthUserId } from '@/lib/supabase/server'
+import { getAuthIdentity } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'Profile — IRONSTACK',
   description: 'Your IRONSTACK profile and personal records.',
 }
 
-/** Legacy route — unified profile lives at /profile/[username|userId]. */
+/** Server redirect to the live profile when online; cached profile when offline. */
 export default async function ProfilePage() {
-  const userId = await getAuthUserId()
-  if (!userId) redirect('/login')
+  const { userId } = await getAuthIdentity()
+  if (!userId) redirect('/login?next=/dashboard/profile')
 
-  const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('id', userId)
-    .maybeSingle()
+  const profileResult = await getProfile(userId)
+  if (profileResult.error && isNetworkFailure(profileResult.error)) {
+    return <OfflineProfilePage />
+  }
 
-  redirect(profileHref(profile?.username, userId))
+  const href = profileHref(profileResult.data?.username, userId)
+  if (href !== '/dashboard/profile') {
+    redirect(href)
+  }
+
+  return <OfflineProfilePage />
 }

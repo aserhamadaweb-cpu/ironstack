@@ -10,7 +10,7 @@ type UserAvatarProps = {
   username?: string | null
   userId?: string | null
   avatarUrl?: string | null
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
   /** When false, render non-clickable. */
   link?: boolean
@@ -20,6 +20,7 @@ const SIZE = {
   sm: 'size-11 text-xs',
   md: 'size-12 text-sm',
   lg: 'size-20 text-2xl',
+  xl: 'size-16 border-gold/40 bg-gold-tint text-xl sm:size-24 sm:text-3xl',
 } as const
 
 function usableAvatarUrl(url: string | null | undefined): string | null {
@@ -59,7 +60,7 @@ export function UserAvatar({
           alt=""
           fill
           className="object-cover"
-          sizes={size === 'lg' ? '80px' : '48px'}
+          sizes={size === 'xl' ? '96px' : size === 'lg' ? '80px' : '48px'}
         />
       ) : (
         initialsFrom(name)

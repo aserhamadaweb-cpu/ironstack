@@ -1,8 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getAuthIdentity } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
 import type { PersonalRecord, Session } from '@/lib/database.types'
+import { isAlreadyExistsError } from '@/lib/offline/duplicate-error'
+import { logServerError } from '@/lib/log'
 
 export type ActionResult<T = null> =
   | { data: T; error: null }
@@ -16,28 +19,74 @@ function fail(message: string, detail?: string): ActionResult<never> {
 export async function startSessionAction(input: {
   splitId: string
   splitDayId: string
+  sessionId?: string
+  startedAt?: string
 }): Promise<ActionResult<Session>> {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return fail('You must be signed in to start a session.')
 
+  const sessionId = input.sessionId ?? crypto.randomUUID()
+  const startedAt = input.startedAt ?? new Date().toISOString()
+
+  const { data: existing } = await supabase
+    .from('sessions')
+    .select(
+      'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
+    )
+    .eq('id', sessionId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (existing) {
+    return { data: existing as Session, error: null }
+  }
+
+  await supabase
+    .from('sessions')
+    .update({
+      status: 'cancelled',
+      finished_at: new Date().toISOString(),
+    })
+    .eq('user_id', user.id)
+    .eq('status', 'in_progress')
+    .neq('id', sessionId)
+
   const { data, error } = await supabase
     .from('sessions')
-    .insert({
-      user_id: user.id,
-      split_id: input.splitId,
-      split_day_id: input.splitDayId,
-      status: 'in_progress',
-      started_at: new Date().toISOString(),
-    })
+    .upsert(
+      {
+        id: sessionId,
+        user_id: user.id,
+        split_id: input.splitId,
+        split_day_id: input.splitDayId,
+        status: 'in_progress',
+        started_at: startedAt,
+      },
+      { onConflict: 'id', ignoreDuplicates: false },
+    )
     .select(
       'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
     )
     .single()
 
   if (error || !data) {
+    if (isAlreadyExistsError(error)) {
+      const { data: again } = await supabase
+        .from('sessions')
+        .select(
+          'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
+        )
+        .eq('id', sessionId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (again) return { data: again as Session, error: null }
+    }
     return fail('Could not start the session. Please try again.', error?.message)
   }
   return { data: data as Session, error: null }
@@ -48,12 +97,17 @@ export async function logSetAction(input: {
   liftTypeId: string
   setNumber: number
   isSkipped: boolean
+  logId?: string
+  loggedAt?: string
   /** Strength — required unless durationSeconds is set. */
   weight?: number
   reps?: number
   /** Cardio — stored as seconds on lift_logs.duration_seconds. */
   durationSeconds?: number
 }): Promise<ActionResult<{ id: string }>> {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -83,24 +137,33 @@ export async function logSetAction(input: {
     }
   }
 
+  const logId = input.logId ?? crypto.randomUUID()
+
   const { data, error } = await supabase
     .from('lift_logs')
-    .insert({
-      user_id: user.id,
-      lift_type_id: input.liftTypeId,
-      session_id: input.sessionId,
-      weight,
-      reps,
-      duration_seconds: isCardio ? durationSeconds : null,
-      set_number: input.setNumber,
-      is_skipped: Boolean(input.isSkipped),
-      weight_unit: 'kg',
-      logged_at: new Date().toISOString(),
-    })
+    .upsert(
+      {
+        id: logId,
+        user_id: user.id,
+        lift_type_id: input.liftTypeId,
+        session_id: input.sessionId,
+        weight,
+        reps,
+        duration_seconds: isCardio ? durationSeconds : null,
+        set_number: input.setNumber,
+        is_skipped: Boolean(input.isSkipped),
+        weight_unit: 'kg',
+        logged_at: input.loggedAt ?? new Date().toISOString(),
+      },
+      { onConflict: 'id', ignoreDuplicates: false },
+    )
     .select('id')
     .single()
 
   if (error || !data) {
+    if (isAlreadyExistsError(error) && logId) {
+      return { data: { id: logId }, error: null }
+    }
     return fail('Could not save that set. Please try again.', error?.message)
   }
   return { data: { id: data.id as string }, error: null }
@@ -121,11 +184,29 @@ export async function finishSessionAction(input: {
     celebrations?: Array<{ id: string; title: string; body: string | null }>
   }
 > {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return fail('You must be signed in to finish a session.')
+  const { userId } = await getAuthIdentity()
+  if (!userId) return fail('You must be signed in to finish a session.')
+  const user = { id: userId }
+
+  const { data: existing } = await supabase
+    .from('sessions')
+    .select(
+      'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
+    )
+    .eq('id', input.sessionId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (existing?.status === 'completed') {
+    return { data: existing as Session, celebrations: [], error: null }
+  }
+  if (existing?.status === 'cancelled') {
+    return fail('That workout was discarded and cannot be finished.')
+  }
 
   // Source of truth: recompute totals from the session's lift_logs rows.
   const { data: logs, error: logsError } = await supabase
@@ -154,6 +235,92 @@ export async function finishSessionAction(input: {
 
   const finishedAt = new Date().toISOString()
 
+  // Write PRs before marking the session completed so a PR failure never leaves
+  // a finished session without updated personal_records.
+  const celebrationPrs: Array<{ liftName: string; weight: number; reps: number }> =
+    []
+
+  const liftNameById = new Map<string, string>()
+  if (input.prs.length > 0) {
+    const liftTypeIds = [...new Set(input.prs.map((pr) => pr.liftTypeId))]
+    const { data: liftRows, error: liftFetchError } = await supabase
+      .from('lift_types')
+      .select('id, name')
+      .in('id', liftTypeIds)
+
+    if (liftFetchError) {
+      return fail(
+        'Could not load lift types for your personal records. Please try again.',
+        liftFetchError.message,
+      )
+    }
+
+    for (const lift of liftRows ?? []) {
+      liftNameById.set(lift.id as string, (lift.name as string) || 'Lift')
+    }
+  }
+
+  for (const pr of input.prs) {
+    const demoteQuery = pr.previousRecordId
+      ? supabase
+          .from('personal_records')
+          .update({ is_current_pr: false })
+          .eq('id', pr.previousRecordId)
+          .eq('user_id', user.id)
+      : supabase
+          .from('personal_records')
+          .update({ is_current_pr: false })
+          .eq('user_id', user.id)
+          .eq('lift_type_id', pr.liftTypeId)
+          .eq('is_current_pr', true)
+
+    const { data: demoted, error: demoteError } = await demoteQuery.select('id')
+
+    if (demoteError) {
+      logServerError('[session-actions] demote previous PR failed', demoteError)
+      return fail(
+        'Could not update your previous personal record. Please try again.',
+        demoteError.message,
+      )
+    }
+
+    if (pr.previousRecordId && (!demoted || demoted.length === 0)) {
+      logServerError('[session-actions] demote previous PR: no rows updated', {
+        previousRecordId: pr.previousRecordId,
+        liftTypeId: pr.liftTypeId,
+      })
+      return fail(
+        'Could not update your previous personal record. Please try again.',
+        'No matching PR row was updated.',
+      )
+    }
+
+    const liftName = liftNameById.get(pr.liftTypeId) ?? 'Lift'
+    const { error: insertError } = await supabase.from('personal_records').insert({
+      user_id: user.id,
+      lift_type_id: pr.liftTypeId,
+      lift_name: liftName,
+      weight: pr.weight,
+      reps: pr.reps,
+      is_current_pr: true,
+      logged_at: finishedAt,
+    })
+
+    if (insertError) {
+      logServerError('[session-actions] insert new PR failed', insertError)
+      return fail(
+        'Could not save your new personal record. Please try again.',
+        insertError.message,
+      )
+    }
+
+    celebrationPrs.push({
+      liftName,
+      weight: pr.weight,
+      reps: pr.reps,
+    })
+  }
+
   const { data, error } = await supabase
     .from('sessions')
     .update({
@@ -166,55 +333,32 @@ export async function finishSessionAction(input: {
     })
     .eq('id', input.sessionId)
     .eq('user_id', user.id)
+    .eq('status', 'in_progress')
     .select(
       'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
     )
-    .single()
+    .maybeSingle()
 
-  if (error || !data) {
-    return fail('Could not finish the session. Please try again.', error?.message)
+  if (error) {
+    return fail(
+      error.message || 'Could not finish the session. Please try again.',
+      error.message,
+    )
   }
 
-  // Upsert personal_records for any new PRs hit this session.
-  const celebrationPrs: Array<{ liftName: string; weight: number; reps: number }> =
-    []
-
-  for (const pr of input.prs) {
-    if (pr.previousRecordId) {
-      await supabase
-        .from('personal_records')
-        .update({ is_current_pr: false })
-        .eq('id', pr.previousRecordId)
-        .eq('user_id', user.id)
-    } else {
-      await supabase
-        .from('personal_records')
-        .update({ is_current_pr: false })
-        .eq('user_id', user.id)
-        .eq('lift_type_id', pr.liftTypeId)
-        .eq('is_current_pr', true)
-    }
-
-    await supabase.from('personal_records').insert({
-      user_id: user.id,
-      lift_type_id: pr.liftTypeId,
-      weight: pr.weight,
-      reps: pr.reps,
-      is_current_pr: true,
-      logged_at: finishedAt,
-    })
-
-    const { data: lift } = await supabase
-      .from('lift_types')
-      .select('name')
-      .eq('id', pr.liftTypeId)
+  if (!data) {
+    const { data: again } = await supabase
+      .from('sessions')
+      .select(
+        'id, user_id, split_id, split_day_id, status, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, created_at',
+      )
+      .eq('id', input.sessionId)
+      .eq('user_id', user.id)
       .maybeSingle()
-
-    celebrationPrs.push({
-      liftName: lift?.name ?? 'Lift',
-      weight: pr.weight,
-      reps: pr.reps,
-    })
+    if (again?.status === 'completed') {
+      return { data: again as Session, celebrations: [], error: null }
+    }
+    return fail('Could not finish the session. Please try again.')
   }
 
   let celebrations: Array<{ id: string; title: string; body: string | null }> =
@@ -244,6 +388,7 @@ export async function finishSessionAction(input: {
   revalidatePath('/dashboard/home')
   revalidatePath('/dashboard/profile')
   revalidatePath('/dashboard/ai-coach')
+  revalidatePath('/dashboard/history')
 
   return { data: data as Session, celebrations, error: null }
 }
@@ -270,4 +415,96 @@ export async function getCurrentPrsAction(
     return fail('Could not load personal records.', error.message)
   }
   return { data: (data ?? []) as PersonalRecord[], error: null }
+}
+
+export async function getActiveSessionAction(): Promise<
+  ActionResult<{
+    id: string
+    splitId: string
+    splitDayId: string
+    startedAt: string
+    splitName: string | null
+    dayName: string | null
+  } | null>
+> {
+  const { userId } = await getAuthIdentity()
+  if (!userId) return { data: null, error: null }
+  const { getInProgressSession } = await import('@/lib/data/queries')
+  const result = await getInProgressSession(userId)
+  if (result.error) return { data: null, error: result.error }
+  return { data: result.data, error: null }
+}
+
+export async function discardSessionAction(
+  sessionId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const guest = await rejectIfGuest()
+  if (guest) return fail(guest)
+
+  const supabase = await createClient()
+  const { userId } = await getAuthIdentity()
+  if (!userId) return fail('You must be signed in to discard a session.')
+
+  const id = sessionId.trim()
+  if (!id) return fail('Missing session id.')
+
+  const { data: pending } = await supabase
+    .from('sessions')
+    .select('id, status')
+    .eq('user_id', userId)
+    .eq('status', 'in_progress')
+
+  const ids = new Set((pending ?? []).map((row) => row.id as string))
+  ids.add(id)
+
+  for (const pendingId of ids) {
+    const { data: existing } = await supabase
+      .from('sessions')
+      .select('id, status')
+      .eq('id', pendingId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!existing) continue
+    if (existing.status === 'completed') {
+      if (pendingId === id && ids.size === 1) {
+        return fail('That workout is already finished and cannot be discarded.')
+      }
+      continue
+    }
+
+    await supabase.from('lift_logs').delete().eq('session_id', pendingId).eq('user_id', userId)
+
+    const { data: cancelled, error: cancelError } = await supabase
+      .from('sessions')
+      .update({
+        status: 'cancelled',
+        finished_at: new Date().toISOString(),
+      })
+      .eq('id', pendingId)
+      .eq('user_id', userId)
+      .neq('status', 'completed')
+      .select('id, status')
+      .maybeSingle()
+
+    if (cancelError || cancelled?.status !== 'cancelled') {
+      const { error: deleteError } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('id', pendingId)
+        .eq('user_id', userId)
+        .neq('status', 'completed')
+      if (deleteError) {
+        return fail(
+          'Could not discard that session. Please try again.',
+          deleteError.message,
+        )
+      }
+    }
+  }
+
+  revalidatePath('/dashboard/workout')
+  revalidatePath('/dashboard/home')
+  revalidatePath('/dashboard/history')
+  return { data: { id }, error: null }
 }

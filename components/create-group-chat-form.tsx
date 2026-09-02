@@ -22,7 +22,6 @@ type CreateGroupChatFormProps = {
 
 export function CreateGroupChatForm({ friends }: CreateGroupChatFormProps) {
   const t = useTranslations('messages')
-  const tCommon = useTranslations('common')
   const router = useRouter()
   const [name, setName] = useState('')
   const [query, setQuery] = useState('')

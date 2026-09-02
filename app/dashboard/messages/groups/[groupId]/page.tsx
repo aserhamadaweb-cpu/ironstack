@@ -1,6 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { GuestPageGate } from '@/components/guest-page-gate'
 import { GroupChatView } from '@/components/group-chat-view'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { getGroupChatForUser } from '@/lib/data/group-chats'
 import { getProfile } from '@/lib/data/queries'
 import { initialsFrom } from '@/lib/dashboard-utils'
@@ -39,8 +41,14 @@ export default async function GroupChatPage({ params }: PageProps) {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
+        isGuest={profileResult.data?.is_guest === true}
       />
+      <OfflineConnectionGate feature="messages">
+      <GuestPageGate reason="messages" returnPath={`/dashboard/messages/groups/${groupId}`}>
       <GroupChatView currentUserId={user.id} detail={detail} />
+      </GuestPageGate>
+      </OfflineConnectionGate>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { PersonalRecordsPageClient } from '@/components/personal-records-page'
 import { PageError } from '@/components/page-states'
@@ -33,9 +34,11 @@ export default async function PersonalRecordsPage() {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
         profileHref={profileHref(profileResult.data?.username, userId)}
       />
-      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <BackToTrainLink />
         <header>
           <p className="section-kicker">{t('kicker')}</p>
           <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">

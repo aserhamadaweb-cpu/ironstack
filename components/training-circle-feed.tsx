@@ -45,13 +45,7 @@ export function TrainingCircleAvatars({
       {friends.length === 0 && (
         <p className="max-w-xs py-2 text-sm leading-relaxed text-muted-foreground">
           {showAdd
-            ? t.rich('noFriendsYet', {
-                plus: () => (
-                  <span className="font-semibold text-gold" dir="ltr">
-                    +
-                  </span>
-                ),
-              })
+            ? t('noFriendsYet', { plus: '+' })
             : t('guestCircleEmpty')}
         </p>
       )}

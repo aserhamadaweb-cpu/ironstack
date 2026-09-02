@@ -8,8 +8,10 @@ import {
   BrainCircuit,
   ClipboardList,
   Compass,
+  Dumbbell,
   History,
   Home,
+  House,
   Layers,
   Medal,
   Menu,
@@ -23,12 +25,44 @@ import {
 import { useTranslations } from 'next-intl'
 import { useReducedMotion } from 'framer-motion'
 import { ChooseUsernameGate } from '@/components/choose-username-gate'
+import { CoachSuggestionToast } from '@/components/coach-suggestion-toast'
 import { FloatingActions } from '@/components/floating-actions'
 import { GuestBanner } from '@/components/guest-banner'
+import { useGuestGate } from '@/components/guest-gate-provider'
 import { IronStackMark } from '@/components/ironstack-mark'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
 import { NotificationBell } from '@/components/notification-bell'
+import { OfflineStatusBadges } from '@/components/offline-status-badges'
 import { useIsGuest } from '@/components/use-is-guest'
+import { useSuggestionBadge } from '@/components/use-suggestion-badge'
+import { getHomeSnapshot } from '@/lib/offline/cache'
+import { useOfflineStatus } from '@/lib/offline/provider'
+import {
+  APP_TOUR_CLOSE_SIDEBAR_EVENT,
+  APP_TOUR_END_EVENT,
+  APP_TOUR_OPEN_SIDEBAR_EVENT,
+} from '@/lib/app-tour'
+
+const NAV_AVATAR_STORAGE = 'ironstack-nav-avatar'
+
+function readStoredNavAvatar(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return usableAvatarUrl(sessionStorage.getItem(NAV_AVATAR_STORAGE))
+  } catch {
+    return null
+  }
+}
+
+function writeStoredNavAvatar(url: string | null) {
+  if (typeof window === 'undefined') return
+  try {
+    if (url) sessionStorage.setItem(NAV_AVATAR_STORAGE, url)
+    else sessionStorage.removeItem(NAV_AVATAR_STORAGE)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 type DashboardNavProps = {
   userName?: string
@@ -38,17 +72,21 @@ type DashboardNavProps = {
   isGuest?: boolean
 }
 
-type TabId = 'home' | 'workout' | 'messages' | 'challenges' | 'profile'
+type TabId = 'home' | 'workout' | 'profile'
 
 type NavId =
   | TabId
   | 'explore'
   | 'board'
   | 'splits'
+  | 'exercises'
+  | 'homeWorkouts'
   | 'history'
   | 'prs'
   | 'achievements'
   | 'coach'
+  | 'messages'
+  | 'challenges'
   | 'settings'
 
 type NavLink = {
@@ -57,12 +95,23 @@ type NavLink = {
   icon: typeof Home
 }
 
+const TOUR_NAV_ATTR: Partial<Record<NavId, string>> = {
+  home: 'nav-home',
+  workout: 'nav-workout',
+  exercises: 'nav-exercises',
+  homeWorkouts: 'nav-home-workouts',
+  history: 'nav-history',
+  coach: 'nav-coach',
+  settings: 'nav-settings',
+  messages: 'nav-messages',
+  profile: 'nav-profile',
+}
+
 type TabLink = {
   href: string
   id: TabId
   icon: typeof Home
-  labelKey: 'tabHome' | 'tabWorkout' | 'tabMessages' | 'tabChallenges' | 'tabProfile'
-  guestLock?: boolean
+  labelKey: 'tabHome' | 'tabWorkout' | 'tabProfile'
 }
 
 const tabs: TabLink[] = [
@@ -74,27 +123,22 @@ const tabs: TabLink[] = [
     labelKey: 'tabWorkout',
   },
   {
-    href: '/dashboard/messages',
-    id: 'messages',
-    icon: MessageSquare,
-    labelKey: 'tabMessages',
-    guestLock: true,
-  },
-  {
-    href: '/dashboard/challenges',
-    id: 'challenges',
-    icon: Swords,
-    labelKey: 'tabChallenges',
+    href: '/dashboard/profile',
+    id: 'profile',
+    icon: User,
+    labelKey: 'tabProfile',
   },
 ]
 
 const sidebarLinks: NavLink[] = [
   { href: '/dashboard/home', id: 'home', icon: Home },
   { href: '/dashboard/workout', id: 'workout', icon: ClipboardList },
+  { href: '/dashboard/home-workouts', id: 'homeWorkouts', icon: House },
   { href: '/dashboard/explore', id: 'explore', icon: Compass },
   { href: '/dashboard/messages', id: 'messages', icon: MessageSquare },
   { href: '/dashboard/leaderboard', id: 'board', icon: Trophy },
   { href: '/dashboard/splits', id: 'splits', icon: Layers },
+  { href: '/dashboard/exercises', id: 'exercises', icon: Dumbbell },
   { href: '/dashboard/history', id: 'history', icon: History },
   { href: '/dashboard/records', id: 'prs', icon: Trophy },
   { href: '/dashboard/achievements', id: 'achievements', icon: Medal },
@@ -113,6 +157,11 @@ const PREFETCH_ROUTES = [
   '/dashboard/ai-coach',
   '/dashboard/explore',
   '/dashboard/splits',
+  '/dashboard/splits/new',
+  '/dashboard/splits/ai-builder',
+  '/dashboard/splits/create',
+  '/dashboard/exercises',
+  '/dashboard/home-workouts',
   '/dashboard/history',
 ]
 
@@ -123,13 +172,15 @@ function isTabActive(pathname: string, id: TabId, href: string) {
       pathname.startsWith('/dashboard/lift-tracker') ||
       pathname.startsWith('/dashboard/analytics') ||
       pathname.startsWith('/dashboard/splits') ||
+      pathname.startsWith('/dashboard/exercises') ||
+      pathname.startsWith('/dashboard/home-workouts') ||
       pathname.startsWith('/dashboard/history') ||
       pathname.startsWith('/dashboard/sessions')
     )
   }
-  if (id === 'home') return pathname.startsWith('/dashboard/home')
-  if (id === 'messages') return pathname.startsWith('/dashboard/messages')
-  if (id === 'challenges') return pathname.startsWith('/dashboard/challenges')
+  if (id === 'home') {
+    return pathname === '/dashboard/home' || pathname.startsWith('/dashboard/home/')
+  }
   if (id === 'profile') {
     return (
       pathname.startsWith('/dashboard/profile') ||
@@ -160,7 +211,11 @@ function isSidebarActive(pathname: string, id: NavId, href: string) {
       pathname.startsWith('/dashboard/splits/')
     )
   }
-  if (id === 'home') return pathname.startsWith('/dashboard/home')
+  if (id === 'exercises') return pathname.startsWith('/dashboard/exercises')
+  if (id === 'homeWorkouts') return pathname.startsWith('/dashboard/home-workouts')
+  if (id === 'home') {
+    return pathname === '/dashboard/home' || pathname.startsWith('/dashboard/home/')
+  }
   if (id === 'messages') return pathname.startsWith('/dashboard/messages')
   if (id === 'explore') return pathname.startsWith('/dashboard/explore')
   if (id === 'board') return pathname.startsWith('/dashboard/leaderboard')
@@ -230,15 +285,17 @@ export function DashboardNav({
   isGuest: isGuestProp,
 }: DashboardNavProps) {
   const t = useTranslations('nav')
-  const tGuest = useTranslations('guest')
   const pathname = usePathname()
   const router = useRouter()
   const reduceMotion = useReducedMotion()
   const { isGuest: isGuestClient } = useIsGuest()
+  const { count: rawSuggestionCount } = useSuggestionBadge()
+  const { online, hydrated } = useOfflineStatus()
+  const floorMode = hydrated && !online
   const isGuest = Boolean(isGuestProp) || isGuestClient
+  const { openUpgrade } = useGuestGate()
   const hideTabBar = shouldHideTabBar(pathname)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [guestLockOpen, setGuestLockOpen] = useState(false)
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
 
@@ -247,11 +304,27 @@ export function DashboardNav({
     if (!reduceMotion) triggerIronStackNavTransition()
   }, [reduceMotion])
 
-  const openGuestLock = useCallback(() => setGuestLockOpen(true), [])
+  const openGuestLock = useCallback(
+    () => openUpgrade('messages'),
+    [openUpgrade],
+  )
 
   useEffect(() => {
     closeMenu()
   }, [pathname, closeMenu])
+
+  useEffect(() => {
+    const openForTour = () => setMenuOpen(true)
+    const closeForTour = () => setMenuOpen(false)
+    window.addEventListener(APP_TOUR_OPEN_SIDEBAR_EVENT, openForTour)
+    window.addEventListener(APP_TOUR_CLOSE_SIDEBAR_EVENT, closeForTour)
+    window.addEventListener(APP_TOUR_END_EVENT, closeForTour)
+    return () => {
+      window.removeEventListener(APP_TOUR_OPEN_SIDEBAR_EVENT, openForTour)
+      window.removeEventListener(APP_TOUR_CLOSE_SIDEBAR_EVENT, closeForTour)
+      window.removeEventListener(APP_TOUR_END_EVENT, closeForTour)
+    }
+  }, [])
 
   useEffect(() => {
     if (hideTabBar) {
@@ -265,16 +338,27 @@ export function DashboardNav({
   }, [hideTabBar])
 
   useEffect(() => {
+    if (isGuest) {
+      document.body.classList.add('has-guest-banner')
+    } else {
+      document.body.classList.remove('has-guest-banner')
+    }
+    return () => {
+      document.body.classList.remove('has-guest-banner')
+    }
+  }, [isGuest])
+
+  useEffect(() => {
     if (!menuOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu()
     }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    document.body.classList.add('nav-menu-scroll-lock')
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
+      document.body.classList.remove('nav-menu-scroll-lock')
+      document.body.style.removeProperty('overflow')
     }
   }, [menuOpen, closeMenu])
 
@@ -285,17 +369,49 @@ export function DashboardNav({
     }
   }, [router])
 
-  const profileLinkHref = profileHref?.trim() || '/dashboard/profile'
-  const photo = usableAvatarUrl(avatarUrl)
+  const profileLinkHref = floorMode
+    ? '/dashboard/profile'
+    : profileHref?.trim() || '/dashboard/profile'
+  const [cachedPhoto, setCachedPhoto] = useState<string | null>(readStoredNavAvatar)
+
+  useEffect(() => {
+    if (avatarUrl !== undefined) {
+      const next = usableAvatarUrl(avatarUrl)
+      writeStoredNavAvatar(next)
+      setCachedPhoto(next)
+      return
+    }
+    const stored = readStoredNavAvatar()
+    if (stored) setCachedPhoto(stored)
+    void getHomeSnapshot().then((snap) => {
+      const next = usableAvatarUrl(snap?.avatarUrl)
+      if (!next) return
+      writeStoredNavAvatar(next)
+      setCachedPhoto(next)
+    })
+  }, [avatarUrl])
+
+  const photo =
+    avatarUrl !== undefined ? usableAvatarUrl(avatarUrl) : cachedPhoto
   const onProfile =
     pathname.startsWith('/profile/') ||
     pathname.startsWith('/dashboard/profile')
 
   const visibleTabs = tabs
 
-  const visibleSidebarLinks = sidebarLinks.filter(
-    (link) => !(isGuest && (link.id === 'coach')),
-  )
+  const visibleSidebarLinks = sidebarLinks.filter((link) => {
+    if (isGuest && link.id === 'coach') return false
+    if (floorMode) {
+      return (
+        link.id === 'home' ||
+        link.id === 'workout' ||
+        link.id === 'exercises' ||
+        link.id === 'history' ||
+        link.id === 'settings'
+      )
+    }
+    return true
+  })
 
   const allSidebarLinks: NavLink[] = [
     ...visibleSidebarLinks,
@@ -303,6 +419,7 @@ export function DashboardNav({
   ]
 
   const labelFor = (id: NavId) => t(id)
+  const suggestionCount = isGuest ? 0 : rawSuggestionCount
 
   return (
     <>
@@ -314,7 +431,9 @@ export function DashboardNav({
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <button
               type="button"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-silver/15 text-foreground transition-colors active:border-gold/40 active:text-gold sm:size-11"
+              data-tour="nav-menu"
+              data-tour-spotlight="icon"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-silver/15 text-foreground transition-colors active:border-gold/40 active:text-gold"
               aria-expanded={menuOpen}
               aria-controls="site-nav-sidebar"
               aria-label={menuOpen ? t('closeMenu') : t('openMenu')}
@@ -323,13 +442,19 @@ export function DashboardNav({
               {menuOpen ? (
                 <X className="size-5" aria-hidden="true" />
               ) : (
-                <Menu className="size-5" aria-hidden="true" />
+                <span
+                  data-tour="nav-menu-icon"
+                  data-tour-spotlight="icon"
+                  className="inline-flex items-center justify-center"
+                >
+                  <Menu className="size-5" aria-hidden="true" />
+                </span>
               )}
             </button>
 
             <Link
               href="/dashboard/home"
-              className="flex min-h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-1 transition-opacity active:opacity-70 sm:min-h-11"
+              className="flex min-h-11 min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-1 transition-opacity active:opacity-70"
             >
               <IronStackMark size="sm" className="shrink-0" />
               <span className="font-heading text-metallic hidden min-w-0 truncate text-sm font-bold tracking-[0.18em] min-[480px]:inline">
@@ -339,12 +464,13 @@ export function DashboardNav({
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-            {!isGuest ? <NotificationBell /> : null}
+            <OfflineStatusBadges />
+            {!isGuest && !floorMode ? <NotificationBell /> : null}
 
             <Link
               href="/dashboard/settings"
               aria-label={t('settings')}
-              className={`inline-flex size-10 items-center justify-center rounded-lg border transition-colors active:opacity-80 sm:size-11 ${
+              className={`inline-flex size-11 items-center justify-center rounded-lg border transition-colors active:opacity-80 ${
                 isSidebarActive(pathname, 'settings', '/dashboard/settings')
                   ? 'border-gold/40 bg-gold-tint text-gold'
                   : 'border-border text-muted-foreground active:border-gold/40 active:text-gold'
@@ -355,7 +481,7 @@ export function DashboardNav({
 
             {onProfile ? (
               <div
-                className="inline-flex size-10 items-center justify-center sm:size-11"
+                className="inline-flex size-11 items-center justify-center"
                 aria-current="page"
               >
                 <NavFace photo={photo} initials={initials} />
@@ -365,7 +491,7 @@ export function DashboardNav({
               <Link
                 href={profileLinkHref}
                 aria-label={t('profile')}
-                className="inline-flex size-10 items-center justify-center rounded-full transition-opacity active:opacity-80 sm:size-11"
+                className="inline-flex size-11 items-center justify-center rounded-full transition-opacity active:opacity-80"
               >
                 <NavFace photo={photo} initials={initials} />
               </Link>
@@ -395,6 +521,7 @@ export function DashboardNav({
         id="site-nav-sidebar"
         role="navigation"
         aria-label={t('siteNav')}
+        data-tour="nav-sidebar"
         aria-hidden={!menuOpen}
         inert={!menuOpen ? true : undefined}
         className={`app-sidebar${menuOpen ? ' is-open' : ''}`}
@@ -424,23 +551,29 @@ export function DashboardNav({
             {allSidebarLinks.map((link) => {
               const active = isSidebarActive(pathname, link.id, link.href)
               const label = labelFor(link.id)
+              const tourAttr = TOUR_NAV_ATTR[link.id]
               return (
                 <li key={`${link.id}-${link.href}`}>
                   {active ? (
                     <span
                       aria-current="page"
+                      data-tour={tourAttr}
                       className="flex min-h-12 items-center gap-3 rounded-xl border border-gold/25 bg-gold-tint px-4 text-sm font-semibold tracking-[0.12em] text-gold"
                     >
                       <link.icon className="size-4" aria-hidden="true" />
                       {label}
                     </span>
-                  ) : isGuest && link.id === 'messages' ? (
+                  ) : isGuest &&
+                    (link.id === 'messages' || link.id === 'coach') ? (
                     <button
                       type="button"
+                      data-tour={tourAttr}
                       className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-start text-sm font-semibold tracking-[0.12em] text-muted-foreground transition-colors active:bg-silver/10 active:text-foreground"
                       onClick={() => {
                         closeMenu()
-                        openGuestLock()
+                        openUpgrade(
+                          link.id === 'coach' ? 'aiCoach' : 'messages',
+                        )
                       }}
                     >
                       <link.icon className="size-4" aria-hidden="true" />
@@ -449,11 +582,17 @@ export function DashboardNav({
                   ) : (
                     <Link
                       href={link.href}
+                      data-tour={tourAttr}
                       className="flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm font-semibold tracking-[0.12em] text-muted-foreground transition-colors active:bg-silver/10 active:text-foreground lg:hover:bg-silver/10 lg:hover:text-foreground"
                       onClick={closeMenu}
                     >
                       <link.icon className="size-4" aria-hidden="true" />
                       {label}
+                      {link.id === 'coach' && suggestionCount > 0 ? (
+                        <span className="ms-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold tabular-nums text-background">
+                          {suggestionCount > 9 ? '9+' : suggestionCount}
+                        </span>
+                      ) : null}
                     </Link>
                   )}
                 </li>
@@ -464,19 +603,22 @@ export function DashboardNav({
       </aside>
 
       {!hideTabBar && (
-        <nav className="app-tabbar" aria-label={t('primary')}>
+        <nav className="app-tabbar" aria-label={t('primary')} data-tour="nav-tabbar">
           <div className="mx-auto flex max-w-lg lg:max-w-none">
             {visibleTabs.map((tab) => {
               const active = isTabActive(pathname, tab.id, tab.href)
               const label = t(tab.labelKey)
               const Icon = tab.icon
               const className = 'app-tabbar-item'
+              const tourAttr = TOUR_NAV_ATTR[tab.id]
+              const href = tab.id === 'profile' ? profileLinkHref : tab.href
 
               if (active) {
                 return (
                   <span
                     key={tab.id}
                     aria-current="page"
+                    data-tour={tourAttr}
                     className={className}
                   >
                     <Icon className="size-5" aria-hidden="true" />
@@ -485,24 +627,11 @@ export function DashboardNav({
                 )
               }
 
-              if (isGuest && tab.guestLock) {
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={className}
-                    onClick={openGuestLock}
-                  >
-                    <Icon className="size-5" aria-hidden="true" />
-                    {label}
-                  </button>
-                )
-              }
-
               return (
                 <Link
                   key={tab.id}
-                  href={tab.href}
+                  href={href}
+                  data-tour={tourAttr}
                   className={className}
                   prefetch
                   onClick={onPrimaryTabClick}
@@ -516,47 +645,8 @@ export function DashboardNav({
         </nav>
       )}
 
-      <FloatingActions onGuestMessages={openGuestLock} />
-
-      {guestLockOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center">
-          <button
-            type="button"
-            className="absolute inset-0 bg-[var(--overlay-scrim)]"
-            aria-label={t('closeMenu')}
-            onClick={() => setGuestLockOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="guest-messages-lock-title"
-            className="is-panel relative z-10 w-full max-w-sm p-5"
-          >
-            <p
-              id="guest-messages-lock-title"
-              className="text-sm leading-relaxed text-foreground"
-            >
-              {tGuest('messagesLocked')}
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <Link
-                href="/dashboard/settings"
-                className="btn-pill inline-flex min-h-11 items-center justify-center bg-gold px-4 text-xs font-bold tracking-[0.16em] text-black"
-                onClick={() => setGuestLockOpen(false)}
-              >
-                {tGuest('messagesLockedCta')}
-              </Link>
-              <button
-                type="button"
-                className="inline-flex min-h-11 items-center justify-center rounded-full text-xs font-semibold tracking-[0.14em] text-muted-foreground"
-                onClick={() => setGuestLockOpen(false)}
-              >
-                {t('closeMenu')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {!floorMode ? <FloatingActions onGuestMessages={openGuestLock} /> : null}
+      {!floorMode && !isGuest ? <CoachSuggestionToast /> : null}
     </>
   )
 }

@@ -3,14 +3,20 @@ import type {
   DmMessage,
   DmThread,
   Follower,
-  Profile,
+  PublicProfile,
   SessionWithRelations,
 } from '@/lib/database.types'
+import { PUBLIC_PROFILE_COLUMNS } from '@/lib/database.types'
 import type { EarnedAchievement } from '@/lib/achievements'
 import { listEarnedAchievementsForProfile } from '@/lib/data/achievements'
 import { buildActivityHeatmap, type HeatmapCell } from '@/lib/heatmap'
 import { isProfileUserIdParam, orderedDmPair } from '@/lib/profile-path'
 import { fetchStreakStatus } from '@/lib/data/streak'
+import {
+  fetchPublicProfileByUsernameOrId,
+  fetchPublicProfilesByIds,
+  friendlyPublicProfileError,
+} from '@/lib/data/public-profiles'
 
 /** Directional friendship: requester → recipient until accepted. */
 export type FriendshipRelation = 'none' | 'outgoing' | 'incoming' | 'friends'
@@ -36,7 +42,7 @@ export type SharedSplitCard = {
 }
 
 export type PublicProfileBundle = {
-  profile: Profile
+  profile: PublicProfile
   streakDays: number
   /** Hours until streak expires. null = never trained; 0 = ended. */
   streakHoursLeft: number | null
@@ -69,30 +75,14 @@ export type PublicProfileBundle = {
 
 export async function getProfileByUsername(
   username: string,
-): Promise<Profile | null> {
+): Promise<PublicProfile | null> {
   const supabase = await createClient()
-  const raw = username.trim()
-  if (!raw) return null
-
-  if (isProfileUserIdParam(raw)) {
-    const { data } = await supabase
-      .from('profiles')
-      .select(
-        'id, username, display_name, avatar_url, bio, preferred_unit, height_cm, gender, birth_date, current_weight_kg, created_at, updated_at',
-      )
-      .eq('id', raw)
-      .maybeSingle()
-    return (data as Profile | null) ?? null
-  }
-
-  const { data } = await supabase
-    .from('profiles')
-    .select(
-      'id, username, display_name, avatar_url, bio, preferred_unit, height_cm, gender, birth_date, current_weight_kg, created_at, updated_at',
-    )
-    .eq('username', raw.toLowerCase())
-    .maybeSingle()
-  return (data as Profile | null) ?? null
+  const { data, error } = await fetchPublicProfileByUsernameOrId(
+    supabase,
+    username,
+  )
+  if (error) return null
+  return data
 }
 
 export async function getFollowCounts(userId: string) {
@@ -170,7 +160,7 @@ export async function getFriendshipRelation(
 export async function listIncomingFriendRequests(
   userId: string,
 ): Promise<
-  Array<Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>>
+  Array<Pick<PublicProfile, 'id' | 'username' | 'display_name' | 'avatar_url'>>
 > {
   const supabase = await createClient()
   const { data: rows } = await supabase
@@ -184,22 +174,18 @@ export async function listIncomingFriendRequests(
   const ids = (rows ?? []).map((r) => r.user_id)
   if (ids.length === 0) return []
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url')
-    .in('id', ids)
+  const { data: profiles } = await fetchPublicProfilesByIds(supabase, ids)
 
   const map = new Map((profiles ?? []).map((p) => [p.id, p]))
   return ids
     .map((id) => map.get(id))
-    .filter(
-      (
-        p,
-      ): p is Pick<
-        Profile,
-        'id' | 'username' | 'display_name' | 'avatar_url'
-      > => Boolean(p),
-    )
+    .filter((p): p is PublicProfile => Boolean(p))
+    .map((p) => ({
+      id: p.id,
+      username: p.username,
+      display_name: p.display_name,
+      avatar_url: p.avatar_url,
+    }))
 }
 
 const bundleInflight = new Map<
@@ -216,24 +202,41 @@ async function loadPublicProfileBundle(
   const raw = username.trim()
   if (!raw) return { data: null, error: 'Profile not found.' }
 
-  const profileQuery = isProfileUserIdParam(raw)
-    ? supabase
-        .from('profiles')
-        .select(
-          'id, username, display_name, avatar_url, bio, preferred_unit, height_cm, gender, birth_date, current_weight_kg, created_at, updated_at',
-        )
-        .eq('id', raw)
-        .maybeSingle()
-    : supabase
-        .from('profiles')
-        .select(
-          'id, username, display_name, avatar_url, bio, preferred_unit, height_cm, gender, birth_date, current_weight_kg, created_at, updated_at',
-        )
-        .eq('username', raw.toLowerCase())
-        .maybeSingle()
-
-  const { data: profileRow } = await profileQuery
-  const profile = (profileRow as Profile | null) ?? null
+  const profileQueryResult = await fetchPublicProfileByUsernameOrId(
+    supabase,
+    raw,
+  )
+  if (profileQueryResult.error) {
+    return {
+      data: null,
+      error: friendlyPublicProfileError(
+        'Could not load this profile.',
+        profileQueryResult.error,
+      ),
+    }
+  }
+  let profile = profileQueryResult.data
+  if (
+    !profile &&
+    isProfileUserIdParam(raw) &&
+    raw === viewerId
+  ) {
+    const { data: ownProfile, error: ownError } = await supabase
+      .from('profiles')
+      .select(PUBLIC_PROFILE_COLUMNS)
+      .eq('id', viewerId)
+      .maybeSingle()
+    if (ownError) {
+      return {
+        data: null,
+        error: friendlyPublicProfileError(
+          'Could not load this profile.',
+          ownError.message,
+        ),
+      }
+    }
+    profile = (ownProfile as PublicProfile | null) ?? null
+  }
   if (!profile) return { data: null, error: 'Profile not found.' }
 
   const heatmapSince = new Date()
@@ -609,17 +612,14 @@ export async function listProfileSocial(
   if (ids.length === 0) return []
 
   const [{ data: profiles }, flags] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', ids),
+    fetchPublicProfilesByIds(supabase, ids),
     relationFlags(viewerId, ids),
   ])
 
   const order = new Map(ids.map((id, i) => [id, i]))
 
   return ((profiles ?? []) as Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   >[])
     .map((p) => {
@@ -644,7 +644,7 @@ export async function listProfileSocial(
 export type DmThreadListItem = {
   /** Null when this is an accepted friend with no dm_thread yet. */
   thread: DmThread | null
-  other: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>
+  other: Pick<PublicProfile, 'id' | 'username' | 'display_name' | 'avatar_url'>
   lastMessage: Pick<DmMessage, 'content' | 'created_at' | 'sender_id'> | null
   unreadHint: boolean
 }
@@ -685,10 +685,7 @@ export async function listDmThreads(userId: string): Promise<DmThreadListItem[]>
   const profileIds = [...new Set([...threadOtherIds, ...friendIds])]
   if (profileIds.length === 0) return []
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url')
-    .in('id', profileIds)
+  const { data: profiles } = await fetchPublicProfilesByIds(supabase, profileIds)
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
 
@@ -709,7 +706,12 @@ export async function listDmThreads(userId: string): Promise<DmThreadListItem[]>
 
     items.push({
       thread,
-      other,
+      other: {
+        id: other.id,
+        username: other.username,
+        display_name: other.display_name,
+        avatar_url: other.avatar_url,
+      },
       lastMessage: last
         ? {
             content: last.content,
@@ -725,14 +727,7 @@ export async function listDmThreads(userId: string): Promise<DmThreadListItem[]>
   const friendsWithoutThread = friendIds
     .filter((id) => !partnersWithThread.has(id))
     .map((id) => profileMap.get(id))
-    .filter(
-      (
-        p,
-      ): p is Pick<
-        Profile,
-        'id' | 'username' | 'display_name' | 'avatar_url'
-      > => Boolean(p),
-    )
+    .filter((p): p is PublicProfile => Boolean(p))
     .sort((a, b) => {
       const an = (a.display_name || a.username || '').toLowerCase()
       const bn = (b.display_name || b.username || '').toLowerCase()
@@ -740,7 +735,12 @@ export async function listDmThreads(userId: string): Promise<DmThreadListItem[]>
     })
     .map((other) => ({
       thread: null,
-      other,
+      other: {
+        id: other.id,
+        username: other.username,
+        display_name: other.display_name,
+        avatar_url: other.avatar_url,
+      },
       lastMessage: null,
       unreadHint: false,
     }))
@@ -753,14 +753,14 @@ export async function getThreadForUser(
   userId: string,
 ): Promise<{
   thread: DmThread
-  other: Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>
+  other: Pick<PublicProfile, 'id' | 'username' | 'display_name' | 'avatar_url'>
   messages: DmMessage[]
   isFriend: boolean
 } | null> {
   const supabase = await createClient()
   const { data: thread } = await supabase
     .from('dm_threads')
-    .select('id, user_a_id, user_b_id, status, created_at, updated_at')
+    .select('id, user_a_id, user_b_id, initiated_by, status, created_at, updated_at')
     .eq('id', threadId)
     .maybeSingle()
 
@@ -769,12 +769,8 @@ export async function getThreadForUser(
 
   const otherId =
     thread.user_a_id === userId ? thread.user_b_id : thread.user_a_id
-  const [{ data: other }, { data: messages }, friend] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .eq('id', otherId)
-      .maybeSingle(),
+  const [{ data: others }, { data: messages }, friend] = await Promise.all([
+    fetchPublicProfilesByIds(supabase, [otherId]),
     supabase
       .from('dm_messages')
       .select('id, thread_id, sender_id, content, created_at')
@@ -784,11 +780,17 @@ export async function getThreadForUser(
     areFriends(userId, otherId),
   ])
 
+  const other = others[0]
   if (!other) return null
 
   return {
     thread: thread as DmThread,
-    other,
+    other: {
+      id: other.id,
+      username: other.username,
+      display_name: other.display_name,
+      avatar_url: other.avatar_url,
+    },
     messages: (messages ?? []) as DmMessage[],
     isFriend: friend,
   }
@@ -834,10 +836,12 @@ export async function findOrCreateDmThread(
     status: 'pending' as const,
   }
 
-  console.info('[dm_threads] insert', {
-    ...row,
-    auth_uid: user.id,
-  })
+  if (process.env.NODE_ENV === 'development') {
+    console.info('[dm_threads] insert', {
+      ...row,
+      auth_uid: user.id,
+    })
+  }
 
   const { data: created, error } = await supabase
     .from('dm_threads')

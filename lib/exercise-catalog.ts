@@ -9,6 +9,11 @@ export type ExerciseCatalogItem = {
   imageUrl?: string | null
   /** Extra display tags (equipment, etc.). */
   tags?: string[]
+  bodyPart?: string | null
+  target?: string | null
+  equipment?: string | null
+  /** Details page for Gym visual catalog ids (0001). Null for lift_types UUIDs. */
+  detailsHref?: string | null
   /** Opaque original payload for callers that need it. */
   source?: unknown
 }
@@ -41,7 +46,20 @@ const MUSCLE_NORMALIZE: Record<string, string> = {
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
   calves: 'Calves',
+  pectorals: 'Chest',
+  delts: 'Shoulders',
+  deltoids: 'Shoulders',
+  'rear deltoids': 'Shoulders',
+  'upper back': 'Back',
+  spine: 'Back',
+  rhomboids: 'Back',
+  'latissimus dorsi': 'Back',
+  trapezius: 'Traps',
   abs: 'Abs',
+  obliques: 'Abs',
+  'cardiovascular system': 'Cardio',
+  cardio: 'Cardio',
+  'levator scapulae': 'Neck',
   abdominals: 'Abs',
   core: 'Abs',
   forearms: 'Forearms',
@@ -84,7 +102,24 @@ export type ExerciseCatalogQuery = {
   search: string
   muscles: string[]
   category: string | null
+  equipment?: string | null
+  target?: string | null
   sort: ExerciseSort
+}
+
+function searchHaystack(item: ExerciseCatalogItem): string {
+  return [
+    item.name,
+    item.muscleGroup,
+    item.category,
+    item.bodyPart,
+    item.target,
+    item.equipment,
+    ...(item.tags ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
 
 export function filterAndSortExercises(
@@ -93,14 +128,22 @@ export function filterAndSortExercises(
 ): ExerciseCatalogItem[] {
   const q = query.search.trim().toLowerCase()
   const filtered = items.filter((item) => {
-    if (q && !item.name.toLowerCase().includes(q)) return false
+    if (q && !searchHaystack(item).includes(q)) return false
     if (query.muscles.length > 0) {
       const muscle = item.muscleGroup
       if (!muscle || !query.muscles.includes(muscle)) return false
     }
     if (query.category) {
-      const cat = normalizeCategory(item.category)
+      const cat = normalizeCategory(item.category ?? item.bodyPart)
       if (cat !== query.category) return false
+    }
+    if (query.equipment) {
+      const equipment = (item.equipment ?? item.tags?.[0] ?? '').toLowerCase()
+      if (equipment !== query.equipment.toLowerCase()) return false
+    }
+    if (query.target) {
+      const target = (item.target ?? '').toLowerCase()
+      if (target !== query.target.toLowerCase()) return false
     }
     return true
   })
@@ -121,8 +164,26 @@ export function filterAndSortExercises(
 export function collectCategories(items: ExerciseCatalogItem[]): string[] {
   const set = new Set<string>()
   for (const item of items) {
-    const cat = normalizeCategory(item.category)
+    const cat = normalizeCategory(item.category ?? item.bodyPart)
     if (cat) set.add(cat)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b))
+}
+
+export function collectEquipment(items: ExerciseCatalogItem[]): string[] {
+  const set = new Set<string>()
+  for (const item of items) {
+    const value = (item.equipment ?? item.tags?.[0] ?? '').trim()
+    if (value) set.add(value)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b))
+}
+
+export function collectTargets(items: ExerciseCatalogItem[]): string[] {
+  const set = new Set<string>()
+  for (const item of items) {
+    const value = item.target?.trim()
+    if (value) set.add(value)
   }
   return [...set].sort((a, b) => a.localeCompare(b))
 }
@@ -135,15 +196,26 @@ export function libraryToCatalogItem(
     equipment?: string
     category?: string | null
     image: string | null
+    bodyPart?: string | null
+    target?: string | null
+    muscleGroup?: string | null
   },
 ): ExerciseCatalogItem {
   return {
     id: exercise.id,
     name: exercise.name,
-    muscleGroup: normalizeMuscleGroup(exercise.muscles[0] ?? null),
-    category: normalizeCategory(exercise.category),
+    muscleGroup: normalizeMuscleGroup(
+      exercise.muscles[0] ?? exercise.muscleGroup ?? null,
+    ),
+    category: normalizeCategory(exercise.category ?? exercise.bodyPart),
     imageUrl: exercise.image,
     tags: exercise.equipment ? [exercise.equipment] : [],
+    bodyPart: exercise.bodyPart ?? exercise.category ?? null,
+    target: exercise.target ?? null,
+    equipment: exercise.equipment ?? null,
+    detailsHref: /^\d{4}$/.test(exercise.id)
+      ? `/dashboard/exercises/${exercise.id}`
+      : null,
     source: exercise,
   }
 }

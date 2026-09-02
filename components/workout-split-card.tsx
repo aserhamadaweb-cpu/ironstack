@@ -1,0 +1,205 @@
+'use client'
+
+import Link from 'next/link'
+import { useTranslations } from 'next-intl'
+import {
+  CalendarDays,
+  Clock3,
+  Dumbbell,
+  Loader2,
+  Play,
+  Share2,
+  Star,
+  Trash2,
+} from 'lucide-react'
+import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
+import { ACCENT, toneForFocus } from '@/lib/accent'
+
+export type WorkoutSplitCardData = {
+  id: string
+  slug: string
+  name: string
+  days: number
+  focus: string
+  description?: string | null
+  isShared?: boolean
+  /** Formatted saved date (updated_at, fallback created_at). */
+  savedDate?: string | null
+}
+
+type WorkoutSplitCardProps = {
+  split: WorkoutSplitCardData
+  primarySplitId?: string | null
+  isShared?: boolean
+  /** Train tab — start + view only. */
+  compact?: boolean
+  onStart: (slug: string) => void
+  onDelete?: (id: string, name: string) => void
+  onShareToggle?: (id: string) => void
+  onOpenShare?: (split: WorkoutSplitCardData) => void
+  onSetPrimary?: (id: string) => void
+  deleting?: boolean
+  sharing?: boolean
+  settingPrimary?: boolean
+  pending?: boolean
+}
+
+/** Gold fill — avoids CTA_PRIMARY (near-white) blending into card on dark theme. */
+const START_CTA =
+  'inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gold text-sm font-bold tracking-[0.18em] text-black transition-all duration-200 hover:scale-[1.02] hover:bg-gold/90 active:scale-[0.98]'
+
+export function WorkoutSplitCard({
+  split,
+  primarySplitId = null,
+  isShared = false,
+  compact = false,
+  onStart,
+  onDelete,
+  onShareToggle,
+  onOpenShare,
+  onSetPrimary,
+  deleting = false,
+  sharing = false,
+  settingPrimary = false,
+  pending = false,
+}: WorkoutSplitCardProps) {
+  const t = useTranslations('workout')
+  const tShare = useTranslations('splitShare')
+  const tone = ACCENT[toneForFocus(split.focus)]
+  const isPrimary =
+    Boolean(primarySplitId) &&
+    (split.id === primarySplitId || split.slug === primarySplitId)
+
+  return (
+    <article
+      className={`workout-split-card group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-card p-5 transition-all duration-200 hover:border-gold/30 sm:p-6 ${tone.edge} ${
+        isPrimary ? 'border-gold/45 ring-1 ring-gold/20' : 'border-border'
+      }`}
+    >
+      <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
+        <div
+          className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${tone.chip}`}
+        >
+          <Dumbbell className="size-5" aria-hidden="true" />
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {isPrimary ? (
+            <span className="inline-flex max-w-full items-center rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-gold">
+              {t('activeProgramBadge')}
+            </span>
+          ) : null}
+          {isShared ? (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-blue/35 bg-blue-tint/40 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-blue">
+              <Share2 className="size-3 shrink-0" aria-hidden="true" />
+              {t('sharedBadge')}
+            </span>
+          ) : null}
+          <span
+            className={`max-w-full truncate rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.15em] ${tone.badge}`}
+          >
+            {isLatinFragment(split.focus)
+              ? split.focus.toUpperCase()
+              : split.focus}
+          </span>
+          {!compact && onDelete ? (
+            <button
+              type="button"
+              onClick={() => onDelete(split.id, split.name)}
+              disabled={deleting || pending}
+              aria-label={t('deleteAria', { name: split.name })}
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-silver/15 bg-background/50 text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <h3 className="workout-split-copy font-heading text-xl font-bold text-foreground">
+        {split.name}
+      </h3>
+      {split.description ? (
+        <p className="workout-split-copy mt-1.5 line-clamp-3 text-sm text-muted-foreground">
+          {split.description}
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarDays className={`size-3.5 shrink-0 ${tone.text}`} aria-hidden="true" />
+          {t('daysPerWeek', { count: split.days })}
+        </span>
+        {split.savedDate ? (
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <Clock3 className={`size-3.5 shrink-0 ${tone.text}`} aria-hidden="true" />
+            <LtrIsolate when={isLatinFragment(split.savedDate)} className="truncate">
+              {split.savedDate}
+            </LtrIsolate>
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-auto flex flex-col gap-2 pt-5">
+        <button
+          type="button"
+          data-tour="workout-start-cta"
+          onClick={() => onStart(split.slug)}
+          className={START_CTA}
+        >
+          <Play className="size-4 fill-current" aria-hidden="true" />
+          {t('startSession')}
+        </button>
+        <Link
+          href={`/dashboard/splits/${split.slug}`}
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-silver/15 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold"
+        >
+          {t('viewSplit')}
+        </Link>
+        {!compact && !isPrimary && onSetPrimary ? (
+          <button
+            type="button"
+            onClick={() => onSetPrimary(split.id)}
+            disabled={settingPrimary || pending}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gold/30 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/10 disabled:opacity-50"
+          >
+            {settingPrimary ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Star className="size-3.5" aria-hidden="true" />
+            )}
+            {t('setAsPrimary')}
+          </button>
+        ) : null}
+        {!compact && onOpenShare ? (
+          <button
+            type="button"
+            onClick={() => onOpenShare(split)}
+            disabled={pending}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gold/30 bg-gold/10 text-xs font-semibold tracking-[0.12em] text-gold transition hover:border-gold/50 disabled:opacity-60"
+          >
+            <Share2 className="size-3.5" aria-hidden="true" />
+            {tShare('shareSplit')}
+          </button>
+        ) : null}
+        {!compact && onShareToggle ? (
+          <button
+            type="button"
+            onClick={() => onShareToggle(split.id)}
+            disabled={sharing || pending}
+            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border text-xs font-semibold tracking-[0.12em] transition disabled:opacity-60 ${
+              isShared
+                ? 'border-blue/35 bg-blue-tint/30 text-blue hover:border-blue/50'
+                : 'border-silver/15 text-muted-foreground hover:border-blue/35 hover:text-blue'
+            }`}
+          >
+            {sharing ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Share2 className="size-3.5" aria-hidden="true" />
+            )}
+            {isShared ? t('sharedUnshare') : t('shareToProfile')}
+          </button>
+        ) : null}
+      </div>
+    </article>
+  )
+}

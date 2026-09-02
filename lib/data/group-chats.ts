@@ -7,12 +7,14 @@ import type {
   GroupChatMemberRole,
   GroupMessage,
   GroupMessageWithSender,
-  Profile,
+  PublicProfile,
 } from '@/lib/database.types'
 import { createClient } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
+import { fetchPublicProfilesByIds } from '@/lib/data/public-profiles'
 
 type ProfileLite = Pick<
-  Profile,
+  PublicProfile,
   'id' | 'username' | 'display_name' | 'avatar_url'
 >
 
@@ -47,13 +49,8 @@ async function loadProfiles(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ids: string[],
 ): Promise<Map<string, ProfileLite>> {
-  const unique = [...new Set(ids.filter(Boolean))]
-  if (unique.length === 0) return new Map()
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url')
-    .in('id', unique)
-  return new Map(((data ?? []) as ProfileLite[]).map((p) => [p.id, p]))
+  const { data } = await fetchPublicProfilesByIds(supabase, ids)
+  return new Map((data ?? []).map((p) => [p.id, p]))
 }
 
 export async function listGroupChatsForUser(
@@ -195,6 +192,9 @@ export async function createGroupChatAction(input: {
   name: string
   memberIds: string[]
 }): Promise<{ ok: true; groupId: string } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 
@@ -269,6 +269,9 @@ export async function sendGroupMessageAction(input: {
   groupId: string
   content: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 
@@ -301,6 +304,9 @@ export async function sendGroupMessageAction(input: {
 export async function leaveGroupChatAction(
   groupId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 
@@ -331,6 +337,9 @@ export async function removeGroupMemberAction(input: {
   groupId: string
   memberUserId: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
   if (input.memberUserId === user.id) {
@@ -364,6 +373,9 @@ export async function renameGroupChatAction(input: {
   groupId: string
   name: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
   const { supabase, user } = await requireUser()
   if (!user) return fail('Not signed in.')
 

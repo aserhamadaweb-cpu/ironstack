@@ -1,5 +1,6 @@
 import { Dumbbell } from 'lucide-react'
 import Link from 'next/link'
+import { buildAuthEntryHref } from '@/lib/auth-entry'
 
 export function WhyIronStack() {
   return (
@@ -30,7 +31,7 @@ export function WhyIronStack() {
       <p className="mt-8 text-center text-sm text-muted-foreground">
         Already training with us?{' '}
         <Link
-          href="/login"
+          href={buildAuthEntryHref()}
           className="font-semibold text-gold underline-offset-4 active:opacity-80"
         >
           Sign in

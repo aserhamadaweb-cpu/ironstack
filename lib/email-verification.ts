@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-/** Kept for a future Confirm-email / verified-domain rollout. Not used in signup while Confirm email is off. */
+/** Optional guest-upgrade helpers. Not used for email/password sign-up (Confirm email is off). */
 
 export async function sendVerificationCode(supabase: SupabaseClient) {
   const { data, error } = await supabase.functions.invoke(

@@ -1,5 +1,7 @@
-import { notFound, redirect } from 'next/navigation'
-import { PageError } from '@/components/page-states'
+import { redirect } from 'next/navigation'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { SplitEditGate } from '@/components/split-local-gate'
+import { SplitEditOfflineGuard } from '@/components/split-edit-offline-guard'
 import { SplitBuilder, type SplitBuilderInitial } from '@/components/split-builder'
 import { getProfile, getSplitDetail } from '@/lib/data/queries'
 import { toSplitDetail } from '@/lib/data/split-adapter'
@@ -38,7 +40,7 @@ function toBuilderInitial(
       subtitle: day.note || null,
       exercises: day.exercises.map((exercise, exIndex) => {
         const resolved =
-          resolveLibraryExercise(exercise.name) ??
+          resolveLibraryExercise(exercise.name, exercise.liftTypeId) ??
           ({
             id: exercise.liftTypeId || `custom-${dayIndex}-${exIndex}`,
             name: exercise.name,
@@ -75,17 +77,21 @@ export default async function EditSplitPage({ params }: Params) {
     getProfile(user.id),
   ])
 
-  if (splitResult.error || profileResult.error) {
+  const displayName =
+    profileResult.data?.display_name ||
+    user.email?.split('@')[0] ||
+    'Athlete'
+
+  if (!splitResult.data) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError
-          message={splitResult.error || profileResult.error || 'Error'}
-        />
-      </main>
+      <SplitEditGate
+        slug={slug}
+        displayName={displayName}
+        initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
+      />
     )
   }
-
-  if (!splitResult.data) notFound()
 
   const raw = splitResult.data
   if (raw.user_id !== user.id || raw.is_system) {
@@ -93,19 +99,21 @@ export default async function EditSplitPage({ params }: Params) {
   }
 
   const detail = enrichSplitFromLibrary(toSplitDetail(raw))
-  const displayName =
-    profileResult.data?.display_name ||
-    user.email?.split('@')[0] ||
-    'Athlete'
 
   return (
-    <SplitBuilder
+    <GuestPageGate
+      reason="editSplit"
+      returnPath={`/dashboard/splits/${slug}/edit`}
+    >
+    <SplitEditOfflineGuard
       library={loadExerciseLibrary()}
       displayName={displayName}
       initials={initialsFrom(displayName)}
+      avatarUrl={profileResult.data?.avatar_url}
       mode="edit"
       editSplitId={raw.id}
       initial={toBuilderInitial(detail)}
     />
+    </GuestPageGate>
   )
 }

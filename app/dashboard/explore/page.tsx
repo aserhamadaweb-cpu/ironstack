@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function ExplorePage() {
   const { userId, email } = await getAuthIdentity()
-  if (!userId) redirect('/login')
+  if (!userId) redirect('/login?next=/dashboard/explore')
 
   const [profileResult, boardResult] = await Promise.all([
     getProfile(userId),
@@ -28,10 +28,11 @@ export default async function ExplorePage() {
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
         profileHref={profileHref(profileResult.data?.username, userId)}
         isGuest={profileResult.data?.is_guest === true}
       />
-      <main className="pb-24 md:pb-8">
+      <main>
         <ExplorePageClient
           previewRows={boardResult.data ?? []}
           currentUserId={userId}

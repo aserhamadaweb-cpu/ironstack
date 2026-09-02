@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import 'server-only'
 
 /**
  * Service-role client for privileged server routes (e.g. send-push).

@@ -7,15 +7,28 @@ import { GeminiRateLimitError, runCoachTurn } from '@/lib/ai/coach'
 import {
   getConversationForUser,
   getOrCreateLatestConversation,
+  hydrateAgentActionStatuses,
   insertAiMessage,
   listConversations,
   mapMessagesWithUsedTools,
+  extractCoachActionFromTrace,
   type AiMessageRow,
 } from '@/lib/ai/conversations'
 import {
   formatMemoriesForPrompt,
   getActiveMemories,
 } from '@/lib/ai/memory'
+import { isSplitProposal } from '@/lib/ai/action-types'
+import { formatProposalForRevision } from '@/lib/ai/proposal-revision'
+import { isSplitBuildIntent } from '@/lib/ai/split-intent'
+import {
+  formatSplitContextForPrompt,
+  loadSplitBuildContext,
+} from '@/lib/ai/split-context'
+import {
+  formatSessionContextForPrompt,
+  parseSessionCoachContext,
+} from '@/lib/ai/session-context'
 import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
@@ -28,6 +41,13 @@ export async function GET(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (user.is_anonymous) {
+    return NextResponse.json(
+      { error: 'Create an account to use AI Coach.' },
+      { status: 403 },
+    )
   }
 
   try {
@@ -46,7 +66,10 @@ export async function GET(request: Request) {
       return NextResponse.json({
         conversationId: loaded.conversation.id,
         title: loaded.conversation.title,
-        messages: mapMessagesWithUsedTools(loaded.messages),
+        messages: await hydrateAgentActionStatuses(
+          user.id,
+          mapMessagesWithUsedTools(loaded.messages),
+        ),
         conversations,
       })
     }
@@ -57,7 +80,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       conversationId: conversation.id,
       title: conversation.title,
-      messages: mapMessagesWithUsedTools(messages),
+      messages: await hydrateAgentActionStatuses(
+        user.id,
+        mapMessagesWithUsedTools(messages),
+      ),
       conversations:
         conversations.length > 0
           ? conversations
@@ -82,10 +108,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (user.is_anonymous) {
+    return NextResponse.json(
+      { error: 'Create an account to use AI Coach.' },
+      { status: 403 },
+    )
+  }
+
   let body: {
     message?: string
     conversationId?: string
     action?: 'new' | 'chat'
+    reviseProposal?: unknown
+    ephemeral?: boolean
+    sessionContext?: unknown
+    history?: Array<{ role?: string; content?: string }>
   }
   try {
     body = await request.json()
@@ -127,7 +164,70 @@ export async function POST(request: Request) {
     )
   }
 
+  const sessionContext = parseSessionCoachContext(body.sessionContext)
+  const ephemeral = Boolean(body.ephemeral && sessionContext)
+
+  if (body.ephemeral && !sessionContext) {
+    return NextResponse.json(
+      { error: 'Valid sessionContext is required for in-workout chat.' },
+      { status: 400 },
+    )
+  }
+
   try {
+    if (ephemeral && sessionContext) {
+      const clientHistory = Array.isArray(body.history)
+        ? body.history
+            .filter(
+              (row) =>
+                row &&
+                (row.role === 'user' || row.role === 'assistant') &&
+                typeof row.content === 'string',
+            )
+            .slice(-20)
+            .map((row) => ({
+              role: row.role as 'user' | 'assistant',
+              content: String(row.content).slice(0, 4000),
+            }))
+        : []
+
+      const profileLang = await supabase
+        .from('profiles')
+        .select('language')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then((r) => (r.data?.language === 'ar' ? 'ar' : 'en') as 'en' | 'ar')
+
+      const [memories] = await Promise.all([getActiveMemories(user.id)])
+      const memoryBlock = [
+        formatMemoriesForPrompt(memories),
+        formatSessionContextForPrompt(sessionContext),
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+
+      const { text, toolTrace } = await runCoachTurn({
+        userId: user.id,
+        conversationId: null,
+        history: clientHistory,
+        userMessage: message,
+        memoryBlock,
+        locale: profileLang,
+        liveSessionMode: true,
+      })
+
+      return NextResponse.json({
+        ephemeral: true,
+        assistantMessage: {
+          id: `ephemeral-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          createdAt: new Date().toISOString(),
+          usedTools: toolTrace.some((t) => t.name !== 'save_user_note'),
+        },
+      })
+    }
+
     let conversationId = body.conversationId
     let historyMessages: AiMessageRow[] = []
 
@@ -146,14 +246,23 @@ export async function POST(request: Request) {
       historyMessages = latest.messages
     }
 
-    const userRow = await insertAiMessage({
-      conversationId,
-      userId: user.id,
-      role: 'user',
-      content: message,
-    })
+    const history = historyMessages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }))
 
-    const [celebrations, memories, profileLang] = await Promise.all([
+    const reviseProposal = isSplitProposal(body.reviseProposal)
+      ? body.reviseProposal
+      : null
+
+    const splitBuildMode =
+      isSplitBuildIntent(message, history) || Boolean(reviseProposal)
+    const revisePendingSplit =
+      Boolean(reviseProposal) && reviseProposal!.kind === 'create_split'
+
+    const [celebrations, memories, profileLang, splitContext] = await Promise.all([
       getUnmentionedChatCelebrations(user.id),
       getActiveMemories(user.id),
       supabase
@@ -162,6 +271,7 @@ export async function POST(request: Request) {
         .eq('id', user.id)
         .maybeSingle()
         .then((r) => (r.data?.language === 'ar' ? 'ar' : 'en') as 'en' | 'ar'),
+      splitBuildMode ? loadSplitBuildContext(user.id) : Promise.resolve(null),
     ])
     const celebrationContext =
       celebrations.length > 0
@@ -169,33 +279,46 @@ export async function POST(request: Request) {
             .map((c) => `${c.title}${c.body ? ` (${c.body})` : ''}`)
             .join('; ')
         : null
-    const memoryBlock = formatMemoriesForPrompt(memories)
-
-    const history = historyMessages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }))
+    const memoryBlock = [
+      formatMemoriesForPrompt(memories),
+      splitContext
+        ? formatSplitContextForPrompt(splitContext.preferences, splitContext.slots)
+        : '',
+      reviseProposal ? formatProposalForRevision(reviseProposal) : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     const { text, toolTrace } = await runCoachTurn({
       userId: user.id,
+      conversationId,
       history,
       userMessage: message,
       celebrationContext,
       memoryBlock,
       locale: profileLang,
+      splitBuildMode,
+      revisePendingSplit,
     })
 
-    for (const tool of toolTrace) {
-      await insertAiMessage({
-        conversationId,
-        userId: user.id,
-        role: 'tool',
-        content: JSON.stringify(tool.result),
-        toolName: tool.name,
-      })
-    }
+    const userRow = await insertAiMessage({
+      conversationId,
+      userId: user.id,
+      role: 'user',
+      content: message,
+    })
+
+    await Promise.all(
+      toolTrace.map((tool) =>
+        insertAiMessage({
+          conversationId,
+          userId: user.id,
+          role: 'tool',
+          content: JSON.stringify(tool.result),
+          toolName: tool.name,
+        }),
+      ),
+    )
 
     if (celebrations.length > 0) {
       await markCelebrationsMentionedInChat(
@@ -230,7 +353,9 @@ export async function POST(request: Request) {
         content: assistantRow.content,
         createdAt: assistantRow.created_at,
         usedTools: toolTrace.some((t) => t.name !== 'save_user_note'),
+        action: extractCoachActionFromTrace(toolTrace),
       },
+      meta: { splitBuildMode },
     })
   } catch (err) {
     console.error('[ai-coach POST]', err)

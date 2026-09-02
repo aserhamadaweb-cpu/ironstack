@@ -5,6 +5,11 @@ export type AppLocale = (typeof locales)[number]
 export const DEFAULT_LOCALE: AppLocale = 'en'
 export const LOCALE_COOKIE = 'ironstack-locale'
 export const LOCALE_STORAGE_KEY = 'ironstack-locale'
+/** Set when the visitor explicitly picks a language on first launch. */
+export const LOCALE_CHOSEN_COOKIE = 'ironstack-locale-chosen'
+export const LOCALE_CHOSEN_STORAGE_KEY = 'ironstack-locale-chosen'
+
+export const LOCALE_GATE_PATH = '/choose-language'
 
 export function isAppLocale(value: unknown): value is AppLocale {
   return value === 'en' || value === 'ar'
@@ -28,4 +33,28 @@ export function applyLocaleToDocument(locale: AppLocale) {
   } catch {
     /* ignore */
   }
+}
+
+/** Persist explicit language choice on this device (localStorage mirror). */
+export function markLocaleChosen(locale: AppLocale) {
+  applyLocaleToDocument(locale)
+  try {
+    localStorage.setItem(LOCALE_CHOSEN_STORAGE_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Client-only: has the visitor already picked a language on this device? */
+export function hasChosenLocaleClient(): boolean {
+  if (typeof document === 'undefined') return false
+  try {
+    if (localStorage.getItem(LOCALE_CHOSEN_STORAGE_KEY) === '1') return true
+  } catch {
+    /* ignore */
+  }
+  return document.cookie.split(';').some((part) => {
+    const [name, value] = part.trim().split('=')
+    return name === LOCALE_CHOSEN_COOKIE && value === '1'
+  })
 }

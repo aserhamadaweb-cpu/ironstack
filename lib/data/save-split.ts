@@ -1,7 +1,12 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getAuthIdentity } from '@/lib/supabase/server'
+import { rejectIfGuest } from '@/lib/data/guest-guard'
+import { logServerError } from '@/lib/log'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
+import { loadIdentityMapFile } from '@/lib/exercises/catalog'
+import { liftSlugForLibraryExercise } from '@/lib/exercises/identity'
+import { parseTargetReps } from '@/lib/split-reps'
 
 export type SaveSplitDayInput = {
   name: string
@@ -15,10 +20,16 @@ export type SaveSplitDayInput = {
     equipment?: string
     /** Exercise library category, e.g. cardio, strength. */
     category?: string | null
+    /** Target reps or cardio duration minutes, e.g. "8–12" or "30". */
+    reps?: string
   }>
 }
 
 export type SaveSplitInput = {
+  /** Client-generated UUID so offline creates can upsert without duplicates. */
+  id?: string
+  /** Client-generated day UUIDs, parallel to `days`. */
+  dayIds?: string[]
   name: string
   description?: string | null
   category?: string | null
@@ -30,15 +41,6 @@ export type SaveSplitResult =
   | { data: { id: string }; error: null }
   | { data: null; error: string }
 
-function toSlug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80)
-}
-
-/** Pull a category value that already exists in the DB (satisfies the check constraint). */
 async function pickExistingCategory(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -97,7 +99,7 @@ async function assertUnderSplitLimit(
     if ((retry.count ?? 0) >= MAX_CUSTOM_SPLITS) {
       return {
         data: null,
-        error: `You already have ${MAX_CUSTOM_SPLITS} custom splits. Delete one from Your Splits to add another.`,
+        error: `You already have ${MAX_CUSTOM_SPLITS} custom splits. Delete one from My Splits to add another.`,
       }
     }
     return null
@@ -106,7 +108,7 @@ async function assertUnderSplitLimit(
   if ((count ?? 0) >= MAX_CUSTOM_SPLITS) {
     return {
       data: null,
-      error: `You already have ${MAX_CUSTOM_SPLITS} custom splits. Delete one from Your Splits to add another.`,
+      error: `You already have ${MAX_CUSTOM_SPLITS} custom splits. Delete one from My Splits to add another.`,
     }
   }
   return null
@@ -126,6 +128,7 @@ async function insertUserSplitRow(
     daysPerWeek: number
     preferredCategory?: string | null
     sourceSplitId?: string | null
+    id?: string
   },
 ): Promise<{ id: string } | { error: string }> {
   const category = await pickExistingCategory(supabase, input.preferredCategory)
@@ -138,6 +141,7 @@ async function insertUserSplitRow(
     is_system: false,
     is_shared: false,
   }
+  if (input.id) base.id = input.id
   if (input.sourceSplitId) {
     base.source_split_id = input.sourceSplitId
   }
@@ -172,17 +176,16 @@ async function insertUserSplitRow(
   let lastError: { message?: string; code?: string } | null = null
 
   for (const payload of attempts) {
-    const { data, error } = await supabase
-      .from('splits')
-      .insert(payload)
-      .select('id')
-      .single()
+    const query = input.id
+      ? supabase.from('splits').upsert(payload, { onConflict: 'id' })
+      : supabase.from('splits').insert(payload)
+    const { data, error } = await query.select('id').single()
 
     if (!error && data?.id) {
       return { id: data.id as string }
     }
     lastError = error
-    console.error('[save-split] split insert attempt', payload, error)
+    logServerError('[save-split] split insert attempt', error)
   }
 
   const detail = lastError?.message ?? ''
@@ -213,9 +216,46 @@ type SourceDayRow = {
     | Array<{
         lift_type_id: string
         target_sets: number
+        target_reps_min?: number | null
+        target_reps_max?: number | null
         exercise_order: number
       }>
     | null
+}
+
+function targetsFromReps(reps?: string) {
+  const parsed = parseTargetReps(reps)
+  return {
+    target_reps_min: parsed.min,
+    target_reps_max: parsed.max,
+  }
+}
+
+async function insertSplitDayExercise(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  row: {
+    id?: string
+    split_day_id: string
+    lift_type_id: string
+    target_sets: number
+    exercise_order: number
+    target_reps_min?: number | null
+    target_reps_max?: number | null
+  },
+) {
+  const { error } = await supabase.from('split_day_exercises').insert(row)
+  if (
+    error &&
+    /target_reps/i.test(error.message ?? '') &&
+    (row.target_reps_min != null || row.target_reps_max != null)
+  ) {
+    const { target_reps_min, target_reps_max, ...rest } = row
+    void target_reps_min
+    void target_reps_max
+    return supabase.from('split_day_exercises').insert(rest).then((r: { error: unknown }) => r.error)
+  }
+  return error
 }
 
 async function copySplitTree(
@@ -252,10 +292,12 @@ async function copySplitTree(
     )
 
     for (const exercise of exercises) {
-      const { error: exError } = await supabase.from('split_day_exercises').insert({
+      const exError = await insertSplitDayExercise(supabase, {
         split_day_id: dayRow.id,
         lift_type_id: exercise.lift_type_id,
         target_sets: exercise.target_sets,
+        target_reps_min: exercise.target_reps_min ?? null,
+        target_reps_max: exercise.target_reps_max ?? null,
         exercise_order: exercise.exercise_order,
       })
 
@@ -275,14 +317,18 @@ async function copySplitTree(
 
 /**
  * Maps library categories to lift_types.category values stored in Supabase.
+ * The new catalog uses body parts (chest, waist, …) which must not be written
+ * as lift_types.category — those fail the check constraint.
  */
 function liftCategoryFromLibrary(category: string | null | undefined): string {
   const raw = category?.trim().toLowerCase()
   if (!raw) return 'accessory'
   if (raw === 'cardio') return 'cardio'
-  if (raw === 'stretching' || raw === 'plyometrics') return 'accessory'
-  if (raw === 'strength') return 'compound'
-  return raw
+  if (raw === 'stretching' || raw === 'plyometrics' || raw === 'accessory') {
+    return 'accessory'
+  }
+  if (raw === 'strength' || raw === 'compound') return 'compound'
+  return 'compound'
 }
 
 async function syncLiftTypeCategory(
@@ -317,7 +363,15 @@ async function ensureLiftTypeId(
     category?: string | null
   },
 ): Promise<{ id: string } | { error: string }> {
-  const slug = toSlug(exercise.libraryId || exercise.name)
+  const identity = loadIdentityMapFile()
+  const mappedSlug = /^\d{4}$/.test(exercise.libraryId.trim())
+    ? identity.bySourceId[exercise.libraryId.trim()]?.legacySlug
+    : null
+  const slug = liftSlugForLibraryExercise(
+    exercise.libraryId,
+    exercise.name,
+    mappedSlug,
+  )
   const name = exercise.name.trim()
   const muscle = exercise.muscles[0] ?? null
   const category = liftCategoryFromLibrary(exercise.category)
@@ -329,7 +383,6 @@ async function ensureLiftTypeId(
     .maybeSingle()
 
   if (bySlug?.id) {
-    await syncLiftTypeCategory(supabase, bySlug.id as string, exercise.category)
     return { id: bySlug.id as string }
   }
 
@@ -341,7 +394,6 @@ async function ensureLiftTypeId(
     .maybeSingle()
 
   if (byName?.id) {
-    await syncLiftTypeCategory(supabase, byName.id as string, exercise.category)
     return { id: byName.id as string }
   }
 
@@ -450,10 +502,12 @@ async function ensureLiftTypeId(
 export async function saveCustomSplit(
   input: SaveSplitInput,
 ): Promise<SaveSplitResult> {
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
+
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { userId } = await getAuthIdentity()
+  const user = userId ? { id: userId } : null
 
   if (!user) {
     return { data: null, error: 'You must be signed in to save a split.' }
@@ -470,6 +524,18 @@ export async function saveCustomSplit(
     return { data: null, error: 'Add at least one exercise before saving.' }
   }
 
+  if (input.id) {
+    const { data: existing } = await supabase
+      .from('splits')
+      .select('id')
+      .eq('id', input.id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (existing?.id) {
+      return updateCustomSplit(existing.id as string, input)
+    }
+  }
+
   const limitError = await assertUnderSplitLimit(supabase, user.id)
   if (limitError) return limitError
 
@@ -479,65 +545,196 @@ export async function saveCustomSplit(
     description: input.description?.trim() || null,
     daysPerWeek: input.daysPerWeek,
     preferredCategory: input.category,
+    id: input.id,
   })
 
   if ('error' in split) {
     return { data: null, error: split.error }
   }
 
-  for (let dayIndex = 0; dayIndex < input.days.length; dayIndex += 1) {
-    const day = input.days[dayIndex]
-    const { data: dayRow, error: dayError } = await supabase
-      .from('split_days')
-      .insert({
-        split_id: split.id,
-        name: day.name.trim() || `Day ${dayIndex + 1}`,
-        subtitle: day.subtitle?.trim() || null,
-        day_order: dayIndex + 1,
-      })
-      .select('id')
-      .single()
+  // Offline sync may have already written days for this id. Replace instead of
+  // inserting a second (split_id, day_order) row.
+  const daysError = await replaceSplitDays(supabase, split.id, input)
+  if (daysError) {
+    await supabase.from('splits').delete().eq('id', split.id)
+    return daysError
+  }
 
-    if (dayError || !dayRow) {
-      console.error('[saveCustomSplit] day insert', dayError)
-      await supabase.from('splits').delete().eq('id', split.id)
-      return {
-        data: null,
-        error: dayError?.message
-          ? `Could not save a training day: ${dayError.message}`
-          : 'Could not save a training day. Please try again.',
-      }
+  try {
+    const { revalidatePath } = await import('next/cache')
+    revalidatePath('/dashboard/workout')
+    revalidatePath('/dashboard/home-workouts')
+  } catch {
+    /* Client will refresh. */
+  }
+
+  return { data: { id: split.id }, error: null }
+}
+
+async function replaceSplitDays(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  splitId: string,
+  input: SaveSplitInput,
+): Promise<SaveSplitResult | null> {
+  const { data: oldDays, error: loadDaysError } = await supabase
+    .from('split_days')
+    .select('id, day_order')
+    .eq('split_id', splitId)
+
+  if (loadDaysError) {
+    logServerError('[replaceSplitDays] load days', loadDaysError)
+    return {
+      data: null,
+      error: 'Could not load training days. Please try again.',
     }
+  }
 
-    for (let exIndex = 0; exIndex < day.exercises.length; exIndex += 1) {
-      const exercise = day.exercises[exIndex]
-      const lift = await ensureLiftTypeId(supabase, exercise)
-      if ('error' in lift) {
-        await supabase.from('splits').delete().eq('id', split.id)
-        return { data: null, error: lift.error }
-      }
+  const previous = (oldDays ?? []) as Array<{ id: string; day_order: number }>
+  const maxOrder = Math.max(0, ...previous.map((row) => Number(row.day_order) || 0))
+  const offset = Math.max(1000, maxOrder + 1000)
 
-      const { error: exError } = await supabase.from('split_day_exercises').insert({
-        split_day_id: dayRow.id,
-        lift_type_id: lift.id,
-        target_sets: Math.max(1, exercise.sets || 3),
-        exercise_order: exIndex + 1,
-      })
-
-      if (exError) {
-        console.error('[saveCustomSplit] exercise insert', exError)
-        await supabase.from('splits').delete().eq('id', split.id)
+  if (previous.length > 0) {
+    for (let i = 0; i < previous.length; i += 1) {
+      const { error } = await supabase
+        .from('split_days')
+        .update({ day_order: offset + i + 1 })
+        .eq('id', previous[i].id)
+      if (error) {
+        logServerError('[replaceSplitDays] shift days', error)
+        for (const row of previous) {
+          await supabase
+            .from('split_days')
+            .update({ day_order: row.day_order })
+            .eq('id', row.id)
+        }
         return {
           data: null,
-          error: exError.message
-            ? `Could not save an exercise: ${exError.message}`
-            : 'Could not save an exercise. Please try again.',
+          error: 'Could not update training days. Please try again.',
         }
       }
     }
   }
 
-  return { data: { id: split.id }, error: null }
+  const keepIds: string[] = []
+  const restoreShift = async () => {
+    for (const row of previous) {
+      await supabase
+        .from('split_days')
+        .update({ day_order: row.day_order })
+        .eq('id', row.id)
+    }
+    if (keepIds.length > 0) {
+      const extra = keepIds.filter((id) => !previous.some((row) => row.id === id))
+      if (extra.length > 0) {
+        await supabase.from('split_day_exercises').delete().in('split_day_id', extra)
+        await supabase.from('split_days').delete().in('id', extra)
+      }
+    }
+  }
+
+  for (let dayIndex = 0; dayIndex < input.days.length; dayIndex += 1) {
+    const day = input.days[dayIndex]
+    const dayId =
+      input.dayIds?.[dayIndex] &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        input.dayIds[dayIndex],
+      )
+        ? input.dayIds[dayIndex]
+        : crypto.randomUUID()
+    keepIds.push(dayId)
+
+    const payload = {
+      id: dayId,
+      split_id: splitId,
+      name: day.name.trim() || `Day ${dayIndex + 1}`,
+      subtitle: day.subtitle?.trim() || null,
+      day_order: dayIndex + 1,
+    }
+
+    const { error: upsertError } = await supabase
+      .from('split_days')
+      .upsert(payload, { onConflict: 'id' })
+
+    if (upsertError) {
+      logServerError('[replaceSplitDays] day upsert', upsertError)
+      await restoreShift()
+      return {
+        data: null,
+        error: upsertError.message
+          ? `Could not save a training day: ${upsertError.message}`
+          : 'Could not save a training day. Please try again.',
+      }
+    }
+
+    const { data: oldExercises } = await supabase
+      .from('split_day_exercises')
+      .select('id')
+      .eq('split_day_id', dayId)
+    const oldExerciseIds = ((oldExercises ?? []) as Array<{ id: string }>).map(
+      (row) => row.id,
+    )
+
+    const createdExerciseIds: string[] = []
+    for (let exIndex = 0; exIndex < day.exercises.length; exIndex += 1) {
+      const exercise = day.exercises[exIndex]
+      const lift = await ensureLiftTypeId(supabase, exercise)
+      if ('error' in lift) {
+        if (createdExerciseIds.length > 0) {
+          await supabase.from('split_day_exercises').delete().in('id', createdExerciseIds)
+        }
+        await restoreShift()
+        return { data: null, error: lift.error }
+      }
+
+      const exerciseId = crypto.randomUUID()
+      const reps = targetsFromReps(exercise.reps)
+      const exError = await insertSplitDayExercise(supabase, {
+        id: exerciseId,
+        split_day_id: dayId,
+        lift_type_id: lift.id,
+        target_sets: Math.max(1, exercise.sets || 3),
+        target_reps_min: reps.target_reps_min,
+        target_reps_max: reps.target_reps_max,
+        exercise_order: exIndex + 1 + 1000,
+      })
+
+      if (exError) {
+        logServerError('[replaceSplitDays] exercise insert', exError)
+        if (createdExerciseIds.length > 0) {
+          await supabase.from('split_day_exercises').delete().in('id', createdExerciseIds)
+        }
+        await restoreShift()
+        return {
+          data: null,
+          error: (exError as { message?: string }).message
+            ? `Could not save an exercise: ${(exError as { message: string }).message}`
+            : 'Could not save an exercise. Please try again.',
+        }
+      }
+      createdExerciseIds.push(exerciseId)
+    }
+
+    if (oldExerciseIds.length > 0) {
+      await supabase.from('split_day_exercises').delete().in('id', oldExerciseIds)
+    }
+    for (let exIndex = 0; exIndex < createdExerciseIds.length; exIndex += 1) {
+      await supabase
+        .from('split_day_exercises')
+        .update({ exercise_order: exIndex + 1 })
+        .eq('id', createdExerciseIds[exIndex])
+    }
+  }
+
+  const staleIds = previous
+    .map((row) => row.id)
+    .filter((id) => !keepIds.includes(id))
+  if (staleIds.length > 0) {
+    await supabase.from('split_day_exercises').delete().in('split_day_id', staleIds)
+    await supabase.from('split_days').delete().in('id', staleIds)
+  }
+
+  return null
 }
 
 /** Replace an owned custom split's meta + days + exercises in place. */
@@ -545,10 +742,12 @@ export async function updateCustomSplit(
   splitId: string,
   input: SaveSplitInput,
 ): Promise<SaveSplitResult> {
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
+
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { userId } = await getAuthIdentity()
+  const user = userId ? { id: userId } : null
 
   if (!user) {
     return { data: null, error: 'You must be signed in to edit a split.' }
@@ -608,68 +807,12 @@ export async function updateCustomSplit(
     }
   }
 
-  const { data: oldDays } = await supabase
-    .from('split_days')
-    .select('id')
-    .eq('split_id', id)
-
-  const oldDayIds = (oldDays ?? []).map((d) => d.id as string)
-  if (oldDayIds.length > 0) {
-    await supabase.from('split_day_exercises').delete().in('split_day_id', oldDayIds)
-    await supabase.from('split_days').delete().eq('split_id', id)
-  }
-
-  for (let dayIndex = 0; dayIndex < input.days.length; dayIndex += 1) {
-    const day = input.days[dayIndex]
-    const { data: dayRow, error: dayError } = await supabase
-      .from('split_days')
-      .insert({
-        split_id: id,
-        name: day.name.trim() || `Day ${dayIndex + 1}`,
-        subtitle: day.subtitle?.trim() || null,
-        day_order: dayIndex + 1,
-      })
-      .select('id')
-      .single()
-
-    if (dayError || !dayRow) {
-      console.error('[updateCustomSplit] day insert', dayError)
-      return {
-        data: null,
-        error: dayError?.message
-          ? `Could not save a training day: ${dayError.message}`
-          : 'Could not save a training day. Please try again.',
-      }
-    }
-
-    for (let exIndex = 0; exIndex < day.exercises.length; exIndex += 1) {
-      const exercise = day.exercises[exIndex]
-      const lift = await ensureLiftTypeId(supabase, exercise)
-      if ('error' in lift) {
-        return { data: null, error: lift.error }
-      }
-
-      const { error: exError } = await supabase.from('split_day_exercises').insert({
-        split_day_id: dayRow.id,
-        lift_type_id: lift.id,
-        target_sets: Math.max(1, exercise.sets || 3),
-        exercise_order: exIndex + 1,
-      })
-
-      if (exError) {
-        console.error('[updateCustomSplit] exercise insert', exError)
-        return {
-          data: null,
-          error: exError.message
-            ? `Could not save an exercise: ${exError.message}`
-            : 'Could not save an exercise. Please try again.',
-        }
-      }
-    }
-  }
+  const daysError = await replaceSplitDays(supabase, id, input)
+  if (daysError) return daysError
 
   const { revalidatePath } = await import('next/cache')
   revalidatePath('/dashboard/workout')
+  revalidatePath('/dashboard/home-workouts')
   revalidatePath('/dashboard/splits')
   revalidatePath(`/dashboard/splits/${id}`)
   revalidatePath(`/dashboard/splits/${id}/edit`)
@@ -683,6 +826,9 @@ export async function updateCustomSplit(
 export async function saveRecommendedSplit(
   sourceSplitId: string,
 ): Promise<SaveSplitResult> {
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -707,7 +853,7 @@ export async function saveRecommendedSplit(
       id, name, description, days_per_week, category,
       split_days (
         id, name, subtitle, day_order,
-        split_day_exercises ( lift_type_id, target_sets, exercise_order )
+        split_day_exercises ( lift_type_id, target_sets, target_reps_min, target_reps_max, exercise_order )
       )
     `,
     )
@@ -731,19 +877,6 @@ export async function saveRecommendedSplit(
     return { data: { id: existingBySource.id as string }, error: null }
   }
 
-  // Fallback for DBs without source_split_id yet.
-  const { data: existingCopy } = await supabase
-    .from('splits')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('name', source.name)
-    .eq('is_system', false)
-    .maybeSingle()
-
-  if (existingCopy?.id) {
-    return { data: { id: existingCopy.id as string }, error: null }
-  }
-
   const created = await insertUserSplitRow(supabase, {
     userId: user.id,
     name: source.name as string,
@@ -765,6 +898,8 @@ export async function saveRecommendedSplit(
       | Array<{
           lift_type_id: string
           target_sets: number
+          target_reps_min?: number | null
+          target_reps_max?: number | null
           exercise_order: number
         }>
       | null
@@ -785,6 +920,9 @@ export async function setSplitShared(
   splitId: string,
   isShared: boolean,
 ): Promise<SaveSplitResult> {
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -810,7 +948,7 @@ export async function setSplitShared(
     return { data: null, error: 'Only your custom splits can be shared.' }
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('splits')
     .update({
       is_shared: isShared,
@@ -818,6 +956,8 @@ export async function setSplitShared(
     })
     .eq('id', id)
     .eq('user_id', user.id)
+    .select('id, is_shared')
+    .maybeSingle()
 
   if (error) {
     console.error('[setSplitShared]', error)
@@ -832,8 +972,16 @@ export async function setSplitShared(
     return { data: null, error: 'Could not update sharing. Please try again.' }
   }
 
+  if (!updated?.id) {
+    return {
+      data: null,
+      error: 'Could not update sharing — split not found or access denied.',
+    }
+  }
+
   const { revalidatePath } = await import('next/cache')
   revalidatePath('/dashboard/workout')
+  revalidatePath('/dashboard/splits')
   revalidatePath(`/dashboard/splits/${id}`)
   revalidatePath('/dashboard/home')
 
@@ -855,7 +1003,11 @@ export async function setSplitShared(
  */
 export async function saveSharedSplit(
   sourceSplitId: string,
+  options?: { shareToken?: string },
 ): Promise<SaveSplitResult> {
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -882,30 +1034,66 @@ export async function saveSharedSplit(
     return { data: { id: already.id as string }, error: null }
   }
 
-  const { data: source, error: sourceError } = await supabase
-    .from('splits')
-    .select(
-      `
+  const shareToken = options?.shareToken?.trim() || null
+  let source: Record<string, unknown> | null = null
+
+  if (shareToken) {
+    try {
+      const admin = (await import('@/lib/supabase/admin')).createAdminClient()
+      const { data, error: adminError } = await admin
+        .from('splits')
+        .select(
+          `
+      id, user_id, name, description, days_per_week, category, is_shared, is_system, share_token,
+      split_days (
+        id, name, subtitle, day_order,
+        split_day_exercises ( lift_type_id, target_sets, target_reps_min, target_reps_max, exercise_order )
+      )
+    `,
+        )
+        .eq('id', id)
+        .eq('share_token', shareToken)
+        .maybeSingle()
+      if (adminError || !data) {
+        return { data: null, error: 'Could not load that shared split.' }
+      }
+      source = data as Record<string, unknown>
+    } catch {
+      return { data: null, error: 'Could not load that shared split.' }
+    }
+  } else {
+    const { data, error: sourceError } = await supabase
+      .from('splits')
+      .select(
+        `
       id, user_id, name, description, days_per_week, category, is_shared, is_system,
       split_days (
         id, name, subtitle, day_order,
-        split_day_exercises ( lift_type_id, target_sets, exercise_order )
+        split_day_exercises ( lift_type_id, target_sets, target_reps_min, target_reps_max, exercise_order )
       )
     `,
-    )
-    .eq('id', id)
-    .maybeSingle()
+      )
+      .eq('id', id)
+      .maybeSingle()
 
-  if (sourceError || !source) {
-    console.error('[saveSharedSplit] load source', sourceError)
-    return { data: null, error: 'Could not load that shared split.' }
+    if (sourceError || !data) {
+      console.error('[saveSharedSplit] load source', sourceError)
+      return { data: null, error: 'Could not load that shared split.' }
+    }
+    source = data as Record<string, unknown>
   }
 
   if (source.user_id === user.id) {
     return { data: null, error: 'That split is already yours.' }
   }
 
-  if (!source.is_system && !source.is_shared) {
+  const isSystem = Boolean(source.is_system)
+  const isShared = Boolean(source.is_shared)
+  const hasShareToken = Boolean(
+    typeof source.share_token === 'string' && source.share_token.trim(),
+  )
+
+  if (!isSystem && !isShared && !(shareToken && hasShareToken)) {
     return { data: null, error: 'That split is not shared.' }
   }
 
@@ -939,42 +1127,82 @@ export async function saveSharedSplit(
 export async function deleteCustomSplit(
   splitId: string,
 ): Promise<SaveSplitResult> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const guest = await rejectIfGuest()
+  if (guest) return { data: null, error: guest }
 
-  if (!user) {
-    return { data: null, error: 'You must be signed in to delete a split.' }
+  try {
+    const supabase = await createClient()
+    const { userId } = await getAuthIdentity()
+    const user = userId ? { id: userId } : null
+
+    if (!user) {
+      return { data: null, error: 'You must be signed in to delete a split.' }
+    }
+
+    const id = splitId.trim()
+    if (!id) {
+      return { data: null, error: 'Missing split id.' }
+    }
+
+    const { data: days } = await supabase
+      .from('split_days')
+      .select('id')
+      .eq('split_id', id)
+
+    const dayIds = (days ?? []).map((d) => d.id as string)
+    if (dayIds.length > 0) {
+      await supabase.from('split_day_exercises').delete().in('split_day_id', dayIds)
+      await supabase.from('split_days').delete().eq('split_id', id)
+    }
+
+    const { data: deleted, error } = await supabase
+      .from('splits')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .eq('is_system', false)
+      .select('id')
+
+    if (error || !deleted?.length) {
+      console.error('[deleteCustomSplit]', error)
+      return { data: null, error: 'Could not delete that split. Please try again.' }
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('primary_split_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.primary_split_id === id) {
+      await supabase
+        .from('profiles')
+        .update({
+          primary_split_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+    }
+
+    try {
+      const { revalidatePath } = await import('next/cache')
+      revalidatePath('/dashboard/workout')
+      revalidatePath('/dashboard/home-workouts')
+      revalidatePath('/dashboard/splits')
+      revalidatePath(`/dashboard/splits/${id}`)
+    } catch {
+      /* Client will refresh; a revalidate failure must not crash delete. */
+    }
+
+    return { data: { id }, error: null }
+  } catch (err) {
+    console.error('[deleteCustomSplit]', err)
+    return {
+      data: null,
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Could not delete that split. Please try again.',
+    }
   }
-
-  const id = splitId.trim()
-  if (!id) {
-    return { data: null, error: 'Missing split id.' }
-  }
-
-  const { data: days } = await supabase
-    .from('split_days')
-    .select('id')
-    .eq('split_id', id)
-
-  const dayIds = (days ?? []).map((d) => d.id as string)
-  if (dayIds.length > 0) {
-    await supabase.from('split_day_exercises').delete().in('split_day_id', dayIds)
-    await supabase.from('split_days').delete().eq('split_id', id)
-  }
-
-  const { error } = await supabase
-    .from('splits')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .eq('is_system', false)
-
-  if (error) {
-    console.error('[deleteCustomSplit]', error)
-    return { data: null, error: 'Could not delete that split. Please try again.' }
-  }
-
-  return { data: { id }, error: null }
 }

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { CreateGroupChatForm } from '@/components/create-group-chat-form'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { getAcceptedFriends, getProfile } from '@/lib/data/queries'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
@@ -36,12 +38,17 @@ export default async function NewGroupChatPage() {
   }))
 
   return (
-    <div className="min-h-svh pb-20 md:pb-0">
+    <div className="min-h-svh">
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
       />
+      <OfflineConnectionGate feature="messages">
+      <GuestPageGate reason="messages" returnPath="/dashboard/messages/groups/new">
       <CreateGroupChatForm friends={friends} />
+      </GuestPageGate>
+      </OfflineConnectionGate>
     </div>
   )
 }

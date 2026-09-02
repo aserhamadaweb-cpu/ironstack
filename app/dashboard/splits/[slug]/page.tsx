@@ -1,5 +1,5 @@
-import { notFound, redirect } from 'next/navigation'
-import { PageError } from '@/components/page-states'
+import { redirect } from 'next/navigation'
+import { SplitDetailGate } from '@/components/split-local-gate'
 import { SplitDetailPage } from '@/components/split-detail-page'
 import { getProfile, getSplitDetail } from '@/lib/data/queries'
 import { toSplitDetail } from '@/lib/data/split-adapter'
@@ -37,29 +37,31 @@ export default async function SplitPage({ params }: Params) {
     getProfile(user.id),
   ])
 
-  if (splitResult.error || profileResult.error) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError message={splitResult.error || profileResult.error || 'Error'} />
-      </main>
-    )
-  }
-
-  if (!splitResult.data) {
-    notFound()
-  }
-
-  const split = enrichSplitFromLibrary(toSplitDetail(splitResult.data))
   const displayName =
     profileResult.data?.display_name ||
     user.email?.split('@')[0] ||
     'Athlete'
+
+  if (!splitResult.data) {
+    return (
+      <SplitDetailGate
+        slug={slug}
+        displayName={displayName}
+        initials={initialsFrom(displayName)}
+        avatarUrl={profileResult.data?.avatar_url}
+        viewerUserId={user.id}
+      />
+    )
+  }
+
+  const split = enrichSplitFromLibrary(toSplitDetail(splitResult.data))
 
   return (
     <SplitDetailPage
       split={split}
       displayName={displayName}
       initials={initialsFrom(displayName)}
+      avatarUrl={profileResult.data?.avatar_url}
       viewerUserId={user.id}
     />
   )

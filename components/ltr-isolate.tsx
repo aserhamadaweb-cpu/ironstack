@@ -24,7 +24,10 @@ export function LtrIsolate({
     )
   }
   return (
-    <Tag dir="ltr" className={`ltr-isolate ${className ?? ''}`.trim()}>
+    <Tag
+      dir="ltr"
+      className={`ltr-isolate max-w-full min-w-0 ${className ?? ''}`.trim()}
+    >
       {children}
     </Tag>
   )

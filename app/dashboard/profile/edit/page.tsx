@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { EditProfileForm } from '@/components/edit-profile-form'
+import { GuestPageGate } from '@/components/guest-page-gate'
 import { PageError } from '@/components/page-states'
 import { getProfile } from '@/lib/data/queries'
 import { initialsFrom } from '@/lib/dashboard-utils'
@@ -33,14 +35,16 @@ export default async function EditProfilePage() {
     'Athlete'
 
   return (
-    <div className="min-h-svh pb-20 md:pb-0">
+    <div className="min-h-svh">
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
         avatarUrl={profile?.avatar_url}
       />
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-        <header className="mb-8">
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
+        <GuestPageGate reason="editProfile" returnPath="/dashboard/profile/edit">
+        <BackToTrainLink />
+        <header className="mb-2">
           <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
             PROFILE
           </p>
@@ -58,8 +62,10 @@ export default async function EditProfilePage() {
             displayName: profile?.display_name ?? displayName,
             bio: profile?.bio ?? '',
             avatarUrl: profile?.avatar_url ?? null,
+            usernameChangeCount: profile?.username_change_count ?? 0,
           }}
         />
+        </GuestPageGate>
       </main>
     </div>
   )

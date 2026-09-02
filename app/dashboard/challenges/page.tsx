@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { FriendChallengesPage } from '@/components/friend-challenges-page'
+import { GuestPageGate } from '@/components/guest-page-gate'
+import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import {
   listLiftTypesForChallenges,
   listMyChallenges,
@@ -50,7 +53,10 @@ export default async function ChallengesPage() {
         avatarUrl={profileResult.data?.avatar_url}
         isGuest={profileResult.data?.is_guest === true}
       />
-      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 pb-24 sm:px-6 sm:py-8 md:pb-8">
+      <OfflineConnectionGate feature="leaderboard">
+      <GuestPageGate reason="challenges" returnPath="/dashboard/challenges">
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <BackToTrainLink />
         <header>
           <p className="section-kicker">{t('kicker')}</p>
           <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">
@@ -67,6 +73,8 @@ export default async function ChallengesPage() {
           unit={profileResult.data?.preferred_unit ?? 'kg'}
         />
       </main>
+      </GuestPageGate>
+      </OfflineConnectionGate>
     </>
   )
 }

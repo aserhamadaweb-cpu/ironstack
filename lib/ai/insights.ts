@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import { GEMINI_MODEL } from '@/lib/ai/prompt'
 import { fetchStreakStatus } from '@/lib/data/streak'
+import { logServerError } from '@/lib/log'
 import { createClient } from '@/lib/supabase/server'
 import { formatSessionDate, formatVolume } from '@/lib/session-store'
 
@@ -69,24 +70,29 @@ export async function getLatestInsight(
   userId: string,
   language: InsightLocale = 'en',
 ): Promise<AiInsight | null> {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from('ai_insights')
-    .select(
-      'id, user_id, headline, detail, source_session_id, generated_at, created_at, language',
-    )
-    .eq('user_id', userId)
-    .eq('language', language)
-    .order('generated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    const { data, error } = await supabase
+      .from('ai_insights')
+      .select(
+        'id, user_id, headline, detail, source_session_id, generated_at, created_at, language',
+      )
+      .eq('user_id', userId)
+      .eq('language', language)
+      .order('generated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-  if (error) {
-    console.error('[ai_insights]', error.message)
+    if (error) {
+      logServerError('[ai_insights]', error.message)
+      return null
+    }
+    return (data as AiInsight | null) ?? null
+  } catch (err) {
+    logServerError('[ai_insights]', err)
     return null
   }
-  return (data as AiInsight | null) ?? null
 }
 
 export async function listAiInsights(
@@ -104,7 +110,7 @@ export async function listAiInsights(
     .limit(limit)
 
   if (error) {
-    console.error('[ai_insights list]', error.message)
+    logServerError('[ai_insights list]', error.message)
     return []
   }
   return (data ?? []) as AiInsight[]
@@ -516,6 +522,7 @@ export async function getOrRefreshCoachInsight(
 export async function getCachedCoachInsight(
   userId: string,
 ): Promise<CoachInsightView> {
+  try {
   const locale = await resolveInsightLocale(userId)
   const supabase = await createClient()
   const [{ data: latestSession }, cached] = await Promise.all([
@@ -569,5 +576,16 @@ export async function getCachedCoachInsight(
     sessionMeta: sessionMetaFromLatest(latestSession),
     sourceSessionId: latestSession.id,
     generatedAt: null,
+  }
+  } catch (err) {
+    logServerError('[ai_insights] cached', err)
+    return {
+      kind: 'empty',
+      headline: 'Log your first session',
+      detail: 'Connect to load coach insights. Training still works offline.',
+      sessionMeta: null,
+      sourceSessionId: null,
+      generatedAt: null,
+    }
   }
 }

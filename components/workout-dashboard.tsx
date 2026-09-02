@@ -1,28 +1,23 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  CalendarDays,
+  ArrowRight,
   Clock3,
   Dumbbell,
+  House,
   Layers,
-  Loader2,
-  Play,
+  Minus,
   Plus,
-  Share2,
-  Trash2,
+  TrendingDown,
   TrendingUp,
   Trophy,
   Weight,
 } from 'lucide-react'
-import {
-  useReducedMotion,
-} from 'framer-motion'
-import { AiCoachPanel } from '@/components/ai-coach-panel'
 import {
   CelebrationBanner,
   type CelebrationBannerItem,
@@ -31,28 +26,41 @@ import { DashboardNav } from '@/components/dashboard-nav'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
 import { ltrEmbed } from '@/lib/bidi'
 import { EmptyState } from '@/components/page-states'
-import { ACCENT, CTA_PRIMARY, toneForFocus } from '@/lib/accent'
-import type { CoachInsightView } from '@/lib/ai/insights'
+import {
+  WorkoutSplitCard,
+  type WorkoutSplitCardData,
+} from '@/components/workout-split-card'
 import { initialsFrom } from '@/lib/dashboard-utils'
-import { deleteCustomSplit, setSplitShared } from '@/lib/data/save-split'
+import { OfflineFloorWorkout } from '@/components/offline-floor-workout'
+import {
+  getCachedSplits,
+  getCachedUserId,
+  getHomeSnapshot,
+} from '@/lib/offline/cache'
+import { useOfflineStatus } from '@/lib/offline/provider'
+import {
+  listLocalCompletedSessions,
+  OFFLINE_CHANGED_EVENT,
+} from '@/lib/offline/session-store'
+import { profileHref as buildProfileHref } from '@/lib/profile-path'
+import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
+import { ActiveWorkoutConflict } from '@/components/active-workout-conflict'
+import { useActiveWorkout } from '@/lib/use-active-workout'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
+import { createSplitChoiceHref } from '@/lib/split-create-paths'
+import { useGuestGate } from '@/components/guest-gate-provider'
+import { CTA_PRIMARY } from '@/lib/accent'
 import { formatVolumeKg, type WeightUnit } from '@/lib/units'
-
-type SplitCard = {
-  id: string
-  slug: string
-  name: string
-  days: number
-  lastUsed: string
-  focus: string
-  description?: string | null
-  isShared?: boolean
-}
+import {
+  formatLoadChangePct,
+  type WeeklyVolumeTrend,
+} from '@/lib/volume-trend'
 
 type WorkoutDashboardProps = {
   displayName: string
-  yourSplits: SplitCard[]
-  recommendedSplits: SplitCard[]
+  featuredSplit: WorkoutSplitCardData | null
+  totalCustomSplits: number
+  primarySplitId: string | null
   lastSession: {
     badge: string
     meta: string
@@ -76,212 +84,361 @@ type WorkoutDashboardProps = {
     bars: number[]
     caption: string
   }
+  journeyTrend: WeeklyVolumeTrend
   celebrations?: CelebrationBannerItem[]
-  insight: CoachInsightView
   avatarUrl?: string | null
   profileHref?: string
   isGuest?: boolean
+  liveDegraded?: boolean
 }
 
-const JOURNEY_PLACEHOLDER_BARS = [28, 28, 28, 28, 28, 28, 28, 28]
+/** Survives RSC remounts so reconnect reload does not loop. */
+let workoutLiveReloadLock: string | null = null
+
+function pickFeaturedSplit(
+  splits: WorkoutSplitCardData[],
+  primarySplitId: string | null,
+): WorkoutSplitCardData | null {
+  if (splits.length === 0) return null
+  if (primarySplitId) {
+    const primary = splits.find(
+      (s) => s.id === primarySplitId || s.slug === primarySplitId,
+    )
+    if (primary) return primary
+  }
+  return splits[0]
+}
 
 export function WorkoutDashboard({
   displayName,
-  yourSplits,
-  recommendedSplits,
+  featuredSplit: initialFeaturedSplit,
+  totalCustomSplits: initialTotalCustomSplits,
+  primarySplitId,
   lastSession,
   historySessions,
   journeyVolume,
   weightUnit = 'kg',
   volumeTrend,
+  journeyTrend,
   celebrations = [],
-  insight,
   avatarUrl,
   profileHref,
   isGuest = false,
+  liveDegraded = false,
 }: WorkoutDashboardProps) {
   const t = useTranslations('workout')
+  const tHome = useTranslations('homeWorkouts')
   const router = useRouter()
-  const reduce = useReducedMotion()
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [shareError, setShareError] = useState<string | null>(null)
-  const [sharingId, setSharingId] = useState<string | null>(null)
-  const [sharedMap, setSharedMap] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(yourSplits.map((s) => [s.id, Boolean(s.isShared)])),
-  )
-  const [pending, startTransition] = useTransition()
+  const { requireAccount } = useGuestGate()
+  const { online, hydrated, refresh, lastError, syncing } = useOfflineStatus()
+  const [featuredSplit, setFeaturedSplit] = useState(initialFeaturedSplit)
+  const [splitCount, setSplitCount] = useState(initialTotalCustomSplits)
+  const [snapshot, setSnapshot] = useState<Awaited<
+    ReturnType<typeof getHomeSnapshot>
+  >>(null)
+  const [history, setHistory] = useState(historySessions)
+  const [recap, setRecap] = useState(lastSession)
+  const [localVolume, setLocalVolume] = useState<number | null>(null)
+  const [liveReloadError, setLiveReloadError] = useState<string | null>(null)
+  const [liveReloading, setLiveReloading] = useState(false)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const { active: activeWorkout, refresh: refreshActiveWorkout } = useActiveWorkout()
+  const [startBlocked, setStartBlocked] = useState(false)
 
   useEffect(() => {
-    setSharedMap(
-      Object.fromEntries(yourSplits.map((s) => [s.id, Boolean(s.isShared)])),
+    void getHomeSnapshot()
+      .then(setSnapshot)
+      .catch(() => setSnapshot(null))
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    if (!online) {
+      workoutLiveReloadLock = null
+      setLiveReloadError(null)
+      setLiveReloading(false)
+      return
+    }
+    if (!liveDegraded) {
+      setLiveReloadError(null)
+      setLiveReloading(false)
+      return
+    }
+
+    const lockKey = `online:${retryNonce}`
+    if (workoutLiveReloadLock === lockKey) return
+    workoutLiveReloadLock = lockKey
+
+    let cancelled = false
+    const maxAttempts = 4
+
+    const run = async (attempt: number) => {
+      if (cancelled) return
+      setLiveReloading(true)
+      setLiveReloadError(null)
+      try {
+        await Promise.race([
+          refresh(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('timeout')), 15_000)
+          }),
+        ])
+        if (cancelled) return
+        router.refresh()
+        setLiveReloading(false)
+      } catch (err) {
+        if (cancelled) return
+        const message =
+          err instanceof Error && err.message === 'timeout'
+            ? t('liveReloadTimeout')
+            : err instanceof Error
+              ? err.message
+              : t('liveReloadTimeout')
+        if (attempt < maxAttempts) {
+          window.setTimeout(() => {
+            void run(attempt + 1)
+          }, 2_000 * attempt)
+          return
+        }
+        setLiveReloading(false)
+        setLiveReloadError(message)
+      }
+    }
+
+    void run(1)
+    return () => {
+      cancelled = true
+    }
+  }, [hydrated, online, liveDegraded, refresh, router, t, retryNonce])
+
+  useEffect(() => {
+    setHistory(historySessions)
+    setRecap(lastSession)
+  }, [historySessions, lastSession])
+
+  useEffect(() => {
+    setFeaturedSplit(initialFeaturedSplit)
+    setSplitCount(initialTotalCustomSplits)
+  }, [initialFeaturedSplit, initialTotalCustomSplits])
+
+  useEffect(() => {
+    const mergeCards = (
+      server: WorkoutSplitCardData[],
+      local: WorkoutSplitCardData[],
+    ) => {
+      const ids = new Set(server.flatMap((s) => [s.id, s.slug]))
+      return [
+        ...server,
+        ...local.filter((s) => !ids.has(s.id) && !ids.has(s.slug)),
+      ]
+    }
+
+    let cancelled = false
+    async function hydrateFromCache() {
+      try {
+        const [cached, uid, localSessions] = await Promise.all([
+          getCachedSplits(),
+          getCachedUserId(),
+          listLocalCompletedSessions().catch(() => []),
+        ])
+        if (cancelled) return
+
+        const yoursFromCache: WorkoutSplitCardData[] = cached
+          .filter(
+            (row) =>
+              row?.detail &&
+              row?.row &&
+              row.row.user_id === uid &&
+              !row.row.is_system,
+          )
+          .map((row) => ({
+            id: row.detail.slug,
+            slug: row.detail.slug,
+            name: row.detail.name,
+            days: row.detail.daysPerWeek,
+            focus: row.detail.tag,
+            description: row.detail.description,
+            isShared: row.detail.isShared,
+          }))
+
+        const serverList = initialFeaturedSplit ? [initialFeaturedSplit] : []
+        const merged = mergeCards(serverList, yoursFromCache)
+        setSplitCount(Math.max(initialTotalCustomSplits, merged.length))
+        setFeaturedSplit(pickFeaturedSplit(merged, primarySplitId))
+
+        const knownIds = new Set(historySessions.map((row) => row.id))
+        const extraHistory = localSessions
+          .filter((session) => !knownIds.has(session.id))
+          .map((session) => {
+            const split = cached.find((row) => row.id === session.splitId)
+            const volume = session.logs.reduce((sum, log) => {
+              if (log.isSkipped || (log.durationSeconds ?? 0) > 0) return sum
+              return sum + (Number(log.weight) || 0) * (Number(log.reps) || 0)
+            }, 0)
+            const minutes = Math.max(
+              0,
+              Math.round((session.durationSeconds ?? 0) / 60),
+            )
+            return {
+              id: session.id,
+              date: new Date(
+                session.finishedAt ?? session.startedAt,
+              ).toLocaleDateString(),
+              name: split?.detail.name ?? t('title'),
+              duration: `${minutes} min`,
+              volume: formatVolumeKg(volume, weightUnit),
+              sets: session.logs.filter((log) => !log.isSkipped).length,
+              volumeKg: volume,
+            }
+          })
+        const localKg = localSessions.reduce((sum, session) => {
+          return (
+            sum +
+            session.logs.reduce((inner, log) => {
+              if (log.isSkipped || (log.durationSeconds ?? 0) > 0) return inner
+              return inner + (Number(log.weight) || 0) * (Number(log.reps) || 0)
+            }, 0)
+          )
+        }, 0)
+        if (localKg > 0) setLocalVolume(localKg)
+        if (extraHistory.length > 0) {
+          setHistory(
+            extraHistory
+              .map((session) => {
+                const { sets, volumeKg, ...row } = session
+                void sets
+                void volumeKg
+                return row
+              })
+              .concat(historySessions)
+              .slice(0, 8),
+          )
+          if (!lastSession) {
+            const first = extraHistory[0]
+            setRecap({
+              badge: t('custom'),
+              meta: first.date,
+              title: first.name,
+              blurb: t('subtitle'),
+              duration: first.duration,
+              volume: first.volume,
+              sets: String(first.sets),
+              standouts: [],
+            })
+          }
+        }
+
+        const slugs = merged.map((s) => s.slug)
+        for (const slug of slugs) {
+          router.prefetch(`/dashboard/splits/${slug}/session`)
+        }
+      } catch {
+        /* IndexedDB unavailable */
+      }
+    }
+    void hydrateFromCache()
+    window.addEventListener(OFFLINE_CHANGED_EVENT, hydrateFromCache)
+    return () => {
+      cancelled = true
+      window.removeEventListener(OFFLINE_CHANGED_EVENT, hydrateFromCache)
+    }
+  }, [
+    initialFeaturedSplit,
+    initialTotalCustomSplits,
+    historySessions,
+    lastSession,
+    primarySplitId,
+    router,
+    t,
+    weightUnit,
+  ])
+
+  const resolvedName = liveDegraded
+    ? snapshot?.displayName || displayName
+    : displayName || snapshot?.displayName || displayName
+  const resolvedAvatar = liveDegraded
+    ? snapshot?.avatarUrl ?? avatarUrl
+    : avatarUrl ?? snapshot?.avatarUrl
+  const resolvedHref =
+    profileHref ||
+    buildProfileHref(snapshot?.username, snapshot?.userId)
+  const resolvedGuest = isGuest || snapshot?.isGuest === true
+  const shownVolume =
+    journeyVolume > 0 ? journeyVolume : localVolume ?? journeyVolume
+  const firstName = resolvedName.trim().split(/\s+/)[0] || resolvedName
+  const atSplitLimit = splitCount >= MAX_CUSTOM_SPLITS
+  const hasPrimary =
+    Boolean(primarySplitId) &&
+    Boolean(
+      featuredSplit &&
+        (featuredSplit.id === primarySplitId ||
+          featuredSplit.slug === primarySplitId),
     )
-  }, [yourSplits])
 
-  const firstName = displayName.trim().split(/\s+/)[0] || displayName
-  const atSplitLimit = yourSplits.length >= MAX_CUSTOM_SPLITS
-
-  const handleDelete = (splitId: string, splitName: string) => {
-    if (deletingId || pending) return
-    const confirmed = window.confirm(
-      t('deleteConfirm', { name: splitName, max: MAX_CUSTOM_SPLITS }),
-    )
-    if (!confirmed) return
-
-    setDeleteError(null)
-    setDeletingId(splitId)
-    startTransition(async () => {
-      const result = await deleteCustomSplit(splitId)
-      setDeletingId(null)
-      if (result.error) {
-        setDeleteError(result.error)
+  const startSplit = (slug: string) => {
+    requireAccount('startSession', () => {
+      if (activeWorkout && activeWorkout.splitId !== slug) {
+        setStartBlocked(true)
         return
       }
-      router.refresh()
+      router.push(`/dashboard/splits/${slug}/session`)
     })
   }
 
-  const handleShareToggle = (splitId: string) => {
-    if (sharingId || pending) return
-    const next = !sharedMap[splitId]
-    setShareError(null)
-    setSharingId(splitId)
-    setSharedMap((prev) => ({ ...prev, [splitId]: next }))
-    startTransition(async () => {
-      const result = await setSplitShared(splitId, next)
-      setSharingId(null)
-      if (result.error) {
-        setSharedMap((prev) => ({ ...prev, [splitId]: !next }))
-        setShareError(result.error)
-        return
-      }
-      router.refresh()
-    })
+  const goCreateSplit = () => {
+    requireAccount('createSplit', () => router.push(createSplitChoiceHref()))
   }
 
-  const renderSplitCard = (
-    split: SplitCard,
-    options?: { deletable?: boolean; shareable?: boolean },
-  ) => {
-    const tone = ACCENT[toneForFocus(split.focus)]
-    const isDeleting = deletingId === split.id
-    const isShared = Boolean(sharedMap[split.id] ?? split.isShared)
-    const isSharing = sharingId === split.id
+  if (hydrated && !online) {
     return (
-      <article
-        key={split.id}
-        className={`group relative flex w-[85vw] max-w-sm shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card p-6 transition-all duration-200 hover:border-gold/30 md:w-auto md:max-w-none md:hover:-translate-y-0.5 ${tone.edge}`}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className={`flex size-11 items-center justify-center rounded-xl ${tone.chip}`}>
-            <Dumbbell className="size-5" aria-hidden="true" />
-          </div>
-          <div className="flex items-center gap-2">
-            {options?.shareable && isShared && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-blue/35 bg-blue-tint/40 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-blue">
-                <Share2 className="size-3" aria-hidden="true" />
-                {t('sharedBadge')}
-              </span>
-            )}
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.15em] ${tone.badge}`}>
-              {isLatinFragment(split.focus)
-                ? split.focus.toUpperCase()
-                : split.focus}
-            </span>
-            {options?.deletable && (
-              <button
-                type="button"
-                onClick={() => handleDelete(split.id, split.name)}
-                disabled={isDeleting || pending}
-                aria-label={t('deleteAria', { name: split.name })}
-                className="flex size-9 items-center justify-center rounded-xl border border-silver/15 bg-background/50 text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <h3 className="font-heading text-xl font-bold text-foreground">
-          {split.name}
-        </h3>
-        {split.description ? (
-          <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
-            {split.description}
-          </p>
-        ) : null}
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <CalendarDays
-              className={`size-3.5 ${tone.text}`}
-              aria-hidden="true"
-            />
-            {t('daysPerWeek', { count: split.days })}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Clock3
-              className={`size-3.5 ${tone.text}`}
-              aria-hidden="true"
-            />
-            <LtrIsolate when={isLatinFragment(split.lastUsed)}>
-              {split.lastUsed}
-            </LtrIsolate>
-          </span>
-        </div>
-
-        <div className="mt-auto flex flex-col gap-2 pt-6">
-          <Link
-            href={`/dashboard/splits/${split.slug}/session`}
-            className={`inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-bold tracking-[0.18em] transition-all duration-200 hover:scale-[1.02] ${CTA_PRIMARY}`}
-          >
-            <Play
-              className="size-4 fill-current"
-              aria-hidden="true"
-            />
-            {t('startSession')}
-          </Link>
-          <Link
-            href={`/dashboard/splits/${split.slug}`}
-            className="inline-flex min-h-10 w-full items-center justify-center rounded-full border border-silver/15 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold"
-          >
-            {t('viewSplit')}
-          </Link>
-          {options?.shareable && (
-            <button
-              type="button"
-              onClick={() => handleShareToggle(split.id)}
-              disabled={isSharing || pending}
-              className={`inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border text-xs font-semibold tracking-[0.12em] transition disabled:opacity-60 ${
-                isShared
-                  ? 'border-blue/35 bg-blue-tint/30 text-blue hover:border-blue/50'
-                  : 'border-silver/15 text-muted-foreground hover:border-blue/35 hover:text-blue'
-              }`}
-            >
-              {isSharing ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Share2 className="size-3.5" aria-hidden="true" />
-              )}
-              {isShared ? t('sharedUnshare') : t('shareToProfile')}
-            </button>
-          )}
-        </div>
-      </article>
+      <OfflineFloorWorkout
+        displayName={resolvedName}
+        avatarUrl={resolvedAvatar}
+        profileHref={resolvedHref}
+        isGuest={resolvedGuest}
+      />
     )
   }
 
-  const journeySparkBars =
-    volumeTrend.bars.length >= 2 ? volumeTrend.bars : JOURNEY_PLACEHOLDER_BARS
+
+  const journeySparkBars = journeyTrend.bars
+  const loadPctLabel =
+    journeyTrend.loadChangePct === null
+      ? null
+      : ltrEmbed(formatLoadChangePct(Math.abs(journeyTrend.loadChangePct)))
+
+  const journeyLoadMessage = (() => {
+    if (loadPctLabel === null) return null
+    switch (journeyTrend.loadInsight) {
+      case 'up':
+        return t('loadUp', { pct: loadPctLabel })
+      case 'down':
+        return t('loadDown', { pct: loadPctLabel })
+      case 'flat':
+        return t('loadFlat')
+      default:
+        return null
+    }
+  })()
 
   const journeyTrendCaption =
-    journeyVolume === 0
+    shownVolume === 0
       ? t('journeyStart')
-      : volumeTrend.bars.length === 1
+      : journeyTrend.loadInsight === 'baseline'
         ? t('journeyBaseline')
-        : volumeTrend.caption
+        : t('weeklyVolumeCaption', { weeks: journeyTrend.weeksWithSessions })
+
+  const JourneyTrendIcon =
+    journeyTrend.loadInsight === 'down'
+      ? TrendingDown
+      : journeyTrend.loadInsight === 'flat'
+        ? Minus
+        : TrendingUp
+
+  const recentHistory = history.slice(0, 2)
 
   return (
-    <div className="relative min-h-svh pb-20 md:pb-0">
+    <div className="relative min-h-svh">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
         <div className="absolute inset-x-0 top-0 h-[55svh] [mask-image:linear-gradient(to_bottom,black_10%,transparent)]">
           <Image
@@ -298,17 +455,51 @@ export function WorkoutDashboard({
       </div>
 
       <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={avatarUrl}
-        profileHref={profileHref}
-        isGuest={isGuest}
+        userName={resolvedName}
+        initials={initialsFrom(resolvedName)}
+        avatarUrl={resolvedAvatar}
+        profileHref={resolvedHref}
+        isGuest={resolvedGuest}
       />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">
+      {startBlocked && activeWorkout ? (
+        <ActiveWorkoutConflict
+          active={activeWorkout}
+          onResolved={() => {
+            setStartBlocked(false)
+            void refreshActiveWorkout()
+          }}
+          onStay={() => setStartBlocked(false)}
+        />
+      ) : null}
+
+      <main
+        data-tour="page-workout"
+        className="mx-auto max-w-7xl min-w-0 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8 md:py-12"
+      >
+            {(liveDegraded && online && (liveReloading || liveReloadError || lastError || syncing)) && (
+              <div className="mb-6 rounded-2xl border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-foreground">
+                <p>
+                  {liveReloadError || lastError || t('liveReload')}
+                </p>
+                {(liveReloadError || lastError) && (
+                  <button
+                    type="button"
+                    className="mt-2 inline-flex min-h-10 items-center rounded-full border border-gold/40 px-4 text-xs font-bold tracking-[0.14em] text-gold"
+                    onClick={() => {
+                      workoutLiveReloadLock = null
+                      setRetryNonce((n) => n + 1)
+                    }}
+                  >
+                    {t('liveRetry')}
+                  </button>
+                )}
+              </div>
+            )}
             {celebrations.length > 0 && (
               <CelebrationBanner items={celebrations} />
             )}
+            <ActiveWorkoutBanner />
 
             <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -339,7 +530,7 @@ export function WorkoutDashboard({
                     as="p"
                     className="font-heading mt-3 text-4xl font-bold tracking-tight text-foreground tabular-nums sm:text-5xl"
                   >
-                    {formatVolumeKg(journeyVolume, weightUnit).replace(
+                    {formatVolumeKg(shownVolume, weightUnit).replace(
                       ` ${weightUnit}`,
                       '',
                     )}{' '}
@@ -350,14 +541,32 @@ export function WorkoutDashboard({
                   <p className="mt-2 text-sm font-medium text-muted-foreground">
                     {t('liftedSince')}
                   </p>
-                  <div className="mt-5 flex items-start gap-3 rounded-2xl border border-success/30 bg-success-tint p-4">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border chip-green">
-                      <TrendingUp className="size-4" aria-hidden="true" />
+                  {journeyLoadMessage ? (
+                    <div
+                      className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 ${
+                        journeyTrend.loadInsight === 'down'
+                          ? 'border-heat/30 bg-heat-tint'
+                          : journeyTrend.loadInsight === 'flat'
+                            ? 'border-border bg-muted/40'
+                            : 'border-success/30 bg-success-tint'
+                      }`}
+                    >
+                      <div
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-xl border ${
+                          journeyTrend.loadInsight === 'down'
+                            ? 'chip-amber'
+                            : journeyTrend.loadInsight === 'flat'
+                              ? 'border-border bg-background'
+                              : 'chip-green'
+                        }`}
+                      >
+                        <JourneyTrendIcon className="size-4" aria-hidden="true" />
+                      </div>
+                      <p className="text-sm leading-relaxed text-muted-foreground">
+                        {journeyLoadMessage}
+                      </p>
                     </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {t('loadUp', { pct: ltrEmbed('18%') })}
-                    </p>
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="w-full shrink-0 rounded-2xl border border-border bg-background p-4 lg:w-64">
@@ -371,13 +580,25 @@ export function WorkoutDashboard({
                     {journeySparkBars.map((height, index) => (
                       <div
                         key={index}
-                        className="w-full rounded-t-sm bg-gradient-to-t from-success/20 to-success/85"
+                        className={`w-full rounded-t-sm bg-gradient-to-t ${
+                          journeyTrend.weeklyVolumes[index] > 0
+                            ? 'from-success/20 to-success/85'
+                            : 'from-muted/20 to-muted/50'
+                        }`}
                         style={{ height: `${height}%` }}
                       />
                     ))}
                   </div>
-                  <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-success">
-                    <TrendingUp className="size-3.5" aria-hidden="true" />
+                  <p
+                    className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold ${
+                      journeyTrend.loadInsight === 'down'
+                        ? 'text-heat'
+                        : journeyTrend.loadInsight === 'flat'
+                          ? 'text-muted-foreground'
+                          : 'text-success'
+                    }`}
+                  >
+                    <JourneyTrendIcon className="size-3.5" aria-hidden="true" />
                     <LtrIsolate when={isLatinFragment(journeyTrendCaption)}>
                       {journeyTrendCaption}
                     </LtrIsolate>
@@ -386,65 +607,50 @@ export function WorkoutDashboard({
               </div>
             </section>
 
-            <section className="mb-8 sm:mb-10">
-              <AiCoachPanel
-                insight={insight}
-                compact
-                startHref={
-                  yourSplits[0]
-                    ? `/dashboard/splits/${yourSplits[0].slug}/session`
-                    : recommendedSplits[0]
-                      ? `/dashboard/splits/${recommendedSplits[0].slug}`
-                      : '/dashboard/workout'
-                }
-              />
-            </section>
-
-            {/* Your Splits */}
-            <section className="mb-10">
-              <div className="mb-5">
-                <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                  {t('primary')}
-                </p>
-                <h2 className="font-heading mt-1 text-2xl font-bold text-foreground md:text-3xl">
-                  {t('yourSplits')}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t('splitsHint', { max: MAX_CUSTOM_SPLITS })}
-                </p>
+            {/* Featured split — one program only */}
+            <section className="mb-10 min-w-0" data-tour="workout-splits">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
+                    {t('yourSplitsKicker')}
+                  </p>
+                  <h2 className="font-heading mt-1 text-2xl font-bold text-foreground md:text-3xl">
+                    {t('activeProgram')}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {hasPrimary
+                      ? t('trainSplitsHintPrimary')
+                      : t('trainSplitsHintLatest')}
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/splits"
+                  data-tour="workout-my-splits-link"
+                  className={`${CTA_PRIMARY} inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2.5 px-6 text-sm font-bold tracking-[0.12em] sm:w-auto sm:min-w-[12rem]`}
+                >
+                  {t('manageYourSplits')}
+                  <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
+                </Link>
               </div>
 
-              {deleteError && (
-                <p
-                  role="alert"
-                  className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                >
-                  {deleteError}
-                </p>
-              )}
-              {shareError && (
-                <p
-                  role="alert"
-                  className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                >
-                  {shareError}
-                </p>
-              )}
-
-              {yourSplits.length === 0 ? (
+              {featuredSplit === null ? (
                 <EmptyState
                   icon={Layers}
                   title={t('noSplits')}
                   body={t('noSplitsBody')}
                   actionLabel={t('createSplit')}
-                  actionHref="/dashboard/splits/create"
+                  onAction={goCreateSplit}
                   tone="gold"
                 />
               ) : (
-                <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3">
-                  {yourSplits.map((split) =>
-                    renderSplitCard(split, { deletable: true, shareable: true }),
-                  )}
+                <div className="max-w-xl" data-tour="workout-featured-split">
+                  <WorkoutSplitCard
+                    split={featuredSplit}
+                    primarySplitId={primarySplitId}
+                    isShared={Boolean(featuredSplit.isShared)}
+                    compact
+                    onStart={startSplit}
+                  />
                 </div>
               )}
             </section>
@@ -460,7 +666,7 @@ export function WorkoutDashboard({
                 </h2>
               </div>
 
-              {lastSession === null ? (
+              {recap === null ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-silver/20 bg-card/35 px-6 py-14 text-center">
                   <div className="mb-4 flex size-12 items-center justify-center rounded-xl border border-silver/20 bg-silver/5 text-silver">
                     <Trophy className="size-6" aria-hidden="true" />
@@ -479,30 +685,30 @@ export function WorkoutDashboard({
                       <div className="flex flex-wrap items-center gap-2">
                         <LtrIsolate
                           as="span"
-                          when={isLatinFragment(lastSession.badge)}
+                          when={isLatinFragment(recap.badge)}
                           className="rounded-full border badge-amber px-2.5 py-1 text-[10px] font-semibold tracking-[0.15em]"
                         >
-                          {lastSession.badge}
+                          {recap.badge}
                         </LtrIsolate>
                         <LtrIsolate
                           as="span"
                           className="text-xs text-muted-foreground"
                         >
-                          {lastSession.meta}
+                          {recap.meta}
                         </LtrIsolate>
                       </div>
                       <h3 className="font-heading mt-3 text-xl font-bold text-foreground sm:text-2xl">
-                        {lastSession.title}
+                        {recap.title}
                       </h3>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {lastSession.blurb}
+                        {recap.blurb}
                       </p>
 
                       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                         {[
-                          { label: t('duration'), value: lastSession.duration, icon: Clock3 },
-                          { label: t('volume'), value: lastSession.volume, icon: Weight },
-                          { label: t('sets'), value: lastSession.sets, icon: Layers },
+                          { label: t('duration'), value: recap.duration, icon: Clock3 },
+                          { label: t('volume'), value: recap.volume, icon: Weight },
+                          { label: t('sets'), value: recap.sets, icon: Layers },
                         ].map((stat) => (
                           <div
                             key={stat.label}
@@ -530,12 +736,12 @@ export function WorkoutDashboard({
                         <p className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground">
                           {t('standoutLifts')}
                         </p>
-                        {lastSession.standouts.length === 0 && (
+                        {recap.standouts.length === 0 && (
                           <p className="text-sm text-muted-foreground">
                             {t('noStandouts')}
                           </p>
                         )}
-                        {lastSession.standouts.map((lift) => (
+                        {recap.standouts.map((lift) => (
                           <div
                             key={lift}
                             className="flex min-h-11 items-center gap-3 rounded-xl border border-silver/10 bg-background/40 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-gold/30 hover:bg-gold/5"
@@ -579,21 +785,103 @@ export function WorkoutDashboard({
               )}
             </section>
 
-            {/* Workout Sessions — last 3 */}
-            <section className="mb-10">
+            {/* Create Your Own Split */}
+            <section className="mb-10" data-tour="workout-create">
               <div className="mb-5">
-                <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                  {t('historyKicker')}
+                <p className="text-[10px] font-semibold tracking-[0.3em] text-muted-foreground">
+                  {t('custom')}
                 </p>
                 <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
-                  {t('history')}
+                  {t('customTitle')}
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t('historyHint')}
-                </p>
               </div>
 
-              {historySessions.length === 0 ? (
+              {atSplitLimit ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-silver/25 bg-card/30 px-6 py-12 text-center">
+                  <span className="flex size-14 items-center justify-center rounded-full border border-silver/25 bg-background/60 text-silver">
+                    <Layers className="size-7" aria-hidden="true" />
+                  </span>
+                  <p className="font-heading mt-4 text-xl font-bold text-foreground">
+                    {t('limitReached')}
+                  </p>
+                  <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                    {t('limitBody', { max: MAX_CUSTOM_SPLITS })}
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  data-tour="workout-create-cta"
+                  onClick={goCreateSplit}
+                  className="group flex min-h-14 w-full flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-gold/35 bg-card/30 px-6 py-12 text-center transition-all duration-200 active:border-gold/60 active:bg-gold/5 sm:py-14"
+                >
+                  <span className="flex size-14 items-center justify-center rounded-full border border-gold/40 bg-gold/10 text-gold transition-transform duration-200 group-hover:scale-110">
+                    <Plus className="size-7" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="font-heading text-xl font-bold text-foreground">
+                      {t('createCustom')}
+                    </p>
+                    <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                      {t('createCustomBody', {
+                        used: splitCount,
+                        max: MAX_CUSTOM_SPLITS,
+                      })}
+                    </p>
+                  </div>
+                </button>
+              )}
+            </section>
+
+            <section className="mb-8 sm:mb-10">
+              <Link
+                href="/dashboard/home-workouts"
+                className="is-panel flex flex-col gap-4 p-5 transition hover:border-gold/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+              >
+                <div className="flex min-w-0 items-start gap-3.5">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-gold/25 bg-gold/10 text-gold">
+                    <House className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="section-kicker">{tHome('kicker')}</p>
+                    <h2 className="font-heading mt-1 text-xl font-bold text-headline">
+                      {t('homeWorkoutsTitle')}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t('homeWorkoutsBody')}
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex min-h-11 items-center justify-center gap-1 text-xs font-semibold tracking-[0.12em] text-gold">
+                  {t('openHomeWorkouts')}
+                </span>
+              </Link>
+            </section>
+
+            {/* Workout Sessions — last 2 */}
+            <section className="mb-6">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
+                    {t('historyKicker')}
+                  </p>
+                  <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
+                    {t('history')}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t('historyHint')}
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/history"
+                  className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full border border-gold/35 px-4 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:w-auto"
+                >
+                  {t('viewFullHistory')}
+                  <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
+                </Link>
+              </div>
+
+              {recentHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-silver/20 bg-card/35 px-6 py-12 text-center">
                   <p className="font-heading text-lg font-semibold text-foreground">
                     {t('noHistory')}
@@ -604,7 +892,7 @@ export function WorkoutDashboard({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {historySessions.map((session) => (
+                  {recentHistory.map((session) => (
                     <Link
                       key={session.id}
                       href={`/dashboard/sessions/${session.id}`}
@@ -621,6 +909,21 @@ export function WorkoutDashboard({
                           <LtrIsolate as="p" className="mt-0.5 text-xs text-muted-foreground">
                             {session.date}
                           </LtrIsolate>
+                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs sm:hidden">
+                            <LtrIsolate
+                              when={isLatinFragment(session.duration)}
+                              className="tabular-nums text-muted-foreground"
+                            >
+                              <span className="font-semibold text-foreground">
+                                {session.duration}
+                              </span>{' '}
+                              {t('duration')}
+                            </LtrIsolate>
+                            <LtrIsolate className="tabular-nums text-gold">
+                              <span className="font-semibold">{session.volume}</span>{' '}
+                              {t('volume')}
+                            </LtrIsolate>
+                          </div>
                         </div>
                       </div>
                       <div className="hidden shrink-0 items-center gap-6 text-right sm:flex">
@@ -651,82 +954,6 @@ export function WorkoutDashboard({
                     </Link>
                   ))}
                 </div>
-              )}
-            </section>
-
-            {/* Choose a Split */}
-            <section className="mb-10">
-              <div className="mb-5">
-                <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                  {t('recommendedForYou')}
-                </p>
-                <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
-                  {t('chooseSplit')}
-                </h2>
-                <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                  {t('chooseSplitBody')}
-                </p>
-              </div>
-
-              {recommendedSplits.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-silver/20 bg-card/35 px-6 py-12 text-center">
-                  <p className="font-heading text-lg font-semibold text-foreground">
-                    {t('noRecommended')}
-                  </p>
-                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    {t('noRecommendedBody')}
-                  </p>
-                </div>
-              ) : (
-                <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 xl:grid-cols-3">
-                  {recommendedSplits.map((split) => renderSplitCard(split))}
-                </div>
-              )}
-            </section>
-
-            {/* Create Your Own Split */}
-            <section className="mb-6">
-              <div className="mb-5">
-                <p className="text-[10px] font-semibold tracking-[0.3em] text-muted-foreground">
-                  {t('custom')}
-                </p>
-                <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
-                  {t('customTitle')}
-                </h2>
-              </div>
-
-              {atSplitLimit ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-silver/25 bg-card/30 px-6 py-12 text-center">
-                  <span className="flex size-14 items-center justify-center rounded-full border border-silver/25 bg-background/60 text-silver">
-                    <Layers className="size-7" aria-hidden="true" />
-                  </span>
-                  <p className="font-heading mt-4 text-xl font-bold text-foreground">
-                    {t('limitReached')}
-                  </p>
-                  <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                    {t('limitBody', { max: MAX_CUSTOM_SPLITS })}
-                  </p>
-                </div>
-              ) : (
-                <Link
-                  href="/dashboard/splits/create"
-                  className="group flex min-h-14 w-full flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-gold/35 bg-card/30 px-6 py-12 text-center transition-all duration-200 active:border-gold/60 active:bg-gold/5 sm:py-14"
-                >
-                  <span className="flex size-14 items-center justify-center rounded-full border border-gold/40 bg-gold/10 text-gold transition-transform duration-200 group-hover:scale-110">
-                    <Plus className="size-7" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="font-heading text-xl font-bold text-foreground">
-                      {t('createCustom')}
-                    </p>
-                    <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                      {t('createCustomBody', {
-                        used: yourSplits.length,
-                        max: MAX_CUSTOM_SPLITS,
-                      })}
-                    </p>
-                  </div>
-                </Link>
               )}
             </section>
           </main>

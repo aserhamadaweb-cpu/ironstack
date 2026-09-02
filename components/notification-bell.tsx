@@ -43,11 +43,14 @@ export function NotificationBell() {
   const [pending, startTransition] = useTransition()
 
   const refresh = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
     setLoading(true)
     try {
       const result = await getNotificationsAction()
       setItems(result.notifications)
       setUnreadCount(result.unreadCount)
+    } catch {
+      /* Offline — notifications stay empty. */
     } finally {
       setLoading(false)
     }
@@ -164,7 +167,7 @@ export function NotificationBell() {
         }
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="relative inline-flex size-10 items-center justify-center rounded-lg border border-silver/15 text-muted-foreground transition-colors active:opacity-70 sm:size-11"
+        className="relative inline-flex size-11 items-center justify-center rounded-lg border border-silver/15 text-muted-foreground transition-colors active:opacity-70"
       >
         <Bell className="size-4" aria-hidden="true" />
         {badge && (
@@ -178,7 +181,7 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label="Notification center"
-          className="fixed inset-x-3 z-[70] mt-2 flex max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-2xl border border-silver/15 bg-background shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] top-[calc(env(safe-area-inset-top)+3.25rem)] sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-[min(22rem,calc(100vw-1.5rem))]"
+          className="fixed inset-x-3 z-[70] mt-2 flex max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-2xl border border-silver/15 bg-background shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] top-[calc(env(safe-area-inset-top)+var(--app-header-height)+0.25rem)] sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-[min(22rem,calc(100vw-1.5rem))]"
         >
           <div className="flex items-center justify-between gap-2 border-b border-silver/10 px-4 py-3">
             <p className="text-[10px] font-semibold tracking-[0.28em] text-gold">

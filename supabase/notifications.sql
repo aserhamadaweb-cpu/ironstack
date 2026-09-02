@@ -31,3 +31,41 @@ create table if not exists public.push_subscriptions (
 
 create index if not exists push_subscriptions_user_idx
   on public.push_subscriptions (user_id);
+
+-- RLS as it exists live. Documented here because the repo previously carried the
+-- table shapes without the policies, which made the tables look unprotected.
+-- notifications has no INSERT policy for `authenticated` on purpose: rows are
+-- created only by security-definer triggers, never by the client.
+alter table public.notifications enable row level security;
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists notifications_select on public.notifications;
+create policy notifications_select
+  on public.notifications for select
+  to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists notifications_update on public.notifications;
+create policy notifications_update
+  on public.notifications for update
+  to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists push_subscriptions_select on public.push_subscriptions;
+create policy push_subscriptions_select
+  on public.push_subscriptions for select
+  to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists push_subscriptions_insert on public.push_subscriptions;
+create policy push_subscriptions_insert
+  on public.push_subscriptions for insert
+  to authenticated
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists push_subscriptions_delete on public.push_subscriptions;
+create policy push_subscriptions_delete
+  on public.push_subscriptions for delete
+  to authenticated
+  using (user_id = (select auth.uid()));

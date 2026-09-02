@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, Send } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { UserAvatar } from '@/components/user-avatar'
+import { ChatMessageBubble } from '@/components/chat-message-bubble'
 import type { DmMessage } from '@/lib/database.types'
 import { sendDmMessageAction } from '@/lib/data/social-actions'
 import { profileHref } from '@/lib/profile-path'
@@ -100,7 +101,7 @@ export function DmThreadChat({
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100svh-3.5rem)] max-w-2xl flex-col sm:h-[calc(100svh-4rem)]">
+    <div className="mx-auto flex app-chat-viewport-height max-w-2xl flex-col">
       <header className="flex items-center gap-3 border-b border-silver/10 px-4 py-3">
         <Link
           href="/dashboard/messages"
@@ -147,13 +148,17 @@ export function DmThreadChat({
               className={`flex ${mine ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                className={`max-w-[80%] rounded-2xl ${
                   mine
                     ? 'rounded-ee-md border border-blue/25 border-e-[3px] border-e-blue bg-card text-foreground'
                     : 'rounded-es-md border border-silver/10 bg-card/80 text-foreground'
                 }`}
               >
-                {msg.content}
+                <ChatMessageBubble
+                  content={msg.content}
+                  mine={mine}
+                  currentUserId={currentUserId}
+                />
               </div>
             </div>
           )

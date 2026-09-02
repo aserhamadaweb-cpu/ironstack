@@ -16,17 +16,25 @@ import {
   Share2,
   Sparkles,
 } from 'lucide-react'
-import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { useGuestGate } from '@/components/guest-gate-provider'
 import { ExerciseCard } from '@/components/exercise-card'
+import { ExerciseDetailOverlay } from '@/components/exercise-detail-overlay'
 import { EASE } from '@/components/reveal'
+import { splitExerciseDetailRef, type SplitExerciseDetailRef } from '@/lib/exercise-catalog-id'
 import { saveRecommendedSplit, saveSharedSplit, setSplitShared } from '@/lib/data/save-split'
+import { SplitShareSheet } from '@/components/split-share-sheet'
+import { patchCachedSplitShared, refreshWorkoutCache } from '@/lib/offline/cache'
+import { useOfflineStatus } from '@/lib/offline/provider'
 import { countExercises, type SplitDetail } from '@/lib/split-data'
 
 type SplitDetailPageProps = {
   split: SplitDetail
   displayName: string
   initials: string
+  avatarUrl?: string | null
   viewerUserId: string
 }
 
@@ -34,9 +42,17 @@ export function SplitDetailPage({
   split,
   displayName,
   initials,
+  avatarUrl,
   viewerUserId,
 }: SplitDetailPageProps) {
   const router = useRouter()
+  const { requireAccount } = useGuestGate()
+  const tSplitBuilder = useTranslations('splitBuilder')
+  const tCatalog = useTranslations('exerciseCatalog')
+  const tOffline = useTranslations('offline')
+  const tShare = useTranslations('splitShare')
+  const { online, hydrated } = useOfflineStatus()
+  const offline = hydrated && !online
   const reduce = useReducedMotion()
   const isOwner =
     Boolean(split.userId) &&
@@ -49,6 +65,8 @@ export function SplitDetailPage({
   const [shareError, setShareError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [sharePending, startShareTransition] = useTransition()
+  const [shareSheetOpen, setShareSheetOpen] = useState(false)
+  const [selectedExercise, setSelectedExercise] = useState<SplitExerciseDetailRef | null>(null)
   const totalExercises = countExercises(split)
 
   const list: Variants = {
@@ -61,7 +79,8 @@ export function SplitDetailPage({
   }
 
   const handleSave = () => {
-    if (saved || pending || isOwner) return
+    if (saved || pending || isOwner || offline) return
+    requireAccount('saveSplit', () => {
     setSaveError(null)
     startTransition(async () => {
       const result = split.recommended
@@ -74,10 +93,12 @@ export function SplitDetailPage({
       setSaved(true)
       router.refresh()
     })
+    })
   }
 
   const handleShareToggle = () => {
-    if (!isOwner || sharePending) return
+    if (!isOwner || sharePending || offline) return
+    requireAccount('shareSplit', () => {
     const next = !isShared
     setShareError(null)
     setIsShared(next)
@@ -88,7 +109,24 @@ export function SplitDetailPage({
         setShareError(result.error)
         return
       }
+      try {
+        await patchCachedSplitShared(split.slug, next)
+      } catch {
+        /* cache patch is best-effort */
+      }
+      try {
+        await refreshWorkoutCache()
+      } catch {
+        /* list refresh is best-effort */
+      }
       router.refresh()
+    })
+    })
+  }
+
+  const startSession = () => {
+    requireAccount('startSession', () => {
+      router.push(`/dashboard/splits/${split.slug}/session`)
     })
   }
 
@@ -100,10 +138,10 @@ export function SplitDetailPage({
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} />
+      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       <motion.main
-        className="mx-auto max-w-4xl px-6 pt-8 pb-32 md:pt-12"
+        className="mx-auto max-w-4xl px-6 pt-8 md:pt-12"
         initial={{ opacity: 0, y: reduce ? 0 : 28, scale: reduce ? 1 : 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.55, ease: EASE }}
@@ -138,10 +176,18 @@ export function SplitDetailPage({
           <h1 className="font-heading mt-4 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
             {split.name}
           </h1>
-          <p className="mt-2 text-sm font-medium text-muted-foreground">{split.description}</p>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {split.summary}
-          </p>
+          {split.description.trim() &&
+          split.description.trim() !== `${split.daysPerWeek} days/week` ? (
+            <p className="mt-2 text-sm font-medium text-muted-foreground">
+              {split.description}
+            </p>
+          ) : null}
+          {split.summary.trim() &&
+          split.summary.trim() !== split.description.trim() ? (
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {split.summary}
+            </p>
+          ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <span className="inline-flex items-center gap-2 rounded-xl border border-silver/15 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
@@ -159,39 +205,99 @@ export function SplitDetailPage({
             </span>
           </div>
 
-          {isOwner && (
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href={`/dashboard/splits/${split.slug}/edit`}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-silver/25 px-5 text-xs font-bold tracking-[0.14em] text-muted-foreground transition hover:border-gold/40 hover:text-gold"
-              >
-                <Pencil className="size-3.5" aria-hidden="true" />
-                EDIT SPLIT
-              </Link>
-              <button
-                type="button"
-                onClick={handleShareToggle}
-                disabled={sharePending}
-                className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-xs font-bold tracking-[0.14em] transition disabled:opacity-60 ${
-                  isShared
-                    ? 'border-blue/40 bg-blue-tint/40 text-blue'
-                    : 'border-silver/25 text-muted-foreground hover:border-blue/40 hover:text-blue'
-                }`}
-              >
-                {sharePending ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={startSession}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-xs font-bold tracking-[0.14em] text-primary-foreground transition hover:bg-primary/90"
+            >
+              <Play className="size-3.5 fill-current" aria-hidden="true" />
+              START SESSION
+            </button>
+            {isOwner ? (
+              <>
+                {offline ? (
+                  <span
+                    className="inline-flex min-h-11 max-w-full flex-wrap items-center gap-2 rounded-full border border-dashed border-silver/20 bg-card/40 px-5 py-2 text-xs font-bold tracking-[0.14em] text-muted-foreground/70"
+                    title={tOffline('splitRequiresConnection')}
+                  >
+                    <Pencil className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
+                    <span>EDIT SPLIT</span>
+                    <span className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground/80">
+                      · {tOffline('editSplitNeedsConnection')}
+                    </span>
+                  </span>
                 ) : (
-                  <Share2 className="size-3.5" aria-hidden="true" />
+                  <Link
+                    href={`/dashboard/splits/${split.slug}/edit`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-silver/25 px-5 text-xs font-bold tracking-[0.14em] text-muted-foreground transition hover:border-gold/40 hover:text-gold"
+                  >
+                    <Pencil className="size-3.5" aria-hidden="true" />
+                    EDIT SPLIT
+                  </Link>
                 )}
-                {isShared ? 'Shared on profile · Unshare' : 'Share to profile'}
-              </button>
-              {shareError && (
-                <p role="alert" className="mt-2 w-full text-sm text-destructive">
-                  {shareError}
-                </p>
-              )}
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={() => setShareSheetOpen(true)}
+                  disabled={offline}
+                  title={offline ? tOffline('splitRequiresConnection') : undefined}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-5 text-xs font-bold tracking-[0.14em] text-gold transition hover:border-gold/50 disabled:opacity-60"
+                >
+                  <Share2 className="size-3.5" aria-hidden="true" />
+                  {tShare('share')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShareToggle}
+                  disabled={sharePending || offline}
+                  title={offline ? tOffline('splitRequiresConnection') : undefined}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-xs font-bold tracking-[0.14em] transition disabled:opacity-60 ${
+                    isShared
+                      ? 'border-blue/40 bg-blue-tint/40 text-blue'
+                      : 'border-silver/25 text-muted-foreground hover:border-blue/40 hover:text-blue'
+                  }`}
+                >
+                  {sharePending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Share2 className="size-3.5" aria-hidden="true" />
+                  )}
+                  {isShared ? 'Shared on profile · Unshare' : 'Share to profile'}
+                </button>
+                {shareError ? (
+                  <p role="alert" className="mt-2 w-full text-sm text-destructive">
+                    {shareError}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={pending || saved || offline}
+                  title={offline ? tOffline('splitRequiresConnection') : undefined}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-xs font-bold tracking-[0.14em] transition disabled:opacity-70 ${
+                    saved
+                      ? 'border-success bg-success text-background'
+                      : 'border-silver/25 text-muted-foreground hover:border-silver/50 hover:text-foreground'
+                  }`}
+                >
+                  {saved ? (
+                    <Check className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <BookmarkPlus className="size-3.5" aria-hidden="true" />
+                  )}
+                  {saved ? 'SAVED' : pending ? 'SAVING…' : 'SAVE TO YOUR SPLITS'}
+                </button>
+                {saveError ? (
+                  <p role="alert" className="mt-2 w-full text-sm text-destructive">
+                    {saveError}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
         </header>
 
         <motion.div variants={list} initial="hidden" animate="visible">
@@ -216,11 +322,40 @@ export function SplitDetailPage({
               </motion.div>
 
               <div className="flex flex-col gap-2.5">
-                {day.exercises.map((exercise, index) => (
+                {day.exercises.map((exercise, index) => {
+                  const detailRef = splitExerciseDetailRef(exercise)
+                  const openable = Boolean(detailRef)
+                  return (
                   <motion.article
                     key={exercise.id}
                     variants={row}
-                    className="group rounded-2xl border border-silver/10 bg-card/50 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-silver/25 hover:bg-card/80 sm:p-4"
+                    role={openable ? 'button' : undefined}
+                    tabIndex={openable ? 0 : undefined}
+                    onClick={
+                      openable
+                        ? () => setSelectedExercise(detailRef)
+                        : undefined
+                    }
+                    onKeyDown={
+                      openable
+                        ? (event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedExercise(detailRef)
+                            }
+                          }
+                        : undefined
+                    }
+                    aria-label={
+                      openable
+                        ? `${tCatalog('viewDetails')}: ${exercise.name}`
+                        : undefined
+                    }
+                    className={`group rounded-2xl border border-silver/10 bg-card/50 p-3 transition-all duration-200 sm:p-4 ${
+                      openable
+                        ? 'cursor-pointer hover:-translate-y-0.5 hover:border-silver/25 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40'
+                        : ''
+                    }`}
                   >
                     <ExerciseCard
                       index={index}
@@ -230,98 +365,39 @@ export function SplitDetailPage({
                       setsReps={`${exercise.sets} sets × ${exercise.reps} reps`}
                     />
                   </motion.article>
-                ))}
+                  )
+                })}
               </div>
             </section>
           ))}
         </motion.div>
       </motion.main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-silver/10 bg-background/85 px-6 py-4 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 sm:gap-4">
-          <div className="hidden min-w-0 flex-1 sm:block">
-            <p className="truncate text-sm font-semibold text-foreground">{split.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {split.daysPerWeek} days / week · {totalExercises} exercises
-            </p>
-          </div>
+      <AnimatePresence>
+        {selectedExercise ? (
+          <ExerciseDetailOverlay
+            key={`${selectedExercise.id}:${selectedExercise.name}`}
+            exerciseId={selectedExercise.id}
+            exerciseName={selectedExercise.name}
+            onClose={() => setSelectedExercise(null)}
+            backLabel={tSplitBuilder('backToSplit')}
+          />
+        ) : null}
+      </AnimatePresence>
 
-          {!isOwner && (
-            <motion.button
-              type="button"
-              onClick={handleSave}
-              disabled={pending || saved}
-              aria-live="polite"
-              className={`relative flex h-12 flex-1 items-center justify-center gap-2 overflow-hidden rounded-full border text-sm font-bold tracking-[0.18em] transition-colors duration-300 disabled:opacity-70 sm:flex-none sm:px-7 ${
-                saved
-                  ? 'border-success bg-success text-background'
-                  : 'border-silver/25 bg-transparent text-foreground hover:border-silver/50 hover:text-foreground'
-              }`}
-              whileTap={{ scale: pending || saved ? 1 : 0.97 }}
-              animate={
-                saved && !reduce
-                  ? {
-                      boxShadow: [
-                        '0 0 0 0 rgba(198,40,40,0.6)',
-                        '0 0 34px 8px rgba(198,40,40,0.45)',
-                        '0 0 0 0 rgba(198,40,40,0)',
-                      ],
-                    }
-                  : {}
-              }
-              transition={{ duration: 0.9, ease: 'easeOut' }}
-            >
-              <AnimatePresence mode="wait" initial={false}>
-                {saved ? (
-                  <motion.span
-                    key="saved"
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, y: reduce ? 0 : 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: reduce ? 0 : -10 }}
-                    transition={{ duration: 0.25, ease: EASE }}
-                  >
-                    <Check className="size-4" aria-hidden="true" />
-                    SAVED
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="save"
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, y: reduce ? 0 : 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: reduce ? 0 : -10 }}
-                    transition={{ duration: 0.25, ease: EASE }}
-                  >
-                    <BookmarkPlus className="size-4" aria-hidden="true" />
-                    {pending ? 'SAVING…' : 'SAVE'}
-                    <span className="hidden lg:inline">
-                      {pending ? '' : 'TO YOUR SPLITS'}
-                    </span>
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </motion.button>
-          )}
-
-          <Link
-            href={`/dashboard/splits/${split.slug}/session`}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold tracking-[0.18em] text-primary-foreground transition-all hover:scale-[1.01] hover:bg-primary/90 sm:flex-none sm:px-8"
-          >
-            <Play className="size-4 fill-current" aria-hidden="true" />
-            START SESSION
-          </Link>
-        </div>
-        {saveError && (
-          <p
-            role="alert"
-            className="mx-auto mt-3 max-w-4xl text-center text-sm text-destructive"
-          >
-            {saveError}
-          </p>
-        )}
-      </div>
-
+      {isOwner ? (
+        <SplitShareSheet
+          open={shareSheetOpen}
+          onClose={() => {
+            setShareSheetOpen(false)
+            setIsShared(true)
+          }}
+          splitId={split.slug}
+          splitName={split.name}
+          daysPerWeek={split.daysPerWeek}
+          category={split.tag}
+        />
+      ) : null}
     </div>
   )
 }

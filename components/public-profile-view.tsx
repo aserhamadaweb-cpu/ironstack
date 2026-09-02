@@ -54,12 +54,7 @@ import {
 } from '@/lib/data/social-actions'
 import type { FriendshipRelation } from '@/lib/data/social'
 import { formatSessionDate, formatVolume } from '@/lib/session-store'
-import {
-  ageFromBirthDate,
-  formatHeightCm,
-  formatWeightKg,
-  type WeightUnit,
-} from '@/lib/units'
+import { type WeightUnit } from '@/lib/units'
 
 type UnifiedProfileViewProps = {
   data: PublicProfileBundle
@@ -69,6 +64,7 @@ type UnifiedProfileViewProps = {
     displayName: string
     bio: string
     avatarUrl: string | null
+    usernameChangeCount?: number
   }
   /** Viewer's preferred unit when signed in; falls back to profile owner's. */
   weightUnit?: WeightUnit
@@ -84,9 +80,7 @@ export function UnifiedProfileView({
 }: UnifiedProfileViewProps) {
   const t = useTranslations('profile')
   const tCommon = useTranslations('common')
-  const weightUnit: WeightUnit =
-    weightUnitProp ??
-    (data.profile.preferred_unit === 'lb' ? 'lb' : 'kg')
+  const weightUnit: WeightUnit = weightUnitProp ?? 'kg'
   const router = useRouter()
   const reduceMotion = useReducedMotion()
   const [followerCount, setFollowerCount] = useState(data.followerCount)
@@ -302,53 +296,6 @@ export function UnifiedProfileView({
               >
                 {data.profile.bio}
               </motion.p>
-            )}
-
-            {(data.profile.height_cm != null ||
-              data.profile.current_weight_kg != null ||
-              data.profile.birth_date ||
-              data.profile.gender) && (
-              <motion.div
-                className="mt-4 flex flex-wrap gap-2"
-                {...fadeUp(0.15)}
-              >
-                {data.profile.gender && (
-                  <span className="rounded-full border border-silver/15 bg-background/50 px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-                    {data.profile.gender === 'male'
-                      ? t('genderMale')
-                      : t('genderFemale')}
-                  </span>
-                )}
-                {(() => {
-                  const age = ageFromBirthDate(data.profile.birth_date)
-                  return age != null ? (
-                    <span className="rounded-full border border-silver/15 bg-background/50 px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-                      {t('ageYears', { age })}
-                    </span>
-                  ) : null
-                })()}
-                {data.profile.height_cm != null && (
-                  <span className="rounded-full border border-silver/15 bg-background/50 px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-                    {t('statHeight', {
-                      value: formatHeightCm(
-                        Number(data.profile.height_cm),
-                        weightUnit,
-                      ),
-                    })}
-                  </span>
-                )}
-                {data.profile.current_weight_kg != null && (
-                  <span className="rounded-full border border-silver/15 bg-background/50 px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-                    {t('statWeight', {
-                      value: formatWeightKg(
-                        Number(data.profile.current_weight_kg),
-                        weightUnit,
-                        1,
-                      ),
-                    })}
-                  </span>
-                )}
-              </motion.div>
             )}
 
             {!viewerIsGuest && (
@@ -864,6 +811,7 @@ export function UnifiedProfileView({
                   displayName: editInitial.displayName,
                   bio: editInitial.bio,
                   avatarUrl: editInitial.avatarUrl,
+                  usernameChangeCount: editInitial.usernameChangeCount ?? 0,
                 }}
                 onCancel={() => setEditOpen(false)}
                 onSuccess={(username) => {

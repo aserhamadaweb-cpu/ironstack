@@ -13,10 +13,12 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { UserAvatar } from '@/components/user-avatar'
 import type { GroupChatListItem } from '@/lib/data/group-chats'
 import type { DmThreadListItem } from '@/lib/data/social'
 import { startDmWithUserAction } from '@/lib/data/social-actions'
+import { chatMessagePreview } from '@/components/chat-message-bubble'
 
 type MessagesInboxProps = {
   currentUserId: string
@@ -59,9 +61,11 @@ function ThreadRow({
   athlete: string
 }) {
   const name = item.other.display_name || item.other.username || athlete
-  const preview =
-    item.lastMessage?.content ??
-    (item.thread ? noMessagesYet : sayHello)
+  const preview = item.lastMessage?.content
+    ? chatMessagePreview(item.lastMessage.content, noMessagesYet)
+    : item.thread
+      ? noMessagesYet
+      : sayHello
 
   const inner = (
     <>
@@ -160,7 +164,9 @@ function GroupRow({
           )}
         </div>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {item.lastMessage?.content ?? noMessagesYet}
+          {item.lastMessage?.content
+            ? chatMessagePreview(item.lastMessage.content, noMessagesYet)
+            : noMessagesYet}
         </p>
         <p className="mt-1 text-[10px] font-semibold tracking-[0.14em] text-gold">
           {item.chat.is_global ? communityBadge : `${groupBadge} · ${memberCountLabel}`}
@@ -263,7 +269,8 @@ export function MessagesInbox({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
+    <div className="mx-auto max-w-2xl space-y-8 px-4 py-6 sm:px-6 sm:py-8" data-tour="page-messages">
+      <BackToTrainLink />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="section-kicker">{t('kicker')}</p>

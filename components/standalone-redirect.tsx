@@ -2,25 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-
-function isStandaloneDisplay(): boolean {
-  if (typeof window === 'undefined') return false
-
-  const nav = window.navigator as Navigator & { standalone?: boolean }
-  if (nav.standalone === true) return true
-
-  // Installed PWAs report one of these display modes.
-  const modes = ['standalone', 'fullscreen', 'minimal-ui'] as const
-  for (const mode of modes) {
-    try {
-      if (window.matchMedia(`(display-mode: ${mode})`).matches) return true
-    } catch {
-      /* ignore unsupported queries */
-    }
-  }
-
-  return false
-}
+import { getCachedUserId } from '@/lib/offline/cache'
+import { buildAuthEntryHref } from '@/lib/auth-entry'
+import { isStandaloneDisplay } from '@/lib/pwa-client'
 
 type StandaloneRedirectProps = {
   children: React.ReactNode
@@ -45,16 +29,28 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
       }
 
       try {
+        if (!navigator.onLine) {
+          const cachedUser = await getCachedUserId().catch(() => null)
+          if (cancelled) return
+          window.location.replace(cachedUser ? '/offline' : buildAuthEntryHref())
+          return
+        }
+
         const supabase = createClient()
         const { data } = await supabase.auth.getSession()
         if (cancelled) return
 
         const session = data.session
+        const cachedUser = session?.user?.id
+          ? session.user.id
+          : await getCachedUserId().catch(() => null)
 
-        // Hard navigation so we never leave marketing in history or soft-nav back.
-        window.location.replace(session ? '/dashboard' : '/login')
+        window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
       } catch {
-        if (!cancelled) window.location.replace('/login')
+        const cachedUser = await getCachedUserId().catch(() => null)
+        if (!cancelled) {
+          window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
+        }
       }
     }
 

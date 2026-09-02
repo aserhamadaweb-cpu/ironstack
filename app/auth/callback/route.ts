@@ -1,95 +1,110 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
-import { isAppLocale, LOCALE_COOKIE } from '@/lib/i18n'
-import { isThemePreference } from '@/lib/theme'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+import { HOME_PATH } from '@/lib/onboarding-types'
 
-export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+type CookieToSet = { name: string; value: string; options: CookieOptions }
+
+function safeNextPath(raw: string | null) {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return HOME_PATH
+  }
+  return raw
+}
+
+function appOrigin(request: NextRequest) {
+  const url = new URL(request.url)
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const isLocalEnv = process.env.NODE_ENV === 'development'
+  if (isLocalEnv) return url.origin
+  if (forwardedHost) {
+    const proto = request.headers.get('x-forwarded-proto') || 'https'
+    return `${proto}://${forwardedHost}`
+  }
+  return url.origin
+}
+
+/**
+ * Server-side PKCE exchange for OAuth links (?code=…).
+ * The code verifier lives in cookies set when the flow started — exchanging
+ * here (not in a client page) avoids "PKCE code verifier not found" errors.
+ */
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  const nextParam = searchParams.get('next') ?? '/dashboard/home'
-  const next = nextParam.startsWith('/') ? nextParam : '/dashboard/home'
+  const next = safeNextPath(searchParams.get('next'))
+  const oauthError = searchParams.get('error')
+  const oauthErrorDescription = searchParams.get('error_description')
 
-  if (code) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (!error) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      let localeCookie: string | null = null
-
-      if (user) {
-        const meta = user.user_metadata ?? {}
-        const metaUsername =
-          typeof meta.username === 'string'
-            ? meta.username.trim().toLowerCase()
-            : ''
-        const metaLanguage = isAppLocale(meta.language) ? meta.language : null
-        const metaTheme = isThemePreference(meta.theme_preference)
-          ? meta.theme_preference
-          : null
-
-        if (metaLanguage) localeCookie = metaLanguage
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .maybeSingle()
-
-        const patch: {
-          username?: string
-          display_name?: string
-          language?: 'en' | 'ar'
-          theme_preference?: 'dark' | 'light'
-          updated_at: string
-        } = { updated_at: new Date().toISOString() }
-
-        if (/^[a-z0-9_]{3,30}$/.test(metaUsername) && !profile?.username) {
-          const { data: taken } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('username', metaUsername)
-            .neq('id', user.id)
-            .maybeSingle()
-          if (!taken) {
-            patch.username = metaUsername
-            patch.display_name =
-              (typeof meta.display_name === 'string'
-                ? meta.display_name
-                : null) ||
-              user.email?.split('@')[0] ||
-              metaUsername
-          }
-        }
-
-        if (metaLanguage) patch.language = metaLanguage
-        if (metaTheme) patch.theme_preference = metaTheme
-
-        await supabase.from('profiles').update(patch).eq('id', user.id)
-      }
-
-      const forwardedHost = request.headers.get('x-forwarded-host')
-      const isLocalEnv = process.env.NODE_ENV === 'development'
-      const redirectUrl = isLocalEnv
-        ? `${origin}${next}`
-        : forwardedHost
-          ? `https://${forwardedHost}${next}`
-          : `${origin}${next}`
-
-      const response = NextResponse.redirect(redirectUrl)
-      if (localeCookie) {
-        response.cookies.set(LOCALE_COOKIE, localeCookie, {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 365,
-          sameSite: 'lax',
-        })
-      }
-      return response
+  if (oauthError) {
+    const dest = new URL('/auth/error', appOrigin(request))
+    dest.searchParams.set(
+      'reason',
+      oauthError === 'access_denied' ||
+        (oauthErrorDescription || '').toLowerCase().includes('expired')
+        ? 'expired'
+        : 'callback_failed',
+    )
+    if (oauthErrorDescription) {
+      dest.searchParams.set('detail', oauthErrorDescription.slice(0, 280))
     }
+    return NextResponse.redirect(dest)
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`)
+  // Hash tokens (#access_token=…) never reach the server — hand off to /auth/confirm.
+  if (!code) {
+    const confirm = new URL('/auth/confirm', appOrigin(request))
+    searchParams.forEach((value, key) => {
+      if (key !== 'code') confirm.searchParams.set(key, value)
+    })
+    return NextResponse.redirect(confirm)
+  }
+
+  const pendingCookies: CookieToSet[] = []
+  const pendingHeaders: Record<string, string> = {}
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)
+            pendingCookies.push({ name, value, options })
+          })
+          if (headers) Object.assign(pendingHeaders, headers)
+        },
+      },
+    },
+  )
+
+  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  if (error) {
+    const dest = new URL('/auth/error', appOrigin(request))
+    const lower = error.message.toLowerCase()
+    dest.searchParams.set(
+      'reason',
+      lower.includes('expired') || lower.includes('invalid')
+        ? 'expired'
+        : 'exchange_failed',
+    )
+    dest.searchParams.set('detail', error.message.slice(0, 280))
+    return NextResponse.redirect(dest)
+  }
+
+  const finalize = new URL('/auth/finalize', appOrigin(request))
+  finalize.searchParams.set('next', next)
+
+  const response = NextResponse.redirect(finalize.href)
+  for (const { name, value, options } of pendingCookies) {
+    response.cookies.set(name, value, options)
+  }
+  for (const [key, value] of Object.entries(pendingHeaders)) {
+    response.headers.set(key, value)
+  }
+
+  return response
 }

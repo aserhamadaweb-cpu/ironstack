@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
-import type { AppNotification, Profile } from '@/lib/database.types'
+import type { AppNotification, PublicProfile } from '@/lib/database.types'
+import { fetchPublicProfilesByIds } from '@/lib/data/public-profiles'
 
 export type NotificationListItem = AppNotification & {
   related: Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   > | null
 }
@@ -34,15 +35,25 @@ export async function listNotifications(
 
   let relatedMap = new Map<
     string,
-    Pick<Profile, 'id' | 'username' | 'display_name' | 'avatar_url'>
+    Pick<PublicProfile, 'id' | 'username' | 'display_name' | 'avatar_url'>
   >()
 
   if (relatedIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', relatedIds)
-    relatedMap = new Map((profiles ?? []).map((p) => [p.id, p]))
+    const { data: profiles } = await fetchPublicProfilesByIds(
+      supabase,
+      relatedIds,
+    )
+    relatedMap = new Map(
+      (profiles ?? []).map((p) => [
+        p.id,
+        {
+          id: p.id,
+          username: p.username,
+          display_name: p.display_name,
+          avatar_url: p.avatar_url,
+        },
+      ]),
+    )
   }
 
   return (data as AppNotification[]).map((n) => ({

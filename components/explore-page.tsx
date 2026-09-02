@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ChevronRight, Search, Trophy, Users } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
+import { BackToTrainLink } from '@/components/back-to-train-link'
 import { StreakFlame } from '@/components/streak-flame'
 import { searchPeopleAction } from '@/lib/data/social-actions'
 import type { LeaderboardEntry } from '@/lib/database.types'
@@ -65,6 +66,7 @@ export function ExplorePageClient({
 
   return (
     <div className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:px-6 sm:py-8">
+      <BackToTrainLink />
       <header>
         <p className="section-kicker">{t('kicker')}</p>
         <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">

@@ -11,6 +11,7 @@ export type NotificationPreferences = {
   message_request: boolean
   pr_achievement: boolean
   split_saved: boolean
+  unfinished_session: boolean
 }
 
 export type PrivacyFollow = 'everyone' | 'nobody'
@@ -25,9 +26,26 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   message_request: true,
   pr_achievement: true,
   split_saved: true,
+  unfinished_session: false,
 }
 
 export type ProfileGender = 'male' | 'female'
+
+/**
+ * Safe public profile shape from `public.public_profiles`.
+ * Never includes height, weight, birth date, gender, prefs, or private settings.
+ */
+export type PublicProfile = {
+  id: string
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  bio: string | null
+  is_guest: boolean
+}
+
+export const PUBLIC_PROFILE_COLUMNS =
+  'id, username, display_name, avatar_url, bio, is_guest' as const
 
 export type Profile = {
   id: string
@@ -36,7 +54,8 @@ export type Profile = {
   avatar_url: string | null
   bio: string | null
   preferred_unit: 'kg' | 'lb'
-  theme_preference: 'dark' | 'light'
+  /** Null means follow System / metadata appearance (not a stored light/dark). */
+  theme_preference: 'dark' | 'light' | null
   language: 'en' | 'ar'
   notification_preferences: NotificationPreferences
   privacy_follow: PrivacyFollow
@@ -48,6 +67,10 @@ export type Profile = {
   current_weight_kg: number | null
   is_email_verified: boolean
   is_guest: boolean
+  /** Times username was changed after the initial set. Max 2. */
+  username_change_count: number
+  /** Active training program — nullable FK to splits.id */
+  primary_split_id: string | null
   created_at: string
   updated_at: string
 }
@@ -93,6 +116,8 @@ export type PersonalRecord = {
   id: string
   user_id: string
   lift_type_id: string
+  /** Denormalized lift name — required on live DB inserts. */
+  lift_name?: string | null
   weight: number
   reps: number
   is_current_pr: boolean
@@ -107,6 +132,8 @@ export type Split = {
   days_per_week: number
   is_system: boolean
   is_shared: boolean
+  /** Opaque token for public /share/split/[token] links. */
+  share_token: string | null
   /** When this row was cloned from another split (system or shared). */
   source_split_id: string | null
   category: string | null
@@ -271,15 +298,15 @@ export type Challenge = {
 export type ChallengeWithRelations = Challenge & {
   lift_types: Pick<LiftType, 'id' | 'name' | 'slug' | 'muscle_group'> | null
   creator: Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   > | null
   opponent: Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   > | null
   winner: Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   > | null
 }
@@ -336,7 +363,7 @@ export type GroupMessage = {
 
 export type GroupMessageWithSender = GroupMessage & {
   sender: Pick<
-    Profile,
+    PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'
   > | null
 }

@@ -1,5 +1,6 @@
 import type { SplitDetailRow } from '@/lib/database.types'
 import type { MuscleGroup, SplitDetail } from '@/lib/split-data'
+import { formatTargetReps } from '@/lib/split-reps'
 
 const MUSCLE_FALLBACK: MuscleGroup = 'Core'
 
@@ -47,8 +48,11 @@ export function toSplitDetail(row: SplitDetailRow): SplitDetail {
         id: exercise.id,
         name: exercise.lift_types?.name ?? 'Exercise',
         sets: exercise.target_sets,
-        // Schema has no target_reps column — default a sensible hypertrophy range.
-        reps: '8–12',
+        reps: formatTargetReps(
+          exercise.target_reps_min,
+          exercise.target_reps_max,
+          exercise.lift_types?.category === 'cardio' ? '30' : '8–12',
+        ),
         muscle: asMuscle(exercise.lift_types?.muscle_group),
         category: exercise.lift_types?.category ?? undefined,
         image: exercise.lift_types?.image_url ?? undefined,

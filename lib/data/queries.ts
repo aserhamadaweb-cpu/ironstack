@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getAuthUserId } from '@/lib/supabase/server'
 import type {
   Friendship,
   LeaderboardEntry,
@@ -7,11 +7,13 @@ import type {
   PersonalRecord,
   PersonalRecordWithLift,
   Profile,
+  PublicProfile,
   Session,
   SessionWithRelations,
   Split,
   SplitDetailRow,
 } from '@/lib/database.types'
+import { fetchPublicProfilesByIds } from '@/lib/data/public-profiles'
 
 export type DataResult<T> =
   | { data: T; error: null }
@@ -45,11 +47,12 @@ export async function getCurrentUser() {
 }
 
 export async function getProfile(userId: string): Promise<DataResult<Profile | null>> {
+  try {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'id, username, display_name, avatar_url, bio, preferred_unit, theme_preference, language, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, current_weight_kg, is_email_verified, is_guest, created_at, updated_at',
+      'id, username, display_name, avatar_url, bio, preferred_unit, theme_preference, language, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, current_weight_kg, is_email_verified, is_guest, username_change_count, primary_split_id, created_at, updated_at',
     )
     .eq('id', userId)
     .maybeSingle()
@@ -58,6 +61,15 @@ export async function getProfile(userId: string): Promise<DataResult<Profile | n
     return { data: null, error: friendlyError('Could not load your profile.', error.message) }
   }
   return { data: data as Profile | null, error: null }
+  } catch (err) {
+    return {
+      data: null,
+      error: friendlyError(
+        'Could not load your profile.',
+        err instanceof Error ? err.message : 'fetch failed',
+      ),
+    }
+  }
 }
 
 export async function listBodyWeightLogs(
@@ -77,6 +89,62 @@ export async function listBodyWeightLogs(
     }
   }
   return { data: data ?? [], error: null }
+}
+
+export async function getInProgressSession(
+  userId: string,
+): Promise<DataResult<{
+  id: string
+  splitId: string
+  splitDayId: string
+  startedAt: string
+  splitName: string | null
+  dayName: string | null
+} | null>> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('sessions')
+    .select(
+      'id, split_id, split_day_id, started_at, splits(id, name), split_days(id, name)',
+    )
+    .eq('user_id', userId)
+    .eq('status', 'in_progress')
+    .order('started_at', { ascending: false })
+    .limit(1)
+
+  if (error) {
+    return {
+      data: null,
+      error: friendlyError('Could not load your active session.', error.message),
+    }
+  }
+
+  const rowRaw = Array.isArray(data) ? data[0] : data
+  if (!rowRaw) return { data: null, error: null }
+
+  const row = rowRaw as {
+    id: string
+    split_id: string | null
+    split_day_id: string | null
+    started_at: string
+    splits?: { name?: string } | { name?: string }[] | null
+    split_days?: { name?: string } | { name?: string }[] | null
+  }
+  const split = Array.isArray(row.splits) ? row.splits[0] : row.splits
+  const day = Array.isArray(row.split_days) ? row.split_days[0] : row.split_days
+  if (!row.split_id || !row.split_day_id) return { data: null, error: null }
+
+  return {
+    data: {
+      id: row.id,
+      splitId: row.split_id,
+      splitDayId: row.split_day_id,
+      startedAt: row.started_at,
+      splitName: split?.name ?? null,
+      dayName: day?.name ?? null,
+    },
+    error: null,
+  }
 }
 
 export async function getCompletedSessions(
@@ -238,31 +306,61 @@ export async function getTotalVolume(userId: string): Promise<DataResult<number>
 
 export async function getSplitsForUser(userId: string): Promise<DataResult<Split[]>> {
   const supabase = await createClient()
-  // System splits (user_id is null) + the athlete's own custom splits.
   const fullSelect =
     'id, user_id, name, description, days_per_week, is_system, is_shared, source_split_id, category, created_at, updated_at'
   const legacySelect =
     'id, user_id, name, description, days_per_week, is_system, category, created_at, updated_at'
 
-  const primary = await supabase
-    .from('splits')
-    .select(fullSelect)
-    .or(`user_id.is.null,user_id.eq.${userId}`)
-    .order('is_system', { ascending: false })
-    .order('name', { ascending: true })
+  // Own splits first — must remain visible when is_shared=false after unshare.
+  const [ownResult, catalogResult] = await Promise.all([
+    supabase
+      .from('splits')
+      .select(fullSelect)
+      .eq('user_id', userId)
+      .eq('is_system', false)
+      .order('name', { ascending: true }),
+    supabase
+      .from('splits')
+      .select(fullSelect)
+      .or('user_id.is.null,is_system.eq.true')
+      .order('is_system', { ascending: false })
+      .order('name', { ascending: true }),
+  ])
 
-  let rows = primary.data as Split[] | null
-  let error = primary.error
+  let error = ownResult.error ?? catalogResult.error
+  let rows: Split[] | null = null
 
   if (error && /is_shared|source_split_id|column/i.test(error.message)) {
-    const fallback = await supabase
-      .from('splits')
-      .select(legacySelect)
-      .or(`user_id.is.null,user_id.eq.${userId}`)
-      .order('is_system', { ascending: false })
-      .order('name', { ascending: true })
-    rows = (fallback.data ?? null) as Split[] | null
-    error = fallback.error
+    const [ownFallback, catalogFallback] = await Promise.all([
+      supabase
+        .from('splits')
+        .select(legacySelect)
+        .eq('user_id', userId)
+        .eq('is_system', false)
+        .order('name', { ascending: true }),
+      supabase
+        .from('splits')
+        .select(legacySelect)
+        .or('user_id.is.null,is_system.eq.true')
+        .order('is_system', { ascending: false })
+        .order('name', { ascending: true }),
+    ])
+    error = ownFallback.error ?? catalogFallback.error
+    if (!error) {
+      const merged = [...(ownFallback.data ?? []), ...(catalogFallback.data ?? [])]
+      const byId = new Map<string, Split>()
+      for (const row of merged) {
+        byId.set(row.id, row as Split)
+      }
+      rows = [...byId.values()]
+    }
+  } else if (!error) {
+    const merged = [...(ownResult.data ?? []), ...(catalogResult.data ?? [])]
+    const byId = new Map<string, Split>()
+    for (const row of merged) {
+      byId.set(row.id, row as Split)
+    }
+    rows = [...byId.values()]
   }
 
   if (error) {
@@ -300,7 +398,7 @@ export async function getSplitDetail(splitIdOrSlug: string): Promise<DataResult<
       split_days (
         id, split_id, name, day_order, subtitle, created_at,
         split_day_exercises (
-          id, split_day_id, lift_type_id, target_sets, exercise_order, created_at,
+          id, split_day_id, lift_type_id, target_sets, target_reps_min, target_reps_max, exercise_order, created_at,
           lift_types ( id, slug, name, image_url, muscle_group, category )
         )
       )
@@ -341,7 +439,9 @@ export async function getSplitDetail(splitIdOrSlug: string): Promise<DataResult<
 
 export async function getAcceptedFriends(
   userId: string,
-): Promise<DataResult<Array<{ friendship: Friendship; profile: Profile }>>> {
+): Promise<
+  DataResult<Array<{ friendship: Friendship; profile: PublicProfile }>>
+> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('friendships')
@@ -365,19 +465,19 @@ export async function getAcceptedFriends(
     return { data: [], error: null }
   }
 
-  const { data: profiles, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, preferred_unit, created_at, updated_at')
-    .in('id', friendIds)
+  const { data: profiles, error: profileError } = await fetchPublicProfilesByIds(
+    supabase,
+    friendIds,
+  )
 
   if (profileError) {
     return {
       data: null,
-      error: friendlyError('Could not load your training circle.', profileError.message),
+      error: friendlyError('Could not load your training circle.', profileError),
     }
   }
 
-  const profileMap = new Map((profiles as Profile[]).map((p) => [p.id, p]))
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]))
   const joined = rows
     .map((friendship) => {
       const friendId =
@@ -386,7 +486,7 @@ export async function getAcceptedFriends(
       if (!profile) return null
       return { friendship, profile }
     })
-    .filter(Boolean) as Array<{ friendship: Friendship; profile: Profile }>
+    .filter(Boolean) as Array<{ friendship: Friendship; profile: PublicProfile }>
 
   return { data: joined, error: null }
 }
@@ -548,6 +648,14 @@ export async function getLeaderboard(options?: {
   limit?: number
   orderBy?: 'streak' | 'weight'
 }): Promise<DataResult<LeaderboardEntry[]>> {
+  const userId = await getAuthUserId()
+  if (!userId) {
+    return {
+      data: null,
+      error: 'Sign in to view the leaderboard.',
+    }
+  }
+
   const supabase = await createClient()
   const orderBy = options?.orderBy ?? 'streak'
   let query = supabase
@@ -568,6 +676,13 @@ export async function getLeaderboard(options?: {
   const { data, error } = await query
 
   if (error) {
+    const lower = error.message.toLowerCase()
+    if (lower.includes('permission denied') || lower.includes('42501')) {
+      return {
+        data: null,
+        error: 'Sign in to view the leaderboard.',
+      }
+    }
     return {
       data: null,
       error: friendlyError('Could not load the leaderboard.', error.message),

@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
-import { ActiveSession } from '@/components/active-session'
-import { PageError } from '@/components/page-states'
+import { ActiveSessionGate } from '@/components/active-session-gate'
+import { GuestBlockedScreen } from '@/components/guest-blocked-screen'
 import {
   countCompletedSessions,
   getPreviousBestsMap,
@@ -10,85 +10,146 @@ import {
 import { toSplitDetail } from '@/lib/data/split-adapter'
 import { enrichSplitFromLibrary } from '@/lib/exercise-library.server'
 import { initialsFrom } from '@/lib/dashboard-utils'
-import { createClient } from '@/lib/supabase/server'
+import { getIsGuestAction } from '@/lib/data/profile-actions'
+import { getAuthIdentity } from '@/lib/supabase/server'
 
 type Params = { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Params) {
   const { slug } = await params
-  const result = await getSplitDetail(slug)
-  return {
-    title: result.data
-      ? `Active Session · ${result.data.name} — IRONSTACK`
-      : 'Active Session — IRONSTACK',
-    description: 'Log your sets, chase PRs, and finish strong.',
+  try {
+    const result = await getSplitDetail(slug)
+    return {
+      title: result.data
+        ? `Active Session · ${result.data.name} — IRONSTACK`
+        : 'Active Session — IRONSTACK',
+      description: 'Log your sets, chase PRs, and finish strong.',
+    }
+  } catch {
+    return {
+      title: 'Active Session — IRONSTACK',
+      description: 'Log your sets, chase PRs, and finish strong.',
+    }
   }
 }
 
 export default async function ActiveSessionPage({ params }: Params) {
   const { slug } = await params
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  if (await getIsGuestAction()) {
+    return (
+      <GuestBlockedScreen
+        reason="startSession"
+        returnPath={`/dashboard/splits/${slug}/session`}
+      />
+    )
+  }
 
-  if (!user) {
+  const { userId, email } = await getAuthIdentity()
+  if (!userId) {
     redirect('/login')
   }
 
-  const [splitResult, profileResult, countResult] = await Promise.all([
-    getSplitDetail(slug),
-    getProfile(user.id),
-    countCompletedSessions(user.id),
-  ])
+  let split = null
+  let displayName = email?.split('@')[0] || 'Athlete'
+  let initials = 'A'
+  let avatarUrl: string | null = null
+  let isFirstEver = false
+  let weightUnit: 'kg' | 'lb' = 'kg'
+  let previousBests: Record<
+    string,
+    { weight: number; reps: number; durationSeconds?: number | null }
+  > = {}
 
-  if (splitResult.error || profileResult.error || countResult.error) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError
-          message={
-            splitResult.error ||
-            profileResult.error ||
-            countResult.error ||
-            'Error'
+  try {
+    const [splitResult, profileResult, countResult] = await Promise.all([
+      getSplitDetail(slug),
+      getProfile(userId),
+      countCompletedSessions(userId),
+    ])
+
+    if (splitResult.error && !splitResult.data) {
+      return (
+        <ActiveSessionGate
+          slug={slug}
+          displayName={
+            profileResult.data?.display_name ||
+            email?.split('@')[0] ||
+            'Athlete'
           }
+          initials={initialsFrom(
+            profileResult.data?.display_name ||
+              email?.split('@')[0] ||
+              'Athlete',
+          )}
+          avatarUrl={profileResult.data?.avatar_url}
+          isFirstEver={(countResult.data ?? 0) === 0}
+          weightUnit={profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'}
         />
-      </main>
-    )
-  }
+      )
+    }
 
-  if (!splitResult.data) {
-    notFound()
-  }
+    if (!splitResult.data) {
+      return (
+        <ActiveSessionGate
+          slug={slug}
+          displayName={
+            profileResult.data?.display_name ||
+            email?.split('@')[0] ||
+            'Athlete'
+          }
+          initials={initialsFrom(
+            profileResult.data?.display_name ||
+              email?.split('@')[0] ||
+              'Athlete',
+          )}
+          avatarUrl={profileResult.data?.avatar_url}
+          isFirstEver={(countResult.data ?? 0) === 0}
+          weightUnit={profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'}
+        />
+      )
+    }
 
-  const split = enrichSplitFromLibrary(toSplitDetail(splitResult.data))
-  const liftTypeIds = split.schedule.flatMap((day) =>
-    day.exercises.map((ex) => ex.liftTypeId).filter(Boolean),
-  ) as string[]
+    split = enrichSplitFromLibrary(toSplitDetail(splitResult.data))
+    const liftTypeIds = split.schedule.flatMap((day) =>
+      day.exercises.map((ex) => ex.liftTypeId).filter(Boolean),
+    ) as string[]
 
-  const bestsResult = await getPreviousBestsMap(user.id, liftTypeIds)
-  if (bestsResult.error) {
+    const bestsResult = await getPreviousBestsMap(userId, liftTypeIds)
+    previousBests = bestsResult.data ?? {}
+
+    displayName =
+      profileResult.data?.display_name ||
+      email?.split('@')[0] ||
+      'Athlete'
+    initials = initialsFrom(displayName)
+    avatarUrl = profileResult.data?.avatar_url ?? null
+    isFirstEver = (countResult.data ?? 0) === 0
+    weightUnit = profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'
+  } catch {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <PageError message={bestsResult.error} />
-      </main>
+      <ActiveSessionGate
+        slug={slug}
+        displayName={displayName}
+        initials={initialsFrom(displayName)}
+        isFirstEver={false}
+        weightUnit="kg"
+      />
     )
   }
 
-  const displayName =
-    profileResult.data?.display_name ||
-    user.email?.split('@')[0] ||
-    'Athlete'
+  if (!split) notFound()
 
   return (
-    <ActiveSession
-      split={split}
+    <ActiveSessionGate
+      slug={slug}
       displayName={displayName}
-      initials={initialsFrom(displayName)}
-      isFirstEver={(countResult.data ?? 0) === 0}
-      previousBests={bestsResult.data ?? {}}
-      weightUnit={profileResult.data?.preferred_unit === 'lb' ? 'lb' : 'kg'}
+      initials={initials}
+      avatarUrl={avatarUrl}
+      isFirstEver={isFirstEver}
+      weightUnit={weightUnit}
+      initialSplit={split}
+      initialBests={previousBests}
     />
   )
 }

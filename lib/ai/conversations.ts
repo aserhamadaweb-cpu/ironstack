@@ -1,4 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
+import {
+  isAgentPreview,
+  isSessionProposal,
+  isSplitProposal,
+  type CoachUiAction,
+} from '@/lib/ai/action-types'
+import { undoableActionNames } from '@/lib/ai/agent/undoable'
 
 export type AiConversation = {
   id: string
@@ -24,6 +31,7 @@ export type ChatMessageDto = {
   content: string
   createdAt: string
   usedTools: boolean
+  action?: CoachUiAction
 }
 
 /** Short title from the user's opening message. */
@@ -34,19 +42,128 @@ export function titleFromFirstMessage(text: string): string {
   return `${cleaned.slice(0, 45).trimEnd()}…`
 }
 
+function parseToolPayload(row: AiMessageRow): { name: string; result: unknown } | null {
+  if (row.role !== 'tool') return null
+  let raw = row.content
+  let name = row.tool_name ?? ''
+  const prefixed = raw.match(/^\[([^\]]+)\]\s([\s\S]*)$/)
+  if (prefixed) {
+    if (!name) name = prefixed[1]
+    raw = prefixed[2]
+  }
+  try {
+    return { name, result: JSON.parse(raw) as unknown }
+  } catch {
+    return name ? { name, result: raw } : null
+  }
+}
+
+export function extractCoachActionFromTrace(
+  trace: Array<{ name: string; result: unknown }>,
+): CoachUiAction | undefined {
+  for (let i = trace.length - 1; i >= 0; i -= 1) {
+    const action = actionFromPayload(trace[i].name, trace[i].result)
+    if (action) return action
+  }
+  return undefined
+}
+
+function actionFromPayload(name: string, result: unknown): CoachUiAction | undefined {
+  if (!result || typeof result !== 'object') return undefined
+
+  const queued = result as {
+    status?: string
+    pendingActionId?: unknown
+    actionName?: unknown
+    preview?: unknown
+  }
+  if (
+    queued.status === 'pending_confirmation' &&
+    typeof queued.pendingActionId === 'string' &&
+    queued.pendingActionId.length > 0 &&
+    isAgentPreview(queued.preview)
+  ) {
+    return {
+      type: 'agent_action',
+      pendingActionId: queued.pendingActionId,
+      actionName:
+        typeof queued.actionName === 'string' ? queued.actionName : name,
+      preview: queued.preview,
+      status: 'pending',
+    }
+  }
+
+  const proposal = (result as { proposal?: unknown }).proposal
+  if (isSplitProposal(proposal)) {
+    if (
+      name === 'propose_split' ||
+      name === 'propose_update_split' ||
+      !name ||
+      (result as { status?: string }).status === 'pending_confirmation'
+    ) {
+      return { type: 'split_preview', proposal, status: 'pending' }
+    }
+  }
+  if (isSessionProposal(proposal)) {
+    if (
+      name === 'propose_session_action' ||
+      !name ||
+      (result as { status?: string }).status === 'pending_confirmation'
+    ) {
+      return { type: 'session_preview', proposal, status: 'pending' }
+    }
+  }
+  return undefined
+}
+
 export function mapMessagesWithUsedTools(
   messages: AiMessageRow[],
 ): ChatMessageDto[] {
+  const applied = new Map<string, { splitId: string; href?: string }>()
+  const discarded = new Set<string>()
+  const cancelled = new Set<string>()
+  for (const row of messages) {
+    const parsed = parseToolPayload(row)
+    if (!parsed || typeof parsed.result !== 'object' || !parsed.result) continue
+    const result = parsed.result as {
+      proposalId?: string
+      splitId?: string
+      href?: string
+      applied?: boolean
+      discarded?: boolean
+      cancelled?: boolean
+    }
+    if (
+      result.applied &&
+      result.proposalId &&
+      result.splitId &&
+      (parsed.name === 'confirm_create_split' || parsed.name === 'confirm_update_split')
+    ) {
+      applied.set(result.proposalId, { splitId: result.splitId, href: result.href })
+    }
+    if (result.discarded && result.proposalId) {
+      discarded.add(result.proposalId)
+    }
+    if (result.cancelled && result.proposalId) {
+      cancelled.add(result.proposalId)
+    }
+  }
+
   return messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
       let usedTools = false
+      let action: CoachUiAction | undefined
       if (m.role === 'assistant') {
         const fullIdx = messages.findIndex((row) => row.id === m.id)
         for (let j = fullIdx - 1; j >= 0; j -= 1) {
           if (messages[j].role === 'tool') {
             usedTools = true
-            break
+            const parsed = parseToolPayload(messages[j])
+            if (parsed && !action) {
+              action = actionFromPayload(parsed.name, parsed.result)
+            }
+            continue
           }
           if (
             messages[j].role === 'user' ||
@@ -55,6 +172,21 @@ export function mapMessagesWithUsedTools(
             break
           }
         }
+        if (action?.type === 'split_preview') {
+          const saved = applied.get(action.proposal.id)
+          if (saved) {
+            action = {
+              ...action,
+              status: 'saved',
+              splitHref: saved.href ?? `/dashboard/splits/${saved.splitId}`,
+            }
+          } else if (cancelled.has(action.proposal.id)) {
+            action = { ...action, status: 'cancelled' }
+          }
+        }
+        if (action?.type === 'session_preview' && discarded.has(action.proposal.id)) {
+          action = { ...action, status: 'done' }
+        }
       }
       return {
         id: m.id,
@@ -62,8 +194,117 @@ export function mapMessagesWithUsedTools(
         content: m.content,
         createdAt: m.created_at,
         usedTools,
+        action,
       }
     })
+}
+
+/**
+ * Resolve the real state of queued agent actions.
+ *
+ * The chat transcript only records that a change was proposed. Whether it was
+ * confirmed, cancelled, expired, or later undone lives in
+ * `ai_pending_actions` / `ai_action_audit`, so reloading a conversation has to
+ * look it up rather than trusting the stored tool payload.
+ */
+export async function hydrateAgentActionStatuses(
+  userId: string,
+  messages: ChatMessageDto[],
+): Promise<ChatMessageDto[]> {
+  const ids = [
+    ...new Set(
+      messages
+        .map((m) => (m.action?.type === 'agent_action' ? m.action.pendingActionId : null))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+  if (ids.length === 0) return messages
+
+  const supabase = await createClient()
+  const [pendingRes, auditRes] = await Promise.all([
+    supabase
+      .from('ai_pending_actions')
+      .select('id, status, expires_at')
+      .eq('user_id', userId)
+      .in('id', ids),
+    supabase
+      .from('ai_action_audit')
+      .select('id, pending_action_id, status, summary')
+      .eq('user_id', userId)
+      .in('pending_action_id', ids),
+  ])
+
+  const pendingById = new Map(
+    (pendingRes.data ?? []).map((row) => [row.id as string, row]),
+  )
+  const auditByPending = new Map<
+    string,
+    { id: string; status: string; summary: string }
+  >()
+  for (const row of auditRes.data ?? []) {
+    if (!row.pending_action_id) continue
+    auditByPending.set(row.pending_action_id as string, {
+      id: row.id as string,
+      status: row.status as string,
+      summary: (row.summary as string) ?? '',
+    })
+  }
+
+  // An undo is a separate append-only entry pointing back at the original, so
+  // "already undone" has to be looked up by those audit ids.
+  const auditIds = [...auditByPending.values()].map((entry) => entry.id)
+  const undoneAuditIds = new Set<string>()
+  if (auditIds.length > 0) {
+    const { data: undos } = await supabase
+      .from('ai_action_audit')
+      .select('undo_of')
+      .eq('user_id', userId)
+      .in('undo_of', auditIds)
+    for (const row of undos ?? []) {
+      if (row.undo_of) undoneAuditIds.add(row.undo_of as string)
+    }
+  }
+
+  const undoable = undoableActionNames()
+  const now = Date.now()
+
+  return messages.map((message) => {
+    if (message.action?.type !== 'agent_action') return message
+    const card = message.action
+    const pending = pendingById.get(card.pendingActionId)
+    const audit = auditByPending.get(card.pendingActionId)
+
+    if (audit?.status === 'executed') {
+      return {
+        ...message,
+        action: {
+          ...card,
+          status: 'applied',
+          auditId: audit.id,
+          summary: audit.summary,
+          undoable: undoable.has(card.actionName),
+          undone: undoneAuditIds.has(audit.id),
+        },
+      }
+    }
+    if (audit?.status === 'failed') {
+      return { ...message, action: { ...card, status: 'failed' } }
+    }
+    if (!pending) {
+      return { ...message, action: { ...card, status: 'expired' } }
+    }
+    if (pending.status === 'cancelled') {
+      return { ...message, action: { ...card, status: 'cancelled' } }
+    }
+    if (
+      pending.status === 'expired' ||
+      (pending.status === 'pending' &&
+        new Date(pending.expires_at as string).getTime() < now)
+    ) {
+      return { ...message, action: { ...card, status: 'expired' } }
+    }
+    return message
+  })
 }
 
 export async function listConversations(
@@ -115,11 +356,26 @@ export async function getConversationForUser(
 
   const { data: messages, error } = await supabase
     .from('ai_messages')
-    .select('id, conversation_id, role, content, created_at')
+    .select('id, conversation_id, role, content, created_at, tool_name')
     .eq('conversation_id', conversation.id)
     .in('role', ['user', 'assistant', 'tool'])
     .order('created_at', { ascending: true })
     .limit(200)
+
+  if (error && /tool_name|schema cache|column/i.test(error.message)) {
+    const fallback = await supabase
+      .from('ai_messages')
+      .select('id, conversation_id, role, content, created_at')
+      .eq('conversation_id', conversation.id)
+      .in('role', ['user', 'assistant', 'tool'])
+      .order('created_at', { ascending: true })
+      .limit(200)
+    if (fallback.error) throw new Error(fallback.error.message)
+    return {
+      conversation: conversation as AiConversation,
+      messages: (fallback.data ?? []) as AiMessageRow[],
+    }
+  }
 
   if (error) throw new Error(error.message)
 
