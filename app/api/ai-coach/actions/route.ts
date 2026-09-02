@@ -9,6 +9,7 @@ import { insertAiMessage } from '@/lib/ai/conversations'
 import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const supabase = await createClient()

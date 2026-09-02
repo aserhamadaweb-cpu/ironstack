@@ -1,0 +1,6 @@
+.cursor/
+scripts/audit-closeout-output.txt
+scripts/debug-login-page.mjs
+public/tour-preview/
+public/install-tutorial/_preview/
+supabase/.temp/

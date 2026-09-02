@@ -29,7 +29,14 @@ public/worker-*.js.map
 public/swe-worker-*.js
 public/swe-worker-*.js.map
 public/fallback-*.js
-.env*
+
+# Local env files (keep .env.example tracked for Vercel onboarding)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
 
 # User-data reset audit dumps (may contain auth IDs)
 scripts/_reset-audit-*.json

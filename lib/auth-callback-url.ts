@@ -1,10 +1,8 @@
 import { ONBOARDING_PATH } from '@/lib/onboarding-types'
+import { getSiteUrl } from '@/lib/site-url'
 
 export function siteOriginFromEnv(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-    'http://localhost:3000'
-  )
+  return getSiteUrl()
 }
 
 /** Builds /auth/callback?next=… for Supabase emailRedirectTo (server-safe). */

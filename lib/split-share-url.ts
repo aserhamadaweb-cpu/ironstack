@@ -1,3 +1,5 @@
+import { getSiteUrl } from '@/lib/site-url'
+
 /** Builds the canonical public URL for a split share token. */
 export function splitSharePath(token: string): string {
   return `/share/split/${encodeURIComponent(token)}`
@@ -6,8 +8,8 @@ export function splitSharePath(token: string): string {
 export function splitShareAbsoluteUrl(token: string, origin?: string): string {
   const base =
     origin?.replace(/\/$/, '') ||
-    (typeof window !== 'undefined' ? window.location.origin : '') ||
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-    'http://localhost:3000'
+    getSiteUrl(
+      typeof window !== 'undefined' ? window.location.origin : null,
+    )
   return `${base}${splitSharePath(token)}`
 }
