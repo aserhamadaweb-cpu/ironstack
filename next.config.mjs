@@ -14,6 +14,15 @@ const withPWA = withPWAInit({
     disableDevLogs: true,
     runtimeCaching: [
       {
+        urlPattern: /\/api\/exercises\/[^/]+$/i,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'exercise-details',
+          expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 30 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+      {
         urlPattern: /\/offline\/exercises\.json$/i,
         handler: 'CacheFirst',
         options: {

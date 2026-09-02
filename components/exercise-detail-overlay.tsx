@@ -4,10 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { ExerciseDetailView } from '@/components/exercise-detail-view'
-import {
-  fetchExerciseDetail,
-  type ExerciseDetailDto,
-} from '@/lib/exercises/actions'
+import { loadExerciseDetail } from '@/lib/exercises/fetch-detail-client'
+import type { ExerciseDetailDto } from '@/lib/exercises/actions'
 import { useDetailsLayerHistory } from '@/lib/use-overlay-history'
 
 type ExerciseDetailOverlayProps = {
@@ -57,7 +55,7 @@ export function ExerciseDetailOverlay({
     let cancelled = false
     setStatus('loading')
     setDetail(null)
-    void fetchExerciseDetail(exerciseId, exerciseName)
+    void loadExerciseDetail(exerciseId, exerciseName)
       .then((data) => {
         if (cancelled) return
         if (!data) {

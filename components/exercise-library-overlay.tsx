@@ -13,10 +13,8 @@ import {
   type ExerciseCatalogItem,
 } from '@/lib/exercise-catalog'
 import type { LibraryExercise } from '@/lib/exercise-library'
-import {
-  fetchExerciseDetail,
-  type ExerciseDetailDto,
-} from '@/lib/exercises/actions'
+import { loadExerciseDetail } from '@/lib/exercises/fetch-detail-client'
+import type { ExerciseDetailDto } from '@/lib/exercises/actions'
 import {
   filterHomeExercises,
   isHomeExercise,
@@ -130,7 +128,7 @@ export function ExerciseLibraryOverlay({
     setDetailStatus('loading')
     setDetail(null)
     setDetailsAdded(false)
-    void fetchExerciseDetail(detailsId)
+    void loadExerciseDetail(detailsId)
       .then((data) => {
         if (cancelled) return
         if (!data) {

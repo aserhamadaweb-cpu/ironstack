@@ -111,10 +111,17 @@ export function useDetailsLayerHistory(options: {
   onCloseRef.current = onClose
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      depthRef.current = 0
+      return
+    }
     if (depthRef.current >= 1) return
-    history.pushState({ ...history.state, [STATE_KEY]: 'details' as OverlayLayer }, '')
-    depthRef.current = 1
+    const frame = window.requestAnimationFrame(() => {
+      if (depthRef.current >= 1 || !open) return
+      history.pushState({ ...history.state, [STATE_KEY]: 'details' as OverlayLayer }, '')
+      depthRef.current = 1
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [open])
 
   useEffect(() => {

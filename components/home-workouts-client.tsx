@@ -1,20 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, House } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { ExerciseDetailView } from '@/components/exercise-detail-view'
+import { ExerciseDetailOverlay } from '@/components/exercise-detail-overlay'
 import { HomeProgramBoard, type HomeSplitCard } from '@/components/home-program-board'
 import { WorkoutRecommendedSplits } from '@/components/workout-recommended-splits'
 import type { LibraryExercise } from '@/lib/exercise-library'
-import {
-  fetchExerciseDetail,
-  type ExerciseDetailDto,
-} from '@/lib/exercises/actions'
 import { resolveHomePrograms } from '@/lib/home-splits'
 import type { SplitRecommendation } from '@/lib/split-recommendations'
-import { useDetailsLayerHistory } from '@/lib/use-overlay-history'
 
 type HomeWorkoutsClientProps = {
   library: LibraryExercise[]
@@ -34,74 +29,25 @@ export function HomeWorkoutsClient({
   isGuest = false,
 }: HomeWorkoutsClientProps) {
   const t = useTranslations('homeWorkouts')
-  const tCatalog = useTranslations('exerciseCatalog')
   const [detailsId, setDetailsId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<ExerciseDetailDto | null>(null)
-  const [detailStatus, setDetailStatus] = useState<'idle' | 'loading' | 'error'>(
-    'idle',
-  )
+  const [detailsName, setDetailsName] = useState<string | undefined>(undefined)
   const programs = useMemo(() => resolveHomePrograms(library), [library])
 
   const closeDetails = useCallback(() => {
     setDetailsId(null)
-    setDetail(null)
-    setDetailStatus('idle')
+    setDetailsName(undefined)
   }, [])
-  const requestCloseDetails = useDetailsLayerHistory({
-    open: Boolean(detailsId),
-    onClose: closeDetails,
-  })
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (!detailsId) return
-      event.preventDefault()
-      requestCloseDetails()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [detailsId, requestCloseDetails])
-
-  useEffect(() => {
-    if (!detailsId) {
-      setDetail(null)
-      setDetailStatus('idle')
-      return
-    }
-    let cancelled = false
-    setDetailStatus('loading')
-    setDetail(null)
-    void fetchExerciseDetail(detailsId)
-      .then((data) => {
-        if (cancelled) return
-        if (!data) {
-          setDetailStatus('error')
-          return
-        }
-        setDetail(data)
-        setDetailStatus('idle')
-      })
-      .catch(() => {
-        if (!cancelled) setDetailStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [detailsId])
+  const openExercise = useCallback((exercise: LibraryExercise) => {
+    setDetailsId(exercise.id)
+    setDetailsName(exercise.name)
+  }, [])
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-6">
-      <div className={detailsId ? 'hidden' : ''}>
-        <HomeWorkoutsHeader count={homeCount} />
-      </div>
+      <HomeWorkoutsHeader count={homeCount} />
 
-      <div
-        className={detailsId ? 'pointer-events-none invisible absolute' : ''}
-        inert={Boolean(detailsId)}
-        aria-hidden={Boolean(detailsId)}
-        data-tour="home-workouts-list"
-      >
+      <div data-tour="home-workouts-list">
         <WorkoutRecommendedSplits
           recommendations={recommendedSplits}
           error={recommendedSplitsError}
@@ -110,37 +56,17 @@ export function HomeWorkoutsClient({
         <HomeProgramBoard
           programs={programs}
           yourSplits={yourSplits}
-          onOpenExercise={(exercise) => setDetailsId(exercise.id)}
+          onOpenExercise={openExercise}
         />
       </div>
 
       {detailsId ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {detailStatus === 'loading' ? (
-            <p className="m-auto text-sm text-muted-foreground">
-              {tCatalog('loading')}
-            </p>
-          ) : detailStatus === 'error' || !detail ? (
-            <div className="m-auto max-w-sm text-center">
-              <p className="text-sm font-semibold text-foreground">
-                {tCatalog('loadError')}
-              </p>
-              <button
-                type="button"
-                onClick={requestCloseDetails}
-                className="mt-4 inline-flex h-11 items-center justify-center rounded-full border border-silver/20 px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
-              >
-                {t('backToHomeWorkouts')}
-              </button>
-            </div>
-          ) : (
-            <ExerciseDetailView
-              exercise={detail}
-              onBack={requestCloseDetails}
-              backLabel={t('backToHomeWorkouts')}
-            />
-          )}
-        </div>
+        <ExerciseDetailOverlay
+          exerciseId={detailsId}
+          exerciseName={detailsName}
+          onClose={closeDetails}
+          backLabel={t('backToHomeWorkouts')}
+        />
       ) : null}
     </div>
   )
