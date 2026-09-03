@@ -18,6 +18,7 @@ import {
   validateUsernameFormat,
 } from '@/lib/username'
 import { buildAuthCallbackUrl } from '@/lib/auth-callback-url'
+import { abandonAnonymousSessionIfPresent } from '@/lib/auth/abandon-guest-session'
 
 export type AuthState = {
   error?: string
@@ -59,6 +60,8 @@ export async function signUp(
     nextRaw.startsWith('/') && !nextRaw.startsWith('//')
       ? nextRaw
       : ONBOARDING_PATH
+
+  await abandonAnonymousSessionIfPresent()
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -132,6 +135,8 @@ export async function signIn(
 
   const supabase = await createClient()
 
+  await abandonAnonymousSessionIfPresent()
+
   const { error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -183,6 +188,54 @@ export async function signInGuest(): Promise<AuthState> {
   const jar = await cookies()
   jar.set(ONBOARDING_COOKIE, '', { path: '/', maxAge: 0, sameSite: 'lax' })
   redirect(HOME_PATH)
+}
+
+/** Convert the current anonymous guest into a permanent email/password account. */
+export async function upgradeGuestAccount(
+  _prevState: AuthState | null,
+  formData: FormData,
+): Promise<AuthState> {
+  const email = String(formData.get('email') ?? '').trim()
+  const password = String(formData.get('password') ?? '')
+
+  if (!email || password.length < 6) {
+    return { error: 'Enter a valid email and a password of at least 6 characters.' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.is_anonymous) {
+    redirect(HOME_PATH)
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    email,
+    password,
+    data: { is_guest: false },
+  })
+  if (updateError) {
+    return { error: updateError.message }
+  }
+
+  await supabase
+    .from('profiles')
+    .update({
+      is_guest: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+
+  const jar = await cookies()
+  jar.set(ONBOARDING_COOKIE, '1', {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: 'lax',
+  })
+
+  redirect(ONBOARDING_PATH)
 }
 
 export async function signOut() {

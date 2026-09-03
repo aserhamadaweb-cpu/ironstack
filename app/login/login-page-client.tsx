@@ -29,6 +29,7 @@ import {
 } from '@/lib/auth-errors'
 import { buildAuthCallbackUrl } from '@/lib/auth-callback-url'
 import { signIn, signInGuest } from '@/app/login/actions'
+import { abandonAnonymousSessionIfPresent } from '@/lib/auth/abandon-guest-session'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
 import { handleAuthUserChanged } from '@/lib/clear-client-user-state'
@@ -300,6 +301,7 @@ function LoginAuthForm() {
       }
 
       // Leaving a previous account: wipe local caches before creating a new one.
+      await abandonAnonymousSessionIfPresent()
       await handleAuthUserChanged(null)
       clearIronstackAuthCache()
 

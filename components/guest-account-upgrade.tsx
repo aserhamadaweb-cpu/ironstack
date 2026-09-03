@@ -1,22 +1,19 @@
 'use client'
 
 import { FormEvent, useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { clearProfileOnboardingCache } from '@/components/choose-username-gate'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
-import { createClient } from '@/lib/supabase/client'
+import { upgradeGuestAccount } from '@/app/login/actions'
 
 /**
  * Guest → permanent email/password upgrade.
- * Does not require a custom 6-digit verification step; Confirm email is off.
+ * Runs on the server so the new session is stored in HTTP cookies.
  */
 export function GuestAccountUpgrade() {
   const t = useTranslations('guest')
   const tAuth = useTranslations('auth')
-  const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -36,26 +33,17 @@ export function GuestAccountUpgrade() {
     }
 
     startTransition(async () => {
-      const { data, error: updateError } = await supabase.auth.updateUser({
-        email: nextEmail,
-        password,
-        data: {
-          is_guest: false,
-        },
-      })
-      if (updateError) {
-        setError(updateError.message)
-        return
-      }
-      if (!data.user) {
-        setError(tAuth('generic'))
-        return
-      }
-
       clearIronstackAuthCache()
       clearProfileOnboardingCache()
-      router.push('/dashboard/home')
-      router.refresh()
+
+      const formData = new FormData()
+      formData.set('email', nextEmail)
+      formData.set('password', password)
+
+      const result = await upgradeGuestAccount(null, formData)
+      if (result?.error) {
+        setError(result.error)
+      }
     })
   }
 
@@ -73,6 +61,7 @@ export function GuestAccountUpgrade() {
           {tAuth('email')}
           <input
             type="email"
+            name="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -86,6 +75,7 @@ export function GuestAccountUpgrade() {
           <div className="relative mt-2">
             <input
               type={showPassword ? 'text' : 'password'}
+              name="password"
               required
               minLength={6}
               value={password}
