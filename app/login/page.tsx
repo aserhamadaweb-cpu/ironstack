@@ -1,17 +1,30 @@
 import { Suspense } from 'react'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import LoginPageClient from '@/app/login/login-page-client'
 import { isPickLanguageEntry } from '@/lib/auth-entry'
 import { LOCALE_CHOSEN_COOKIE } from '@/lib/i18n'
+import { createClient, getAuthIdentity } from '@/lib/supabase/server'
+import { userNeedsOnboarding } from '@/lib/onboarding-storage'
+import { HOME_PATH, ONBOARDING_PATH } from '@/lib/onboarding-types'
 
 type LoginPageProps = {
   searchParams: Promise<{ next?: string; mode?: string; pickLanguage?: string }>
 }
 
-// Signed-in visitors are redirected away from /login by proxy.ts — no extra
-// Auth round-trip here so the sign-in screen paints immediately.
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { userId } = await getAuthIdentity()
+  if (userId) {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user && !user.is_anonymous) {
+      redirect(userNeedsOnboarding(user) ? ONBOARDING_PATH : HOME_PATH)
+    }
+  }
+
   const params = await searchParams
   const jar = await cookies()
   const hasChosen = jar.get(LOCALE_CHOSEN_COOKIE)?.value === '1'

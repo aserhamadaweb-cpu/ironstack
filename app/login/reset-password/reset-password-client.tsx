@@ -25,6 +25,7 @@ function authCopy(t: ReturnType<typeof useTranslations<'auth'>>): AuthCopy {
     oauthCancelled: t('oauthCancelled'),
     socialFailed: t('socialFailed'),
     network: t('network'),
+    staleClient: t('staleClient'),
     rateLimited: t('rateLimited'),
     generic: t('generic'),
   }
@@ -121,7 +122,7 @@ export function ResetPasswordClient() {
           <button
             type="submit"
             disabled={loading}
-            className="cta-pulse btn-pill mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] transition-transform duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="cta-pulse btn-pill btn-pill-primary mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 px-10 py-4 text-sm font-bold tracking-[0.25em] transition-transform duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : null}
             {t('resetPasswordSubmit')}

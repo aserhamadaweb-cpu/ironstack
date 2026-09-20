@@ -94,7 +94,7 @@ function normalizeIncoming(
   return {
     ...base,
     ...partial,
-    version: 1,
+    version: 3,
     step: clampOnboardingStep(partial.step ?? base.step),
     displayName:
       typeof partial.displayName === 'string'
@@ -198,8 +198,12 @@ async function persistOnboarding(
 
   // Persist resolved light/dark, or clear the column when System is selected
   // so a prior preference cannot override device theme after refresh.
-  profilePatch.theme_preference =
-    appearance === 'system' ? null : resolvedTheme
+  // Some DBs still have theme_preference NOT NULL — handled below on error.
+  if (appearance === 'system') {
+    profilePatch.theme_preference = null
+  } else {
+    profilePatch.theme_preference = resolvedTheme
+  }
 
   profilePatch.username = username
   if (data.language === 'en' || data.language === 'ar') {
@@ -234,12 +238,28 @@ async function persistOnboarding(
     profilePatch.avatar_url = options.avatar.avatarPresetPath
   }
 
-  const { error: profileError } = await supabase
+  let { error: profileError } = await supabase
     .from('profiles')
     .update(profilePatch)
     .eq('id', user.id)
 
+  // System mode: if nulling theme_preference is rejected (NOT NULL / check),
+  // save the rest of the profile and keep appearance in auth metadata.
+  if (profileError && appearance === 'system') {
+    console.warn(
+      '[onboarding] could not clear theme_preference for system mode:',
+      profileError.message,
+    )
+    const { theme_preference: _ignored, ...withoutTheme } = profilePatch
+    const retry = await supabase
+      .from('profiles')
+      .update(withoutTheme)
+      .eq('id', user.id)
+    profileError = retry.error
+  }
+
   if (profileError) {
+    console.error('[onboarding] profile update failed:', profileError.message)
     const msg = profileError.message.toLowerCase()
     if (msg.includes('unique') || msg.includes('duplicate')) {
       return { ok: false, error: 'That username is already taken.' }
@@ -312,6 +332,7 @@ async function persistOnboarding(
   revalidatePath(HOME_PATH)
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard/profile')
+  revalidatePath('/dashboard/fitness-profile')
 
   return {
     ok: true,
@@ -403,7 +424,7 @@ export async function saveOnboardingProgressAction(
   avatar?: OnboardingAvatarOptions,
 ): Promise<OnboardingActionResult> {
   const current = await getOnboardingStateAction()
-  if (current.completed && current.data.step >= 8) {
+  if (current.completed && current.data.step >= 4) {
     // Editing from settings after completion — allow updates without flipping incomplete.
   }
 
@@ -443,7 +464,7 @@ export async function completeOnboardingAction(
   const alreadyComplete =
     current.completed && !current.incomplete
   const merged = normalizeIncoming(
-    { ...partial, step: partial.step ?? 8 },
+    { ...partial, step: partial.step ?? 4 },
     current.data,
   )
   // Avoid duplicate weight logs when re-saving from Settings edit mode.
@@ -521,6 +542,14 @@ export async function updateAppearanceAction(
       '[appearance] could not clear theme_preference for system mode:',
       profileError.message,
     )
+    const { theme_preference: _ignored, ...withoutTheme } = profileUpdate
+    const retry = await supabase
+      .from('profiles')
+      .update(withoutTheme)
+      .eq('id', user.id)
+    if (retry.error) {
+      return { ok: false, error: 'Could not save appearance.' }
+    }
   } else if (profileError) {
     return { ok: false, error: 'Could not save appearance.' }
   }

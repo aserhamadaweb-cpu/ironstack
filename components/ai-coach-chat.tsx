@@ -27,7 +27,7 @@ import { BackToTrainLink } from '@/components/back-to-train-link'
 import { LtrIsolate } from '@/components/ltr-isolate'
 import { EASE } from '@/components/reveal'
 import { CoachActionCard } from '@/components/coach-action-card'
-import { CoachSuggestions } from '@/components/coach-suggestions'
+import { ProfileCompletenessBanner } from '@/components/profile-completeness-banner'
 import { SUGGESTED_QUESTIONS } from '@/lib/ai/prompt'
 import { isSplitBuildIntent } from '@/lib/ai/split-intent'
 import type { CoachUiAction, SplitProposal } from '@/lib/ai/action-types'
@@ -57,6 +57,8 @@ type AiCoachChatProps = {
   initialMessages: ChatMessage[]
   initialConversations: ConversationSummary[]
   initialMemories: MemoryItem[]
+  profileMissingCount?: number
+  profileMissingLabels?: string[]
 }
 
 type StatHint = { kind: 'lift' | 'streak'; count?: number; value: string }
@@ -104,6 +106,8 @@ export function AiCoachChat({
   initialMessages,
   initialConversations,
   initialMemories,
+  profileMissingCount = 0,
+  profileMissingLabels = [],
 }: AiCoachChatProps) {
   const t = useTranslations('coach')
   const locale = useLocale()
@@ -140,8 +144,8 @@ export function AiCoachChat({
     })
   }, [messages, pending, reduce])
 
-  const showChips = messages.length <= 2
   const showEmpty = messages.length === 0
+  const showChips = messages.length <= 2
   const drawerX = locale === 'ar' ? 280 : -280
   const activeTitle =
     conversations.find((c) => c.id === conversationId)?.title || t('newChat')
@@ -411,7 +415,7 @@ export function AiCoachChat({
   return (
     <div className="relative flex min-h-svh flex-col">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,rgba(232,181,74,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,color-mix(in_srgb,var(--gold)_12%,transparent),transparent_55%)]" />
         <div className="absolute top-[35%] -end-28 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
         <div className="absolute bottom-[15%] start-[-5rem] h-72 w-72 rounded-full bg-blue/[0.04] blur-3xl" />
       </div>
@@ -423,19 +427,21 @@ export function AiCoachChat({
         isGuest={isGuest}
       />
 
-      <div className="mx-auto flex w-full max-w-6xl flex-col overflow-hidden px-3 pt-2 app-chat-viewport-height sm:px-6 sm:pt-6">
-        <BackToTrainLink className="mb-2 shrink-0 sm:mb-4" />
-        <header className="mb-2 flex shrink-0 flex-wrap items-end justify-between gap-2 sm:mb-4 sm:gap-3">
+      <div className="mx-auto flex w-full max-w-7xl flex-col overflow-hidden px-2 pt-1 app-chat-viewport-height sm:px-4 sm:pt-3">
+        <BackToTrainLink className="mb-1 shrink-0 sm:mb-2" />
+        <ProfileCompletenessBanner
+          missingCount={profileMissingCount}
+          missingLabels={profileMissingLabels}
+          className="mb-2 shrink-0 sm:mb-3"
+        />
+        <header className="mb-1 flex shrink-0 flex-wrap items-end justify-between gap-2 sm:mb-3 sm:gap-3">
           <div>
             <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
               {t('kicker')}
             </p>
-            <h1 className="font-heading mt-1 text-xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="font-heading mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {t('brandTitle')}
             </h1>
-            <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-              {t('tagline')}
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -453,9 +459,9 @@ export function AiCoachChat({
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 gap-4">
+        <div className="flex min-h-0 flex-1 gap-3 sm:gap-4">
           {/* Desktop history sidebar */}
-          <aside className="hidden w-64 shrink-0 overflow-hidden rounded-2xl border border-silver/10 bg-background/50 lg:flex lg:flex-col">
+          <aside className="hidden w-56 shrink-0 overflow-hidden rounded-2xl border border-silver/10 bg-background/50 lg:flex lg:flex-col xl:w-64">
             {historyPanel}
           </aside>
 
@@ -500,8 +506,8 @@ export function AiCoachChat({
             )}
           </AnimatePresence>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-silver/10 bg-background/50">
-            <div className="flex items-center gap-2 border-b border-silver/10 px-3 py-2.5 sm:px-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-y border-silver/10 bg-background/60 sm:rounded-2xl sm:border">
+            <div className="flex items-center gap-2 border-b border-silver/10 px-3 py-2 sm:px-4">
               <PanelLeft className="size-3.5 text-muted-foreground" aria-hidden="true" />
               <p className="truncate text-xs text-muted-foreground">{activeTitle}</p>
               {(pending || switching) && (
@@ -509,7 +515,7 @@ export function AiCoachChat({
               )}
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
+            <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5">
               {showEmpty && (
                 <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
                   <div className="mb-4 flex size-36 items-center justify-center sm:size-40">
@@ -518,7 +524,7 @@ export function AiCoachChat({
                   <p className="font-heading text-lg font-semibold text-foreground">
                     {t('readyTitle', { name: displayName.split(/\s+/)[0] })}
                   </p>
-                  <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
                     {t('readyBody')}
                   </p>
                 </div>
@@ -546,16 +552,12 @@ export function AiCoachChat({
                         </div>
                       )}
                       <div
-                        className={`max-w-[92%] sm:max-w-[75%] ${
+                        className={`max-w-[min(100%,42rem)] sm:max-w-[min(100%,85%)] ${
                           isUser ? 'items-end' : 'items-start'
                         } flex flex-col gap-2`}
                       >
                         <div
-                          className={`rounded-2xl px-3.5 py-2.5 leading-relaxed ${
-                            isUser
-                              ? 'text-sm sm:text-sm'
-                              : 'text-base sm:text-sm'
-                          } ${
+                          className={`rounded-2xl px-4 py-3 text-base leading-relaxed ${
                             isUser
                               ? 'rounded-ee-md border border-blue/25 border-e-[3px] border-e-blue bg-card/95 text-foreground'
                               : usedTools
@@ -580,6 +582,9 @@ export function AiCoachChat({
                             conversationId={conversationId}
                             action={msg.action}
                             disabled={switching}
+                            onResumePrompt={(prompt) => {
+                              void sendMessage(prompt)
+                            }}
                             onRevise={(proposal) => {
                               setReviseProposal(proposal)
                               setInput(
@@ -683,8 +688,6 @@ export function AiCoachChat({
                 </motion.div>
               )}
 
-              <CoachSuggestions onAsk={sendMessage} disabled={pending || switching} />
-
               <div ref={bottomRef} />
             </div>
 
@@ -697,22 +700,22 @@ export function AiCoachChat({
                   {SUGGESTED_QUESTIONS.map((q, i) => {
                     const label = t(`suggested.${i}` as 'suggested.0')
                     return (
-                    <motion.button
-                      key={q}
-                      type="button"
-                      disabled={pending || switching}
-                      onClick={() => sendMessage(label)}
-                      initial={reduce ? false : { opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        duration: 0.25,
-                        delay: reduce ? 0 : i * 0.05,
-                        ease: EASE,
-                      }}
-                      className="shrink-0 rounded-full border border-silver/15 bg-card/70 px-3 py-2 text-start text-xs text-muted-foreground transition-colors hover:border-blue/50 hover:bg-blue-tint/60 hover:text-blue disabled:opacity-50"
-                    >
-                      {label}
-                    </motion.button>
+                      <motion.button
+                        key={q}
+                        type="button"
+                        disabled={pending || switching}
+                        onClick={() => sendMessage(label)}
+                        initial={reduce ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.25,
+                          delay: reduce ? 0 : i * 0.05,
+                          ease: EASE,
+                        }}
+                        className="shrink-0 rounded-full border border-silver/15 bg-card/70 px-3 py-2 text-start text-xs text-muted-foreground transition-colors hover:border-blue/50 hover:bg-blue-tint/60 hover:text-blue disabled:opacity-50"
+                      >
+                        {label}
+                      </motion.button>
                     )
                   })}
                 </div>

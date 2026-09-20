@@ -127,7 +127,7 @@ export function LeaderboardPageClient({
                   href={href}
                   className={`is-row flex w-full items-center gap-3 px-3 py-3 text-start ${
                     isYou
-                      ? 'border-gold/35 bg-gold/[0.07] shadow-[0_0_24px_-12px_rgba(232,181,74,0.4)]'
+                      ? 'border-gold/35 bg-gold/[0.07] shadow-[0_0_24px_-12px_color-mix(in_srgb,var(--gold)_40%,transparent)]'
                       : ''
                   }`}
                 >

@@ -52,13 +52,16 @@ export async function getSavedNotes(userId: string) {
 
 export async function getAccountSettings(userId: string) {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(
-      'preferred_unit, language, theme_preference, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, display_name, bio, avatar_url',
-    )
-    .eq('id', userId)
-    .maybeSingle()
+  const [{ data, error }, auth] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select(
+        'preferred_unit, language, theme_preference, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, current_weight_kg, display_name, username, bio, avatar_url, primary_split_id',
+      )
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase.auth.getUser(),
+  ])
 
   if (error) return { error: 'no_data', message: error.message }
   if (!data) return { error: 'no_data', message: 'Profile not found.' }
@@ -66,6 +69,38 @@ export async function getAccountSettings(userId: string) {
   const notifications: NotificationPreferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...((data.notification_preferences ?? {}) as Partial<NotificationPreferences>),
+  }
+
+  const user = auth.data.user
+  let fitness: Record<string, unknown> | null = null
+  if (user && user.id === userId) {
+    const { onboardingDataFromUser } = await import('@/lib/data/onboarding-read')
+    const onboarding = onboardingDataFromUser(user, data)
+    fitness = {
+      primary_goal: onboarding.primaryGoal,
+      secondary_goals: onboarding.secondaryGoals,
+      fitness_level: onboarding.fitnessLevel,
+      days_per_week: onboarding.daysPerWeek,
+      workout_duration: onboarding.workoutDuration,
+      preferred_days: onboarding.preferredDays,
+      training_location: onboarding.trainingLocation,
+      equipment: onboarding.equipment,
+      training_styles: onboarding.trainingStyles,
+      favorite_muscle_groups: onboarding.favoriteMuscleGroups,
+      avoidances: onboarding.avoidances || null,
+      limitations: onboarding.limitations || null,
+      age_range: onboarding.ageRange,
+    }
+  }
+
+  let primarySplitName: string | null = null
+  if (data.primary_split_id) {
+    const { data: split } = await supabase
+      .from('splits')
+      .select('name')
+      .eq('id', data.primary_split_id)
+      .maybeSingle()
+    primarySplitName = split?.name ?? null
   }
 
   return {
@@ -80,9 +115,14 @@ export async function getAccountSettings(userId: string) {
     },
     body_stats: {
       height_cm: data.height_cm,
+      current_weight_kg: data.current_weight_kg,
       gender: data.gender,
       birth_date: data.birth_date,
     },
+    fitness,
+    primary_program: primarySplitName
+      ? { id: data.primary_split_id, name: primarySplitName }
+      : null,
     profile: {
       display_name: data.display_name,
       bio: data.bio,

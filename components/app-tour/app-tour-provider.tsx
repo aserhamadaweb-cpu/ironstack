@@ -26,6 +26,7 @@ import {
 } from '@/lib/data/tour-actions'
 import { useIsGuest } from '@/components/use-is-guest'
 import { useActiveWorkout } from '@/lib/use-active-workout'
+import { useOfflineStatus } from '@/lib/offline/provider'
 import {
   TourDeferredBanner,
   TourOverlay,
@@ -57,12 +58,28 @@ function syncStepToPathname(pathname: string): number | null {
   return matchIdx >= 0 ? matchIdx : null
 }
 
+/** Offline document shell + any /offline/* fallback. */
+function isOfflineShellPath(pathname: string) {
+  return pathname === '/offline' || pathname.startsWith('/offline/')
+}
+
+/**
+ * Never auto-offer or show deferred tour chrome on offline floors.
+ * Same idea as guest exclusion — gym-floor offline UX must stay uncluttered.
+ */
+function shouldBlockTourAutoOffer(online: boolean, pathname: string) {
+  if (!online) return true
+  if (isOfflineShellPath(pathname)) return true
+  return false
+}
+
 export function AppTourProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { isGuest, ready: guestReady } = useIsGuest()
   const { active, ready: activeReady } = useActiveWorkout()
+  const { online, hydrated: offlineHydrated } = useOfflineStatus()
 
   const [status, setStatus] = useState<AppTourStatus | null>(null)
   const [step, setStep] = useState(0)
@@ -70,6 +87,10 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [visible, setVisible] = useState(false)
   const [showDeferred, setShowDeferred] = useState(false)
+  /** Why the deferred banner is showing — drives honest copy. */
+  const [deferredReason, setDeferredReason] = useState<
+    'active-session' | 'wrong-route' | null
+  >(null)
   const [awaitingPath, setAwaitingPath] = useState<string | null>(null)
   const bootstrapped = useRef(false)
   const forceOffer = useRef(false)
@@ -99,18 +120,6 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  const persist = useCallback(
-    async (nextStep: number, nextStatus: AppTourStatus = 'active') => {
-      beginBusy()
-      try {
-        return await persistQuiet(nextStep, nextStatus)
-      } finally {
-        endBusy()
-      }
-    },
-    [beginBusy, endBusy, persistQuiet],
-  )
-
   const goToStep = useCallback(
     (
       nextStep: number,
@@ -130,6 +139,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       setStatus(nextStatus)
       setVisible(true)
       setShowDeferred(false)
+      setDeferredReason(null)
 
       if (
         shouldNavigate &&
@@ -138,6 +148,11 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       ) {
         setAwaitingPath(def.href)
         syncingPath.current = true
+        try {
+          router.prefetch(def.href)
+        } catch {
+          /* best-effort */
+        }
         router.replace(def.href)
       } else {
         setAwaitingPath(null)
@@ -161,6 +176,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
         setStatus('deferred')
         setVisible(false)
         setShowDeferred(true)
+        setDeferredReason('wrong-route')
         void deferAppTourAction(fromStep)
         return
       }
@@ -172,8 +188,17 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const offerTour = useCallback(
     async (fromStep: number) => {
       if (!activeReady) return
+      // Offline floors: never surface tour chrome (including the "active
+      // session" deferred sheet — confusing when there's no workout).
+      if (shouldBlockTourAutoOffer(online, pathname)) {
+        setVisible(false)
+        setShowDeferred(false)
+        setDeferredReason(null)
+        return
+      }
       if (active) {
         setShowDeferred(true)
+        setDeferredReason('active-session')
         setVisible(false)
         setStep(fromStep)
         await deferAppTourAction(fromStep)
@@ -182,7 +207,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       }
       startTour(fromStep)
     },
-    [active, activeReady, startTour],
+    [active, activeReady, online, pathname, startTour],
   )
 
   useEffect(() => {
@@ -208,9 +233,27 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     offerTourRef.current = offerTour
   }, [status, step, offerTour])
 
+  // Drop any leftover tour UI the moment we hit offline / /offline shell.
   useEffect(() => {
-    if (!hydrated || !activeReady || !guestReady) return
+    if (!offlineHydrated) return
+    if (!shouldBlockTourAutoOffer(online, pathname)) return
+    setVisible(false)
+    setShowDeferred(false)
+    setDeferredReason(null)
+  }, [offlineHydrated, online, pathname])
+
+  useEffect(() => {
+    if (!hydrated || !activeReady || !guestReady || !offlineHydrated) return
     if (isGuest) return
+
+    // Guests are excluded; offline floors are excluded the same way.
+    if (shouldBlockTourAutoOffer(online, pathname)) {
+      setVisible(false)
+      setShowDeferred(false)
+      setDeferredReason(null)
+      // Do not set bootstrapped — allow a real offer after reconnect.
+      return
+    }
 
     const wantsTourParam = searchParams.get('tour') === '1'
     if (wantsTourParam) {
@@ -235,6 +278,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       if (def?.href && pathReadyForStep(currentPath, def.href)) {
         setVisible(true)
         setShowDeferred(false)
+        setDeferredReason(null)
         return
       }
       const onPage = syncStepToPathname(currentPath)
@@ -242,17 +286,34 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
         setStep(onPage)
         setVisible(true)
         setShowDeferred(false)
+        setDeferredReason(null)
         void persistQuiet(onPage, 'active')
         return
       }
       setVisible(false)
       setShowDeferred(false)
+      setDeferredReason(null)
+      return
+    }
+
+    // Deferred / mid-tour leftovers must not nag on every app open.
+    // Only first-time `pending`, or an explicit ?tour=1 / Settings restart.
+    const shouldOffer =
+      forceOffer.current || currentStatus === 'pending'
+
+    if (!shouldOffer) {
+      setVisible(false)
+      setShowDeferred(false)
+      setDeferredReason(null)
       return
     }
 
     const def = APP_TOUR_STEPS[stepRef.current]
     if (def?.href && !pathReadyForStep(currentPath, def.href)) {
+      // Wrong route for the saved step — show the pause sheet once for
+      // this offer (pending / forced). Active-session copy stays separate.
       setShowDeferred(true)
+      setDeferredReason('wrong-route')
       setVisible(false)
       if (currentStatus === 'pending') {
         void deferAppTourAction(stepRef.current).then((result) => {
@@ -262,21 +323,25 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const shouldOffer =
-      forceOffer.current ||
-      currentStatus === 'pending' ||
-      currentStatus === 'deferred'
-
-    if (!shouldOffer) return
-
     void offerTourRef.current(stepRef.current)
-  }, [hydrated, activeReady, guestReady, isGuest, searchParams, pathname, persistQuiet])
+  }, [
+    hydrated,
+    activeReady,
+    guestReady,
+    offlineHydrated,
+    isGuest,
+    online,
+    searchParams,
+    pathname,
+    persistQuiet,
+  ])
 
   const prevActiveRef = useRef(active)
   useEffect(() => {
     const wasActive = Boolean(prevActiveRef.current)
     prevActiveRef.current = active
-    if (!hydrated || !activeReady) return
+    if (!hydrated || !activeReady || !offlineHydrated) return
+    if (shouldBlockTourAutoOffer(online, pathname)) return
     if (status !== 'deferred') return
     if (active || !wasActive) return
     if (visible || showDeferred) return
@@ -284,6 +349,9 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   }, [
     hydrated,
     activeReady,
+    offlineHydrated,
+    online,
+    pathname,
     status,
     active,
     visible,
@@ -360,6 +428,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       }
       setVisible(false)
       setShowDeferred(false)
+      setDeferredReason(null)
       releaseTourScrollLock()
       router.replace('/dashboard/home')
     } finally {
@@ -377,6 +446,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       }
       setVisible(false)
       setShowDeferred(false)
+      setDeferredReason(null)
       releaseTourScrollLock()
       router.replace('/dashboard/home')
     } finally {
@@ -394,6 +464,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
           setStep(result.step)
         }
         setVisible(false)
+        setDeferredReason(null)
         releaseTourScrollLock()
         const href =
           destination === 'workout'
@@ -412,16 +483,21 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const onStartLater = useCallback(async () => {
     beginBusy()
     try {
-      const result = await deferAppTourAction(step)
+      // Skip (not defer): "later" must not reappear on every cold start.
+      // Athletes can still restart the tour from Settings.
+      const result = await skipAppTourAction()
       if (result.ok) {
         setStatus(result.status)
         setStep(result.step)
       }
       setShowDeferred(false)
+      setDeferredReason(null)
+      setVisible(false)
+      releaseTourScrollLock()
     } finally {
       endBusy()
     }
-  }, [beginBusy, endBusy, step])
+  }, [beginBusy, endBusy, releaseTourScrollLock])
 
   const onStartNow = useCallback(async () => {
     const def = APP_TOUR_STEPS[step]
@@ -461,14 +537,36 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
 
   const stepDef = APP_TOUR_STEPS[step]
   const pathOk = pathReadyForStep(pathname, stepDef?.href ?? null)
-  const showOverlay = visible && (pathOk || awaitingPath !== null)
+  const tourBlocked = shouldBlockTourAutoOffer(online, pathname)
+  const showOverlay =
+    !tourBlocked && visible && (pathOk || awaitingPath !== null)
+  const showDeferredBanner = !tourBlocked && showDeferred
+
+  // Warm the next 1–2 tour routes so Next doesn't feel like a cold page load.
+  // Tour destinations were left out of the global 3-tab prefetch trim.
+  useEffect(() => {
+    if (!visible || tourBlocked) return
+    const hrefs = new Set<string>()
+    for (let i = step; i <= Math.min(step + 2, APP_TOUR_STEPS.length - 1); i++) {
+      const href = APP_TOUR_STEPS[i]?.href
+      if (href) hrefs.add(href)
+    }
+    for (const href of hrefs) {
+      try {
+        router.prefetch(href)
+      } catch {
+        /* prefetch is best-effort */
+      }
+    }
+  }, [visible, tourBlocked, step, router])
 
   return (
     <AppTourContext.Provider value={ctx}>
       {children}
-      {showDeferred ? (
+      {showDeferredBanner ? (
         <TourDeferredBanner
           busy={busy}
+          reason={deferredReason ?? 'wrong-route'}
           onStartLater={onStartLater}
           onStartNow={onStartNow}
         />

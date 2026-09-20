@@ -9,44 +9,47 @@ import {
   useState,
 } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
-  AlertCircle,
-  Camera,
   Dumbbell,
   Eye,
   EyeOff,
   Loader2,
-  Trash2,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import {
   friendlyAuthError,
+  isStaleClientAuthError,
   isValidEmail,
   type AuthCopy,
 } from '@/lib/auth-errors'
-import { buildAuthCallbackUrl } from '@/lib/auth-callback-url'
+import {
+  ActionFeedbackBanner,
+  useActionFeedback,
+} from '@/components/action-feedback'
+import {
+  buildAuthCallbackUrl,
+  buildOAuthReturnUrl,
+} from '@/lib/auth-callback-url'
 import { signIn, signInGuest } from '@/app/login/actions'
 import { abandonAnonymousSessionIfPresent } from '@/lib/auth/abandon-guest-session'
+import { signInWithGoogleClient } from '@/lib/auth/sign-in-with-google'
 import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
 import { handleAuthUserChanged } from '@/lib/clear-client-user-state'
 import { buildTourSeedForNewAccount } from '@/lib/app-tour-storage'
-import { compressAvatarImage } from '@/lib/compress-avatar'
 import { ChooseLanguageScreen } from '@/components/choose-language-screen'
-import { AvatarPresetPicker } from '@/components/avatar-preset-picker'
 import {
   checkSignupUsernameAction,
   finalizeEmailSignupAction,
+  type FinalizeSignupResult,
 } from '@/lib/data/signup-actions'
 import {
-  AVATAR_ACCEPT,
   normalizeUsername,
-  validateAvatarFile,
   validateUsernameFormat,
 } from '@/lib/username'
+import { ONBOARDING_META_VERSION } from '@/lib/onboarding-types'
 
 type AuthMode = 'signin' | 'signup'
 type OAuthProvider = 'google'
@@ -72,6 +75,7 @@ function authCopy(t: ReturnType<typeof useTranslations<'auth'>>): AuthCopy {
     oauthCancelled: t('oauthCancelled'),
     socialFailed: t('socialFailed'),
     network: t('network'),
+    staleClient: t('staleClient'),
     rateLimited: t('rateLimited'),
     generic: t('generic'),
   }
@@ -113,10 +117,15 @@ function LoginPageContent({ needsLanguageGate }: { needsLanguageGate: boolean })
 function LoginAuthForm() {
   const t = useTranslations('auth')
   const copy = useMemo(() => authCopy(t), [t])
-  const router = useRouter()
+  const { notifyError } = useActionFeedback()
   const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
   const returnNext = safeNextPath(searchParams.get('next'))
+
+  function showError(message: string) {
+    setError(message)
+    notifyError(message)
+  }
 
   useEffect(() => {
     const mode = searchParams.get('mode')
@@ -134,61 +143,15 @@ function LoginAuthForm() {
     const err = searchParams.get('error')
     if (err === 'auth_callback_failed') return t('callbackFailed')
     if (err === 'expired') return t('callbackExpired')
+    if (err === 'session') return t('signinNoSession')
     return null
   })
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [guestLoading, setGuestLoading] = useState(false)
   const [username, setUsername] = useState('')
   const [usernameStatus, setUsernameStatus] = useState<string | null>(null)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [avatarProcessing, setAvatarProcessing] = useState(false)
-  const [avatarWarning, setAvatarWarning] = useState<string | null>(null)
-  const [presetAvatar, setPresetAvatar] = useState<string | null>(null)
 
-  const isBusy = loading || oauthLoading !== null || guestLoading || avatarProcessing
-  const avatarDisplay = avatarPreview || presetAvatar
-
-  function clearAvatarPreview() {
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-    setAvatarPreview(null)
-    setAvatarFile(null)
-  }
-
-  async function onPickAvatar(picked: File | null) {
-    setAvatarWarning(null)
-    if (!picked) {
-      clearAvatarPreview()
-      return
-    }
-    const validationError = validateAvatarFile(picked)
-    if (validationError) {
-      clearAvatarPreview()
-      setAvatarWarning(validationError)
-      return
-    }
-    setAvatarProcessing(true)
-    try {
-      const compressed = await compressAvatarImage(picked)
-      if (avatarPreview) URL.revokeObjectURL(avatarPreview)
-      setPresetAvatar(null)
-      setAvatarFile(compressed.file)
-      setAvatarPreview(compressed.previewUrl)
-    } catch (err) {
-      clearAvatarPreview()
-      setAvatarWarning(
-        err instanceof Error ? err.message : t('avatarProcessFailed'),
-      )
-    } finally {
-      setAvatarProcessing(false)
-    }
-  }
-
-  function onPickPreset(path: string | null) {
-    clearAvatarPreview()
-    setAvatarWarning(null)
-    setPresetAvatar(path)
-  }
+  const isBusy = loading || oauthLoading !== null || guestLoading
 
   function siteOrigin() {
     if (typeof window !== 'undefined' && window.location?.origin) {
@@ -200,6 +163,67 @@ function LoginAuthForm() {
     )
   }
 
+  /**
+   * Fallback when Server Actions are stale after a rebuild — claim username
+   * directly with the browser Supabase session so signup can finish.
+   */
+  async function finalizeSignupOnClient(input: {
+    username: string
+    displayName: string
+  }): Promise<FinalizeSignupResult> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return { ok: false, error: 'Not signed in.' }
+
+    const username = normalizeUsername(input.username)
+    const formatError = validateUsernameFormat(username)
+    if (formatError) return { ok: false, error: formatError }
+
+    const { data: taken } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', username)
+      .neq('id', user.id)
+      .maybeSingle()
+    if (taken) return { ok: false, error: t('usernameTaken') }
+
+    const displayName = input.displayName.trim() || username
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        username,
+        display_name: displayName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+    if (error) {
+      const msg = error.message.toLowerCase()
+      if (msg.includes('unique') || msg.includes('duplicate')) {
+        return { ok: false, error: t('usernameTaken') }
+      }
+      return { ok: false, error: error.message }
+    }
+
+    await supabase.auth.updateUser({
+      data: {
+        username,
+        display_name: displayName,
+        onboarding_completed: false,
+        onboarding_step: 1,
+        onboarding_v1: {
+          version: ONBOARDING_META_VERSION,
+          step: 1,
+          displayName,
+          username,
+          appearance: 'system',
+        },
+      },
+    })
+
+    return { ok: true, username, avatarUrl: null }
+  }
+
   async function handleContinueAsGuest() {
     setError(null)
     setGuestLoading(true)
@@ -207,7 +231,7 @@ function LoginAuthForm() {
       clearIronstackAuthCache()
       const result = await signInGuest()
       if (result?.error) {
-        setError(friendlyAuthError(result.error, copy))
+        showError(friendlyAuthError(result.error, copy))
       }
     } finally {
       setGuestLoading(false)
@@ -218,28 +242,79 @@ function LoginAuthForm() {
     setError(null)
 
     if (mode === 'signup' && !agreedToTerms) {
-      setError(t('mustAgree'))
+      showError(t('mustAgree'))
       return
     }
 
     setOauthLoading(provider)
 
-    const redirectTo = new URL('/auth/callback', siteOrigin())
-    redirectTo.searchParams.set(
-      'next',
-      returnNext ?? (mode === 'signup' ? ONBOARDING_PATH : HOME_PATH),
-    )
+    try {
+      clearIronstackAuthCache()
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: redirectTo.href,
-        skipBrowserRedirect: false,
-      },
-    })
+      const next =
+        returnNext ?? (mode === 'signup' ? ONBOARDING_PATH : HOME_PATH)
 
-    if (oauthError) {
-      setError(friendlyAuthError(oauthError.message, copy, oauthError.code))
+      // In-app Google Identity + browser session + cookie sync (see signInWithGoogleClient).
+      if (provider === 'google') {
+        const result = await signInWithGoogleClient(next)
+        if (!result.ok) {
+          if (!result.cancelled) {
+            // Keep Google's real reason visible — "Something went wrong" hid
+            // production-only origin / GIS failures.
+            showError(
+              /origin|client id|identity|audience|nonce|provider/i.test(
+                result.error,
+              )
+                ? result.error
+                : friendlyAuthError(result.error, copy),
+            )
+          }
+          return
+        }
+        if ('redirected' in result && result.redirected) {
+          // Browser is leaving for Google OAuth — keep the spinner.
+          return
+        }
+        if ('redirectTo' in result && result.redirectTo) {
+          triggerIronStackNavTransition()
+          window.location.assign(result.redirectTo)
+        }
+        return
+      }
+
+      // Non-Google providers (if added later): classic redirect OAuth.
+      await abandonAnonymousSessionIfPresent()
+      const redirectTo = buildOAuthReturnUrl(next, siteOrigin())
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: false,
+        },
+      })
+
+      if (oauthError) {
+        showError(friendlyAuthError(oauthError.message, copy, oauthError.code))
+      }
+    } catch (err) {
+      // Server actions that redirect throw; never surface that as a login error.
+      if (
+        err &&
+        typeof err === 'object' &&
+        'digest' in err &&
+        typeof (err as { digest?: unknown }).digest === 'string' &&
+        String((err as { digest: string }).digest).startsWith('NEXT_REDIRECT')
+      ) {
+        throw err
+      }
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : copy.socialFailed
+      if (!/cancelled/i.test(message)) {
+        showError(friendlyAuthError(message, copy))
+      }
+    } finally {
       setOauthLoading(null)
     }
   }
@@ -251,19 +326,19 @@ function LoginAuthForm() {
 
     const trimmedEmail = email.trim()
     if (!isValidEmail(trimmedEmail)) {
-      setError(copy.invalidEmail)
+      showError(copy.invalidEmail)
       return
     }
     if (password.length < 6) {
-      setError(copy.weakPassword)
+      showError(copy.weakPassword)
       return
     }
     if (mode === 'signup' && password !== confirmPassword) {
-      setError(copy.passwordMismatch)
+      showError(copy.passwordMismatch)
       return
     }
     if (mode === 'signup' && !agreedToTerms) {
-      setError(t('mustAgree'))
+      showError(t('mustAgree'))
       return
     }
 
@@ -273,11 +348,7 @@ function LoginAuthForm() {
       const usernameError = validateUsernameFormat(normalizedUsername)
       if (usernameError) {
         setError(usernameError)
-        return
-      }
-      const availability = await checkSignupUsernameAction(normalizedUsername)
-      if (!availability.available) {
-        setError(availability.error || t('usernameTaken'))
+        notifyError(usernameError)
         return
       }
     }
@@ -285,6 +356,27 @@ function LoginAuthForm() {
     setLoading(true)
 
     try {
+      if (mode === 'signup') {
+        try {
+          const availability = await checkSignupUsernameAction(normalizedUsername)
+          if (!availability.available) {
+            showError(availability.error || t('usernameTaken'))
+            return
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          // Stale Server Action / offline: continue and let finalize catch duplicates.
+          if (
+            /failed to fetch|fetch failed|server action|network/i.test(message)
+          ) {
+            /* proceed */
+          } else {
+            showError(friendlyAuthError(message, copy))
+            return
+          }
+        }
+      }
+
       if (mode === 'signin') {
         const formData = new FormData()
         formData.set('email', trimmedEmail)
@@ -295,15 +387,18 @@ function LoginAuthForm() {
         triggerIronStackNavTransition()
         const result = await signIn(null, formData)
         if (result?.error) {
-          setError(friendlyAuthError(result.error, copy))
+          showError(friendlyAuthError(result.error, copy))
         }
         return
       }
 
-      // Leaving a previous account: wipe local caches before creating a new one.
-      await abandonAnonymousSessionIfPresent()
-      await handleAuthUserChanged(null)
-      clearIronstackAuthCache()
+      // Leaving a previous account only after signup succeeds (wipe-before-create
+      // destroyed pins when signup failed validation/network).
+      try {
+        await abandonAnonymousSessionIfPresent()
+      } catch {
+        /* Non-fatal — guest may already be gone. */
+      }
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: trimmedEmail,
@@ -319,77 +414,90 @@ function LoginAuthForm() {
             username: normalizedUsername,
             onboarding_completed: false,
             onboarding_step: 1,
-            ...(presetAvatar ? { preset_avatar: presetAvatar } : {}),
+            onboarding_v1: {
+              version: ONBOARDING_META_VERSION,
+              step: 1,
+              displayName: trimmedEmail.split('@')[0] || normalizedUsername,
+              username: normalizedUsername,
+              appearance: 'system',
+            },
             ...buildTourSeedForNewAccount(),
           },
         },
       })
 
       if (signUpError) {
-        setError(friendlyAuthError(signUpError.message, copy, signUpError.code))
+        showError(friendlyAuthError(signUpError.message, copy, signUpError.code))
         return
       }
 
       const identities = data.user?.identities ?? []
       if (data.user && identities.length === 0) {
-        setError(copy.alreadyRegistered)
+        showError(copy.alreadyRegistered)
         return
       }
 
       if (!data.session?.user) {
-        setError(t('signupNoSession'))
+        showError(t('signupNoSession'))
         return
       }
 
       clearIronstackAuthCache()
       await handleAuthUserChanged(data.session.user.id)
 
-      let newAvatarPath: string | null = null
-      if (avatarFile) {
-        try {
-          const ext = avatarFile.type === 'image/webp' ? 'webp' : 'jpg'
-          const path = `${data.session.user.id}/${Date.now()}.${ext}`
-          const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(path, avatarFile, {
-              upsert: true,
-              contentType: avatarFile.type,
-            })
-          if (uploadError) {
-            setAvatarWarning(t('avatarUploadFailed'))
-          } else {
-            newAvatarPath = path
-          }
-        } catch {
-          setAvatarWarning(t('avatarUploadFailed'))
+      const displayName =
+        trimmedEmail.split('@')[0] || normalizedUsername
+      let finalized: FinalizeSignupResult
+      try {
+        finalized = await finalizeEmailSignupAction({
+          username: normalizedUsername,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (isStaleClientAuthError(message)) {
+          finalized = await finalizeSignupOnClient({
+            username: normalizedUsername,
+            displayName,
+          })
+        } else {
+          showError(friendlyAuthError(message, copy))
+          return
         }
       }
 
-      const finalized = await finalizeEmailSignupAction({
-        username: normalizedUsername,
-        newAvatarPath,
-        presetAvatarPath: newAvatarPath ? null : presetAvatar,
-      })
-      if (!finalized.ok) {
-        setError(finalized.error)
-        return
-      }
-      if (finalized.avatarError) {
-        setAvatarWarning(t('avatarUploadFailed'))
+      if (!finalized.ok && isStaleClientAuthError(finalized.error)) {
+        finalized = await finalizeSignupOnClient({
+          username: normalizedUsername,
+          displayName,
+        })
       }
 
-      const { markOnboardingStartedAction } = await import(
-        '@/lib/data/onboarding-actions'
-      )
-      await markOnboardingStartedAction()
+      if (!finalized.ok) {
+        showError(
+          isStaleClientAuthError(finalized.error)
+            ? copy.staleClient || finalized.error
+            : finalized.error,
+        )
+        return
+      }
+
+      try {
+        const { markOnboardingStartedAction } = await import(
+          '@/lib/data/onboarding-actions'
+        )
+        await markOnboardingStartedAction()
+      } catch {
+        /* Cookie/meta seed is best-effort; onboarding page can start itself. */
+      }
       triggerIronStackNavTransition()
       const onboardingPath = returnNext
         ? `${ONBOARDING_PATH}?next=${encodeURIComponent(returnNext)}`
         : ONBOARDING_PATH
-      router.push(onboardingPath)
-      router.refresh()
-    } catch {
-      setError(copy.network)
+      // Hard navigation picks up the latest build after signup (avoids stale RSC).
+      window.location.assign(onboardingPath)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showError(friendlyAuthError(message, copy))
     } finally {
       setLoading(false)
     }
@@ -495,19 +603,6 @@ function LoginAuthForm() {
             </button>
           </div>
 
-          {error ? (
-            <div
-              role="alert"
-              className="mb-4 flex items-start gap-3 rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold/80"
-            >
-              <AlertCircle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <p>{error}</p>
-            </div>
-          ) : null}
-
           {mode === 'signup' ? (
             <label className="mb-4 flex items-start gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-3 text-sm leading-relaxed text-muted-foreground">
               <span className="flex size-11 shrink-0 items-center justify-center">
@@ -582,77 +677,6 @@ function LoginAuthForm() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
                 {mode === 'signup' ? (
                   <>
-                    <div className="flex flex-col items-center gap-3">
-                      <p className="w-full text-sm font-medium text-muted-foreground">
-                        {t('profilePhoto')}{' '}
-                        <span className="text-xs font-normal">
-                          ({t('profilePhotoOptional')})
-                        </span>
-                      </p>
-                      <div className="relative">
-                        <div className="flex size-24 items-center justify-center overflow-hidden rounded-full border border-gold/30 bg-card/80 text-gold">
-                          {avatarDisplay ? (
-                            <Image
-                              src={avatarDisplay}
-                              alt=""
-                              width={96}
-                              height={96}
-                              className="size-full object-cover"
-                              unoptimized
-                            />
-                          ) : (
-                            <Camera className="size-8 opacity-70" aria-hidden="true" />
-                          )}
-                        </div>
-                        <label className="absolute -bottom-1 -end-1 inline-flex size-11 cursor-pointer items-center justify-center rounded-full border border-gold/40 bg-gold text-black shadow-md transition hover:brightness-110 focus-within:ring-2 focus-within:ring-gold/40">
-                          <Camera className="size-4" aria-hidden="true" />
-                          <span className="sr-only">{t('choosePhoto')}</span>
-                          <input
-                            type="file"
-                            accept={AVATAR_ACCEPT}
-                            className="sr-only"
-                            disabled={isBusy}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] ?? null
-                              void onPickAvatar(file)
-                              event.target.value = ''
-                            }}
-                          />
-                        </label>
-                      </div>
-                      {avatarDisplay ? (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => {
-                            clearAvatarPreview()
-                            setPresetAvatar(null)
-                            setAvatarWarning(null)
-                          }}
-                          className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-silver/25 px-3 text-xs font-semibold text-muted-foreground transition hover:border-gold/35 hover:text-foreground disabled:opacity-50"
-                        >
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                          {t('removePhoto')}
-                        </button>
-                      ) : (
-                        <p className="text-center text-xs text-muted-foreground">
-                          {t('profilePhotoHint')}
-                        </p>
-                      )}
-                      <div className="w-full">
-                        <AvatarPresetPicker
-                          value={avatarFile ? null : presetAvatar}
-                          onChange={onPickPreset}
-                          disabled={isBusy}
-                        />
-                      </div>
-                      {avatarWarning ? (
-                        <p className="text-center text-xs text-amber-400" role="status">
-                          {avatarWarning}
-                        </p>
-                      ) : null}
-                    </div>
-
                     <div className="flex flex-col gap-2">
                       <label
                         htmlFor="signup-username"
@@ -703,8 +727,8 @@ function LoginAuthForm() {
                         <p
                           className={`text-xs ${
                             usernameStatus === t('usernameAvailable')
-                              ? 'text-emerald-400'
-                              : 'text-amber-400'
+                              ? 'text-success'
+                              : 'text-gold'
                           }`}
                           role="status"
                         >
@@ -811,13 +835,15 @@ function LoginAuthForm() {
                   <button
                     type="submit"
                     disabled={isBusy || (mode === 'signup' && !agreedToTerms)}
-                    className="cta-pulse btn-pill inline-flex min-h-14 w-full items-center justify-center gap-2 bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] transition-transform duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+                    className="cta-pulse btn-pill btn-pill-primary inline-flex min-h-14 w-full items-center justify-center gap-2 px-10 py-4 text-sm font-bold tracking-[0.25em] transition-transform duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                   >
                     {loading ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
                     ) : null}
                     {mode === 'signin' ? t('signIn') : t('createAccount')}
                   </button>
+
+                  <ActionFeedbackBanner error={error} className="w-full" />
 
                   <button
                     type="button"

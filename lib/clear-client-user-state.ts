@@ -87,6 +87,9 @@ export function clearSyncClientCaches(options?: {
 /**
  * Drop IndexedDB rows that belong to another account (keep exercise catalog
  * + system splits).
+ *
+ * Only call on a confirmed account switch or explicit sign-out — never on a
+ * transient offline "getUser() returned null".
  */
 export async function resetOfflineDataForAccountSwitch(
   nextUserId: string | null,
@@ -114,6 +117,8 @@ export async function resetOfflineDataForAccountSwitch(
       }
     }
 
+    // Pins without snapshots make the offline picker empty — clear with the wipe.
+    await db.delete('meta', 'offlineSplitIds')
     await db.delete('meta', 'homeSnapshot')
     await db.delete('meta', 'deletedSplitIds')
     await db.delete('meta', 'orphanPurgeNotice')
@@ -133,13 +138,23 @@ export async function resetOfflineDataForAccountSwitch(
   }
 }
 
+export type AuthUserChangeOptions = {
+  keepDevicePrefs?: boolean
+  /**
+   * Required to wipe when nextUserId is null. Cold-start / offline auth probes
+   * often report "no user" without a real sign-out — those must not destroy
+   * IndexedDB workouts and offline-pinned splits.
+   */
+  isSignOut?: boolean
+}
+
 /**
  * Call on sign-out / sign-in / sign-up when the authenticated user id changes.
  * Idempotent when the same user refreshes.
  */
 export async function handleAuthUserChanged(
   nextUserId: string | null,
-  options?: { keepDevicePrefs?: boolean },
+  options?: AuthUserChangeOptions,
 ): Promise<void> {
   if (typeof window === 'undefined') return
 
@@ -154,6 +169,12 @@ export async function handleAuthUserChanged(
     return
   }
 
+  // Known user → null without an explicit sign-out is a transient probe
+  // (offline getUser, expired network refresh). Keep gym-floor IndexedDB.
+  if (previous && !nextUserId && !options?.isSignOut) {
+    return
+  }
+
   clearSyncClientCaches({
     keepDevicePrefs: options?.keepDevicePrefs === true && Boolean(nextUserId),
   })
@@ -163,4 +184,24 @@ export async function handleAuthUserChanged(
 
 export function readStoredAuthUserId(): string | null {
   return readAuthUserKey()
+}
+
+/**
+ * Ask the browser to keep this origin's storage (IndexedDB) durable.
+ * Without persist(), mobile browsers (esp. Safari / low-storage Android)
+ * may evict site data under pressure — which looks like "offline splits vanished."
+ */
+export async function requestPersistentStorage(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.storage?.persist) {
+    return false
+  }
+  try {
+    if (typeof navigator.storage.persisted === 'function') {
+      const already = await navigator.storage.persisted()
+      if (already) return true
+    }
+    return await navigator.storage.persist()
+  } catch {
+    return false
+  }
 }

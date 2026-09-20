@@ -45,3 +45,14 @@ export const CTA_PRIMARY = 'btn-pill btn-pill-primary'
 
 /** Shared secondary outline */
 export const CTA_SECONDARY = 'btn-pill btn-pill-secondary'
+
+/** Brand gold CTA — auth / marketing emphasis */
+export const CTA_GOLD =
+  'btn-pill btn-pill-gold'
+
+/** Selected choice chip — matches fitness profile / settings */
+export const CHOICE_SELECTED =
+  'border-gold/45 bg-gold-tint text-gold'
+
+export const CHOICE_IDLE =
+  'border-border bg-background/60 text-muted-foreground hover:border-gold/30 hover:text-foreground'

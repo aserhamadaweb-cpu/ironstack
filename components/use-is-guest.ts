@@ -60,11 +60,13 @@ export function useIsGuest() {
     }
 
     const refresh = (user: User | null) => {
-      void handleAuthUserChanged(user?.id ?? null)
       if (!user) {
-        applyGuest(false)
+        // Offline / failed Auth probe must NOT wipe IndexedDB. Only an explicit
+        // SIGNED_OUT event (below) clears offline splits + sessions.
+        applyGuest(readCachedGuest())
         return
       }
+      void handleAuthUserChanged(user.id)
       if (guestFromUser(user)) {
         applyGuest(true)
         return
@@ -74,18 +76,35 @@ export function useIsGuest() {
         .catch(() => applyGuest(readCachedGuest()))
     }
 
-    void supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        refresh(session?.user ?? null)
-      })
-      .catch(() => applyGuest(readCachedGuest()))
+    void (async () => {
+      try {
+        // Prefer local session (works offline). getUser() hits the network and
+        // often returns null when offline — that used to wipe offline data.
+        const { data: sessionData } = await supabase.auth.getSession()
+        if (cancelled) return
+        if (sessionData.session?.user) {
+          refresh(sessionData.session.user)
+          return
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          applyGuest(readCachedGuest())
+          return
+        }
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (cancelled) return
+        refresh(user ?? null)
+      } catch {
+        if (!cancelled) applyGuest(readCachedGuest())
+      }
+    })()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        void handleAuthUserChanged(null)
+        void handleAuthUserChanged(null, { isSignOut: true })
         clearIronstackAuthCache()
         applyGuest(false)
         return

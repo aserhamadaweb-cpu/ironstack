@@ -10,13 +10,14 @@ import { useTranslations } from 'next-intl'
 import { EASE } from '@/components/reveal'
 import { useSuggestionBadge } from '@/components/use-suggestion-badge'
 
-/** Once per browser session — the FAB badge carries it from then on. */
-const SESSION_KEY = 'ironstack:coach-suggestion-toast'
+/** Survives app restarts (PWA / cold open). Session-only was too naggy. */
+const DISMISS_KEY = 'ironstack:coach-suggestion-toast-dismissed'
 
 /**
  * One-shot nudge for athletes who never open the chat.
  *
  * Purely an attention cue: it links to the coach and cannot act on anything.
+ * Dismiss persists in localStorage so it does not reappear every open.
  */
 export function CoachSuggestionToast() {
   const t = useTranslations('coach')
@@ -29,7 +30,7 @@ export function CoachSuggestionToast() {
   useEffect(() => {
     setMounted(true)
     try {
-      setDismissed(sessionStorage.getItem(SESSION_KEY) === '1')
+      setDismissed(localStorage.getItem(DISMISS_KEY) === '1')
     } catch {
       setDismissed(false)
     }
@@ -38,9 +39,9 @@ export function CoachSuggestionToast() {
   const close = () => {
     setDismissed(true)
     try {
-      sessionStorage.setItem(SESSION_KEY, '1')
+      localStorage.setItem(DISMISS_KEY, '1')
     } catch {
-      // Private-mode storage failure just means it may show again later.
+      // Private-mode storage failure: toast may show again later.
     }
   }
 

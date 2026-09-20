@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard-nav'
+import { OfflineHomeRedirect } from '@/components/offline-home-redirect'
 import { SettingsPageClient } from '@/components/settings-page'
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -57,7 +58,7 @@ export default async function SettingsPage() {
       : null
 
   return (
-    <>
+    <OfflineHomeRedirect>
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}
@@ -88,6 +89,6 @@ export default async function SettingsPage() {
         weightLogs={weightLogsResult.data ?? []}
         isGuest={profileResult.data?.is_guest === true}
       />
-    </>
+    </OfflineHomeRedirect>
   )
 }

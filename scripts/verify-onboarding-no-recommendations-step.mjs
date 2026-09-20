@@ -1,5 +1,5 @@
 /**
- * Verifies onboarding completes at step 8 (review) → app tour, with no
+ * Verifies lean onboarding (4 steps) finishes into the app tour, with no
  * split-recommendations step in between. Also confirms Create Split still
  * links to /dashboard/splits/recommendations.
  *
@@ -42,19 +42,29 @@ function staticChecks() {
     fails.push('onboarding-flow still references step 9 / recommendations')
   }
   if (!flow.includes('void finishOnboarding(homeAfterOnboarding)')) {
-    fails.push('step 8 must call finishOnboarding directly')
+    fails.push('finish step must call finishOnboarding directly')
+  }
+  if (!flow.includes('finishWithTour') || !flow.includes('tourHandoff')) {
+    fails.push('finish step should hand off into the app tour')
   }
   if (!choice.includes('RECOMMENDED_SPLITS_PATH')) {
     fails.push('create-split-choice missing recommendations path')
   }
-  if (!types.includes('Math.min(8,')) {
-    fails.push('clampOnboardingStep max should be 8')
+  if (!types.includes('ONBOARDING_STEPS = 4')) {
+    fails.push('ONBOARDING_STEPS should be 4')
+  }
+  if (!types.includes('Math.min(ONBOARDING_STEPS,')) {
+    fails.push('clampOnboardingStep should use ONBOARDING_STEPS')
   }
   if (fails.length) throw new Error(fails.join('; '))
 }
 
 async function clickContinue(page) {
-  await page.getByRole('button', { name: /^continue$|^create my plan$|^save changes$/i }).click()
+  await page
+    .getByRole('button', {
+      name: /^continue$|^start app tour$|^enter ironstack$|^save changes$/i,
+    })
+    .click()
 }
 
 async function e2eFreshSignup(env) {
@@ -96,43 +106,32 @@ async function e2eFreshSignup(env) {
 
     await page.waitForURL(/\/onboarding/, { timeout: 45000 })
 
-    // Step 1 — profile basics (username prefilled from signup)
+    // Step 1 — identity (username locked from signup)
     await page.locator('input[autocomplete="name"]').fill('Verify User')
     await clickContinue(page)
 
-    // Step 2 — optional demographics
-    await page.getByRole('button', { name: /skip for now/i }).click()
-
-    // Step 3 — optional body stats
-    await page.getByRole('button', { name: /skip for now/i }).click()
-
-    // Step 4 — primary goal
+    // Step 2 — training setup (combined)
     await page.getByRole('button', { name: /build muscle/i }).first().click()
-    await clickContinue(page)
-
-    // Step 5 — schedule
     await page.getByRole('button', { name: /^beginner$/i }).click()
     await page.getByRole('button', { name: /^3$/ }).click()
     await page.getByRole('button', { name: /30.?45/i }).click()
+    await page.getByRole('button', { name: /^home$|at home/i }).click()
     await clickContinue(page)
 
-    // Step 6 — location
-    await page.getByRole('button', { name: /^home$/i }).click()
+    // Step 3 — appearance
+    await page.getByRole('button', { name: /^dark$/i }).click()
     await clickContinue(page)
 
-    // Step 7 — preferences (optional)
-    await page.getByRole('button', { name: /skip for now/i }).click()
-
-    // Step 8 — review (must NOT show recommendations)
+    // Step 4 — finish / tour handoff
     const bodyText = await page.locator('main').innerText()
     if (/program options|split recommendations|recommended splits/i.test(bodyText)) {
-      throw new Error('step 8 review shows recommendations copy')
+      throw new Error('finish step shows recommendations copy')
     }
-    if (await page.locator('[data-tour="split-recommendations-panel"]').count()) {
-      throw new Error('split recommendations panel visible at step 8')
+    if (!/short tour|app tour/i.test(bodyText)) {
+      throw new Error('finish step missing tour handoff copy')
     }
 
-    await page.getByRole('button', { name: /create my plan/i }).click()
+    await page.getByRole('button', { name: /start app tour|enter ironstack/i }).click()
     await page.waitForURL(/\/dashboard\/home/, { timeout: 60000 })
 
     const finalUrl = page.url()
@@ -168,7 +167,7 @@ async function e2eFreshSignup(env) {
         2,
       ),
     )
-    console.log('\nPASS: onboarding step 8 → app tour; Create Split recommendations intact.')
+    console.log('\nPASS: lean onboarding → app tour; Create Split recommendations intact.')
   } finally {
     await browser.close()
     if (userId) await admin.auth.admin.deleteUser(userId)

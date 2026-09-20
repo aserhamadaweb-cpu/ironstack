@@ -7,8 +7,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { CoachMascot } from '@/components/coach-mascot'
 import { useGuestGate } from '@/components/guest-gate-provider'
+import { useActionFeedback } from '@/components/action-feedback'
 import { EASE } from '@/components/reveal'
 import type { SessionCoachContext } from '@/lib/ai/session-context'
+import { useOfflineStatus } from '@/lib/offline/provider'
 import {
   markSessionCoachDiscovered,
   markSessionCoachTooltipShown,
@@ -50,6 +52,8 @@ export function SessionCoachChat({
   const t = useTranslations('coach.sessionChat')
   const tCoach = useTranslations('coach')
   const { isGuest, openUpgrade } = useGuestGate()
+  const { online, hydrated } = useOfflineStatus()
+  const { notifyError } = useActionFeedback()
   const reduce = useReducedMotion()
   const [mounted, setMounted] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -96,13 +100,32 @@ export function SessionCoachChat({
         openUpgrade('sessionCoach')
         return
       }
+      if (next && hydrated && !online) {
+        notifyError(t('offlineRequired'))
+        return
+      }
       if (next) {
         markDiscovered()
       }
       onOpenChange(next)
     },
-    [isGuest, markDiscovered, onOpenChange, openUpgrade],
+    [
+      hydrated,
+      isGuest,
+      markDiscovered,
+      notifyError,
+      onOpenChange,
+      online,
+      openUpgrade,
+      t,
+    ],
   )
+
+  useEffect(() => {
+    if (hydrated && !online && open) {
+      onOpenChange(false)
+    }
+  }, [hydrated, online, open, onOpenChange])
 
   useEffect(() => {
     setMounted(true)

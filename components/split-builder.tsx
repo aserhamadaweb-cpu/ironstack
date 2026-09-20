@@ -102,6 +102,8 @@ type SplitBuilderProps = {
   editSplitId?: string
   initial?: SplitBuilderInitial
   defaultHomeLibrary?: boolean
+  /** From onboarding “create yourself” — start tour after first save. */
+  startTourAfterSave?: boolean
 }
 
 export function SplitBuilder({
@@ -115,6 +117,7 @@ export function SplitBuilder({
   editSplitId,
   initial,
   defaultHomeLibrary = false,
+  startTourAfterSave = false,
 }: SplitBuilderProps) {
   const t = useTranslations('splitBuilder')
   const tOffline = useTranslations('offline')
@@ -427,12 +430,20 @@ export function SplitBuilder({
       } catch {
         /* ignore */
       }
+      if (startTourAfterSave && !isEdit) {
+        window.location.assign('/dashboard/home?tour=1')
+        return
+      }
       router.refresh()
     } catch (err) {
       if (isNetworkFailure(err)) {
         queueSplitSync()
         setSavedSplitId(splitId)
         setSaved(true)
+        if (startTourAfterSave && !isEdit) {
+          window.location.assign('/dashboard/home?tour=1')
+          return
+        }
       } else {
         setSaveError(err instanceof Error ? err.message : t('saveFailed'))
       }

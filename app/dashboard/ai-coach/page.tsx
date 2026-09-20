@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { BrainCircuit, MessageSquare, ScrollText } from 'lucide-react'
+import { MessageSquare, ScrollText } from 'lucide-react'
 import { BackToTrainLink } from '@/components/back-to-train-link'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { GuestPageGate } from '@/components/guest-page-gate'
@@ -12,10 +12,16 @@ import { listAiInsights } from '@/lib/ai/insights'
 import { getOrCreateLatestConversation } from '@/lib/ai/conversations'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { getProfile } from '@/lib/data/queries'
+import { onboardingDataFromUser } from '@/lib/data/onboarding-read'
+import {
+  completenessFromOnboarding,
+  getMissingProfileFields,
+} from '@/lib/profile-completeness'
+import { ProfileCompletenessBanner } from '@/components/profile-completeness-banner'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { profileHref } from '@/lib/profile-path'
 import { formatSessionDate } from '@/lib/session-store'
-import { getAuthIdentity } from '@/lib/supabase/server'
+import { createClient, getAuthIdentity } from '@/lib/supabase/server'
 
 export const metadata = {
   title: 'AI Coach — IRONSTACK',
@@ -42,6 +48,34 @@ export default async function AiCoachPage() {
     email?.split('@')[0] ||
     tCommon('athlete')
 
+  let profileMissingCount = 0
+  let profileMissingLabels: string[] = []
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const profile = profileResult.data
+    if (user && profile) {
+      const onboarding = onboardingDataFromUser(user, profile)
+      const missing = getMissingProfileFields(
+        completenessFromOnboarding(onboarding, {
+          weightKg:
+            profile.current_weight_kg != null
+              ? Number(profile.current_weight_kg)
+              : onboarding.weightKg,
+          heightCm: profile.height_cm ?? onboarding.heightCm,
+          gender: profile.gender ?? onboarding.gender,
+          birthDate: profile.birth_date,
+        }),
+      )
+      profileMissingCount = missing.length
+      profileMissingLabels = missing
+    }
+  } catch {
+    /* ignore */
+  }
+
   return (
     <>
       <DashboardNav
@@ -58,6 +92,10 @@ export default async function AiCoachPage() {
         className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 sm:py-8"
       >
         <BackToTrainLink />
+        <ProfileCompletenessBanner
+          missingCount={profileMissingCount}
+          missingLabels={profileMissingLabels}
+        />
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="section-kicker">{t('kicker')}</p>
@@ -93,11 +131,11 @@ export default async function AiCoachPage() {
           </h2>
           {insights.length === 0 ? (
             <EmptyState
-              icon={BrainCircuit}
+              icon={MessageSquare}
               title={t('noInsights')}
               body={t('noInsightsBody')}
-              actionLabel={tCommon('openWorkout')}
-              actionHref="/dashboard/workout"
+              actionLabel={t('openChat')}
+              actionHref="/dashboard/ai-coach/chat"
               tone="gold"
             />
           ) : (

@@ -13,7 +13,10 @@ import {
 import type { AgentToolContext } from '@/lib/ai/agent/tool-bridge'
 import type { AgentPreview } from '@/lib/ai/agent/types'
 import { GEMINI_MODEL, buildCoachSystemPrompt } from '@/lib/ai/prompt'
-import { COACH_TOOL_DECLARATIONS, executeCoachTool } from '@/lib/ai/tools'
+import {
+  coachToolDeclarationsForMode,
+  executeCoachTool,
+} from '@/lib/ai/tools'
 
 export class GeminiRateLimitError extends Error {
   constructor(message = 'rate_limited') {
@@ -30,15 +33,44 @@ function getClient() {
   return new GoogleGenAI({ apiKey })
 }
 
+function errorStatus(err: unknown): number | null {
+  const status = (err as { status?: unknown })?.status
+  return typeof status === 'number' ? status : null
+}
+
 function isRateLimit(err: unknown) {
+  const status = errorStatus(err)
+  if (status === 429 || status === 503) return true
   const message = err instanceof Error ? err.message : String(err)
   const lower = message.toLowerCase()
   return (
     lower.includes('429') ||
+    lower.includes('503') ||
     lower.includes('rate') ||
     lower.includes('quota') ||
-    lower.includes('resource_exhausted')
+    lower.includes('resource_exhausted') ||
+    lower.includes('unavailable') ||
+    lower.includes('high demand')
   )
+}
+
+/** Transient Gemini capacity / network blips — worth a short retry. */
+function isTransientGeminiError(err: unknown) {
+  if (isRateLimit(err)) return true
+  const status = errorStatus(err)
+  if (status === 500 || status === 502 || status === 504) return true
+  const message = err instanceof Error ? err.message : String(err)
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('econnreset') ||
+    lower.includes('etimedout') ||
+    lower.includes('fetch failed') ||
+    lower.includes('network')
+  )
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /** Log the full Gemini error body (message often embeds JSON with the real cause). */
@@ -148,6 +180,7 @@ type PendingProposal =
   | { kind: 'split'; proposal: SplitProposal }
   | { kind: 'session'; proposal: SessionProposal }
   | { kind: 'agent'; preview: AgentPreview }
+  | { kind: 'profile_interview' }
 
 function findPendingProposal(
   toolTrace: Array<{ name: string; result: unknown }>,
@@ -160,8 +193,17 @@ function findPendingProposal(
       proposal?: unknown
       pendingActionId?: string
       preview?: AgentPreview
+      interviewId?: string
+      fields?: unknown
     }
     if (row.status !== 'pending_confirmation') continue
+    if (
+      typeof row.interviewId === 'string' &&
+      Array.isArray(row.fields) &&
+      row.fields.length > 0
+    ) {
+      return { kind: 'profile_interview' }
+    }
     if (isSplitProposal(row.proposal)) {
       return { kind: 'split', proposal: row.proposal }
     }
@@ -176,6 +218,12 @@ function findPendingProposal(
 }
 
 function proposalReadyText(pending: PendingProposal, locale: 'en' | 'ar'): string {
+  if (pending.kind === 'profile_interview') {
+    return locale === 'ar'
+      ? 'قبل ما نكمّل، خلّينا نعبّي تفاصيل ملف اللياقة عبر الاختيارات في البطاقة أدناه — مثل إنشاء برنامج بالذكاء الاصطناعي.'
+      : 'Before we continue, tap through the fitness-profile choices on the card below — same style as Create Split with AI.'
+  }
+
   if (pending.kind === 'agent') {
     const title = pending.preview.title
     return locale === 'ar'
@@ -213,10 +261,32 @@ function proposalReadyText(pending: PendingProposal, locale: 'en' | 'ar'): strin
   return `Tap Open on the card below to open${splitName ? ` "${splitName}"` : ' the program'}.`
 }
 
-function loopLimitText(locale: 'en' | 'ar'): string {
+function loopLimitText(
+  locale: 'en' | 'ar',
+  options?: { splitBuildMode?: boolean },
+): string {
+  if (options?.splitBuildMode) {
+    return locale === 'ar'
+      ? 'ما قدرت أجهّز البرنامج في هالجولة. اطلب «3 أيام Push Pull Legs» أو اضغط إعادة المحاولة.'
+      : "I couldn't finish the split proposal this turn. Try “3-day Push Pull Legs” or tap Retry."
+  }
   return locale === 'ar'
     ? 'استغرق البحث في بياناتك وقتاً أطول من المعتاد. جرّب سؤالاً أقصر، أو اطلب برنامجاً بـ3 أيام فقط.'
     : 'Looking up your training data took longer than usual. Try a shorter ask, or request a 3-day split first.'
+}
+
+function lastProposeSplitError(
+  toolTrace: Array<{ name: string; result: unknown }>,
+): string | null {
+  for (let i = toolTrace.length - 1; i >= 0; i -= 1) {
+    const row = toolTrace[i]
+    if (row.name !== 'propose_split') continue
+    const result = row.result as { error?: string; message?: string } | null
+    if (result && typeof result === 'object' && result.message) {
+      return String(result.message)
+    }
+  }
+  return null
 }
 
 async function generateWithTools(input: {
@@ -232,23 +302,48 @@ async function generateWithTools(input: {
 }): Promise<string> {
   const working = [...input.contents]
   const fastPath = input.splitBuildMode || input.revisePendingSplit
-  const maxRounds = fastPath ? 8 : 14
+  // Split path is allow-listed to propose_split (+ search / interview) — fewer rounds needed.
+  const maxRounds = fastPath ? 6 : 14
+  const toolDeclarations = coachToolDeclarationsForMode({
+    splitBuildMode: input.splitBuildMode,
+    revisePendingSplit: input.revisePendingSplit,
+  })
+
+  const maxAttempts = 3
 
   for (let round = 0; round < maxRounds; round += 1) {
     let response
-    try {
-      response = await input.ai.models.generateContent({
-        model: input.model,
-        contents: working,
-        config: {
-          systemInstruction: input.systemInstruction,
-          tools: [{ functionDeclarations: COACH_TOOL_DECLARATIONS }],
-          temperature: fastPath ? 0.35 : 0.7,
-        },
-      })
-    } catch (err) {
-      logGeminiError(err, `generateContent round=${round} model=${input.model}`)
-      throw err
+    let lastErr: unknown
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        response = await input.ai.models.generateContent({
+          model: input.model,
+          contents: working,
+          config: {
+            systemInstruction: input.systemInstruction,
+            tools: [{ functionDeclarations: toolDeclarations }],
+            temperature: fastPath ? 0.35 : 0.7,
+          },
+        })
+        lastErr = undefined
+        break
+      } catch (err) {
+        lastErr = err
+        logGeminiError(
+          err,
+          `generateContent round=${round} attempt=${attempt}/${maxAttempts} model=${input.model}`,
+        )
+        if (attempt >= maxAttempts || !isTransientGeminiError(err)) {
+          throw err
+        }
+        // 503 high-demand spikes are usually brief — back off before retry.
+        await sleep(400 * attempt * attempt)
+      }
+    }
+    if (!response) {
+      throw lastErr instanceof Error
+        ? lastErr
+        : new Error('Coach could not respond right now.')
     }
 
     const functionCalls = response.functionCalls ?? []
@@ -315,5 +410,22 @@ async function generateWithTools(input: {
     return proposalReadyText(pending, input.locale)
   }
 
-  return loopLimitText(input.locale)
+  const toolNames = input.toolTrace.map((t) => t.name).join(', ') || '(none)'
+  console.warn('[ai-coach] tool round budget exhausted', {
+    splitBuildMode: Boolean(input.splitBuildMode),
+    revisePendingSplit: Boolean(input.revisePendingSplit),
+    rounds: maxRounds,
+    tools: toolNames,
+  })
+
+  const proposeErr = lastProposeSplitError(input.toolTrace)
+  if (proposeErr && input.splitBuildMode) {
+    return input.locale === 'ar'
+      ? `ما قدرت أبني البرنامج: ${proposeErr}`
+      : `I couldn't build that split: ${proposeErr}`
+  }
+
+  return loopLimitText(input.locale, {
+    splitBuildMode: Boolean(input.splitBuildMode),
+  })
 }

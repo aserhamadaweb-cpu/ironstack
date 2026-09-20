@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import type { SplitRecommendation } from '@/lib/split-recommendations'
 import {
   applySplitRecommendationAction,
@@ -11,6 +11,10 @@ import {
   skipSplitRecommendationAction,
 } from '@/lib/data/split-recommendation-actions'
 import { SplitRecommendationCard } from '@/components/split-recommendation-card'
+import {
+  ActionFeedbackBanner,
+  useActionFeedback,
+} from '@/components/action-feedback'
 
 const STANDALONE_REC_LIMIT = 2
 
@@ -40,6 +44,7 @@ export function SplitRecommendationsPanel({
   onSkipped,
 }: SplitRecommendationsPanelProps) {
   const t = useTranslations('splitRecommendations')
+  const { notifySuccess, notifyError } = useActionFeedback()
   const [pending, startTransition] = useTransition()
   const [loading, setLoading] = useState(!initialRecommendations?.length)
   const [error, setError] = useState<string | null>(initialError)
@@ -51,12 +56,6 @@ export function SplitRecommendationsPanel({
   const [expandedId, setExpandedId] = useState<string | null>(
     mode === 'onboarding' ? (initialRecommendations?.[0]?.id ?? null) : null,
   )
-
-  useEffect(() => {
-    if (mode === 'standalone') {
-      window.scrollTo(0, 0)
-    }
-  }, [mode])
 
   useEffect(() => {
     if (mode === 'standalone' && initialRecommendations?.length) {
@@ -99,7 +98,11 @@ export function SplitRecommendationsPanel({
     setSavedNotice(true)
     setSavedProgramName(programName ?? null)
     setError(null)
-    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    notifySuccess(
+      programName
+        ? t('savedBannerBodyNamed', { name: programName })
+        : t('savedToSplits'),
+    )
   }
 
   function handleSelect(rec: SplitRecommendation) {
@@ -107,7 +110,9 @@ export function SplitRecommendationsPanel({
     startTransition(async () => {
       const result = await applySplitRecommendationAction(rec)
       if (result.error || !result.data?.splitId) {
-        setError(result.error ?? t('saveFailed'))
+        const msg = result.error ?? t('saveFailed')
+        setError(msg)
+        notifyError(msg)
         return
       }
       handleSaved(result.data.splitId, rec.name)
@@ -121,6 +126,7 @@ export function SplitRecommendationsPanel({
       const skipped = await skipSplitRecommendationAction()
       if (!skipped.ok) {
         setError(skipped.error)
+        notifyError(skipped.error)
         return
       }
       onSkipped?.()
@@ -131,37 +137,6 @@ export function SplitRecommendationsPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {savedNotice ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-2xl border border-gold/45 bg-gold/10 px-4 py-4 sm:px-5"
-        >
-          <div className="flex items-start gap-3">
-            <CheckCircle2
-              className="mt-0.5 size-5 shrink-0 text-gold"
-              aria-hidden="true"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="font-heading text-base font-bold text-foreground">
-                {t('savedBannerTitle')}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {savedProgramName
-                  ? t('savedBannerBodyNamed', { name: savedProgramName })
-                  : t('savedToSplits')}
-              </p>
-              <Link
-                href="/dashboard/splits"
-                className="mt-3 inline-flex min-h-11 items-center text-xs font-bold tracking-[0.12em] text-gold transition hover:text-gold/80"
-              >
-                {t('viewYourSplits')} →
-              </Link>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex items-start gap-3">
         <span className="flex size-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold">
           <Sparkles className="size-5" aria-hidden="true" />
@@ -176,15 +151,9 @@ export function SplitRecommendationsPanel({
         </div>
       </div>
 
-      <p className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-muted-foreground">
+      <p className="rounded-xl border border-gold/25 bg-gold-tint px-4 py-3 text-xs text-muted-foreground">
         {t('medicalDisclaimer')}
       </p>
-
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
 
       {loading ? (
         <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -214,6 +183,26 @@ export function SplitRecommendationsPanel({
           ))}
         </div>
       )}
+
+      <ActionFeedbackBanner
+        error={error}
+        success={
+          savedNotice
+            ? savedProgramName
+              ? t('savedBannerBodyNamed', { name: savedProgramName })
+              : t('savedToSplits')
+            : null
+        }
+      />
+
+      {savedNotice ? (
+        <Link
+          href="/dashboard/splits"
+          className="inline-flex min-h-11 items-center text-xs font-bold tracking-[0.12em] text-gold transition hover:text-gold/80"
+        >
+          {t('viewYourSplits')} →
+        </Link>
+      ) : null}
 
       {mode === 'onboarding' ? (
         <button

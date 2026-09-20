@@ -52,6 +52,15 @@ function formatProfileInputForPrompt(input: RecommendationInput): string {
     `- Schedule: ${input.daysPerWeek} days/week, ${input.workoutDuration.replace(/_/g, ' ')} sessions`,
     `- Location: ${input.trainingLocation}, equipment: ${equipment}`,
   ]
+  if (input.secondaryGoals.length > 0) {
+    lines.push(`- Secondary goals: ${input.secondaryGoals.join(', ')}`)
+  }
+  if (input.trainingStyles.length > 0) {
+    lines.push(`- Styles: ${input.trainingStyles.join(', ')}`)
+  }
+  if (input.ageRange) {
+    lines.push(`- Age range: ${input.ageRange}`)
+  }
   if (input.avoidances.trim()) {
     lines.push(`- Avoid: ${input.avoidances.trim()}`)
   }

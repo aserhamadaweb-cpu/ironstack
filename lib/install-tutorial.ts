@@ -8,11 +8,15 @@ export type InstallTutorialPlatform = 'ios' | 'android' | 'windows' | 'generic'
 export type InstallTutorialStepDef = {
   /** Stable id — maps to i18n keys under installTutorial.{platform}.{id} */
   id: string
-  /** Public URL under /install-tutorial/{platform}/. Null = placeholder slot. */
+  /**
+   * Public URL under /install-tutorial/{platform}/.
+   * Set only when a real screenshot ships (iOS today).
+   * Null = text-only step — no image area / placeholder.
+   */
   imageSrc: string | null
 }
 
-/** Step order + image filenames per platform. Drop screenshots into matching folders. */
+/** Step order + optional screenshots per platform. */
 export const INSTALL_TUTORIAL_STEP_DEFS: Record<
   InstallTutorialPlatform,
   InstallTutorialStepDef[]
@@ -28,12 +32,12 @@ export const INSTALL_TUTORIAL_STEP_DEFS: Record<
     },
   ],
   android: [
-    { id: 'step1', imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/android/step-1-menu.jpg` },
-    { id: 'step2', imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/android/step-2-install.jpg` },
+    { id: 'step1', imageSrc: null },
+    { id: 'step2', imageSrc: null },
   ],
   windows: [
-    { id: 'step1', imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/windows/step-1-install-icon.jpg` },
-    { id: 'step2', imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/windows/step-2-confirm.jpg` },
+    { id: 'step1', imageSrc: null },
+    { id: 'step2', imageSrc: null },
   ],
   generic: [],
 }

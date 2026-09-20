@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js'
 import {
   clampOnboardingStep,
   emptyOnboardingData,
+  resolveOnboardingFlowStep,
   type AgeRange,
   type EquipmentId,
   type FitnessGoal,
@@ -243,6 +244,7 @@ export function readOnboardingState(
 
   const data = emptyOnboardingData({
     ...fromBlob,
+    version: 3,
     step: clampOnboardingStep(
       fromBlob.step ?? meta.onboarding_step ?? (incomplete ? 1 : 1),
     ),
@@ -262,6 +264,28 @@ export function readOnboardingState(
         : null),
     language: fromBlob.language ?? profileHints?.language ?? null,
   })
+
+  // Prefill display name from username when signup only collected a handle.
+  if (!data.displayName.trim() && data.username) {
+    data.displayName = data.username
+  }
+
+  if (incomplete) {
+    const legacyStep = clampOnboardingStep(
+      fromBlob.step ?? meta.onboarding_step ?? data.step,
+    )
+    // Only remapping when an older blob explicitly recorded v1/v2.
+    // Missing version (fresh signup) must stay on the current appearance-first flow.
+    const blobVersion = fromBlob.version
+    const legacyVersion =
+      blobVersion === 1 || blobVersion === 2 ? blobVersion : 3
+    data.step = resolveOnboardingFlowStep({
+      ...data,
+      version: legacyVersion,
+      step: legacyStep,
+    })
+    data.version = 3
+  }
 
   return {
     completed: completed && !incomplete ? true : completedFlag === true,
@@ -284,7 +308,7 @@ export function buildOnboardingMetadataPatch(
 ): Record<string, unknown> {
   const blob: OnboardingData = {
     ...data,
-    version: 1,
+    version: 3,
     step: clampOnboardingStep(data.step),
     displayName: data.displayName.trim().replace(/\s+/g, ' '),
     username: data.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''),

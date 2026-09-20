@@ -276,7 +276,6 @@ export function SettingsPageClient({
         <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
       </header>
 
-      {!isGuest ? (
       <section className="space-y-3" aria-labelledby="appearance-heading" data-tour="settings-appearance">
         <h2
           id="appearance-heading"
@@ -341,7 +340,6 @@ export function SettingsPageClient({
           </div>
         </div>
       </section>
-      ) : null}
 
       {!isGuest ? (
         <section className="space-y-3" aria-labelledby="fitness-profile-heading">
@@ -357,7 +355,7 @@ export function SettingsPageClient({
               {t('fitnessProfileHint')}
             </p>
             <Link
-              href="/onboarding?edit=1"
+              href="/dashboard/fitness-profile"
               className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-gold/35 bg-gold/10 px-4 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
             >
               {t('editFitnessProfile')}
@@ -901,7 +899,7 @@ export function SettingsPageClient({
                         const { handleAuthUserChanged } = await import(
                           '@/lib/clear-client-user-state'
                         )
-                        await handleAuthUserChanged(null)
+                        await handleAuthUserChanged(null, { isSignOut: true })
                         await signOut()
                       } catch {
                         setSignOutMsg(t('signOutFailed'))

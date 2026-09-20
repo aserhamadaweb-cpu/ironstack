@@ -5,9 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertCircle, Dumbbell, Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { createClient } from '@/lib/supabase/client'
 import { buildAuthEntryHref } from '@/lib/auth-entry'
-import { handleAuthUserChanged } from '@/lib/clear-client-user-state'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
 import { HOME_PATH } from '@/lib/onboarding-types'
 
@@ -18,21 +16,30 @@ function safeNextPath(raw: string | null) {
   return raw
 }
 
-/** Handles legacy hash-token redirects (#access_token=…) that never hit the server. */
+/** Legacy hash-token redirects — forwards to the shared OAuth completion flow. */
 function AuthConfirmContent() {
   const t = useTranslations('auth')
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = useMemo(() => createClient(), [])
   const [error, setError] = useState<string | null>(null)
+
+  const next = useMemo(
+    () => safeNextPath(searchParams.get('next')),
+    [searchParams],
+  )
 
   useEffect(() => {
     let cancelled = false
 
     async function complete() {
-      const next = safeNextPath(searchParams.get('next'))
-      const hash = window.location.hash?.replace(/^#/, '') ?? ''
+      const code = searchParams.get('code')
+      if (code) {
+        const params = new URLSearchParams(searchParams.toString())
+        window.location.replace(`/auth/callback?${params.toString()}`)
+        return
+      }
 
+      const hash = window.location.hash?.replace(/^#/, '') ?? ''
       if (!hash.includes('access_token=')) {
         if (!cancelled) {
           const dest = new URL('/auth/error', window.location.origin)
@@ -42,51 +49,43 @@ function AuthConfirmContent() {
         return
       }
 
+      const params = new URLSearchParams(hash)
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
+      if (!access_token || !refresh_token) {
+        if (!cancelled) {
+          const dest = new URL('/auth/error', window.location.origin)
+          dest.searchParams.set('reason', 'missing_code')
+          router.replace(dest.pathname + dest.search)
+        }
+        return
+      }
+
       try {
-        const params = new URLSearchParams(hash)
-        const access_token = params.get('access_token')
-        const refresh_token = params.get('refresh_token')
-        if (!access_token || !refresh_token) {
-          if (!cancelled) {
-            const dest = new URL('/auth/error', window.location.origin)
-            dest.searchParams.set('reason', 'missing_code')
-            router.replace(dest.pathname + dest.search)
-          }
-          return
-        }
-
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token,
-          refresh_token,
-        })
-        if (sessionError) {
-          if (!cancelled) {
-            const dest = new URL('/auth/error', window.location.origin)
-            dest.searchParams.set('reason', 'exchange_failed')
-            dest.searchParams.set('detail', sessionError.message.slice(0, 280))
-            router.replace(dest.pathname + dest.search)
-          }
-          return
-        }
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
-          if (!cancelled) {
-            const dest = new URL('/auth/error', window.location.origin)
-            dest.searchParams.set('reason', 'no_session')
-            router.replace(dest.pathname + dest.search)
-          }
-          return
-        }
-
         clearIronstackAuthCache()
-        await handleAuthUserChanged(user.id)
 
-        const finalize = new URL('/auth/finalize', window.location.origin)
-        finalize.searchParams.set('next', next)
-        window.location.replace(finalize.href)
+        const res = await fetch('/api/auth/oauth-session', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token, refresh_token, next }),
+        })
+
+        const payload = (await res.json().catch(() => null)) as {
+          redirect?: string
+          error?: string
+        } | null
+
+        if (!res.ok || !payload?.redirect) {
+          if (!cancelled) {
+            setError(payload?.error ?? t('callbackFailed'))
+          }
+          return
+        }
+
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        window.location.replace(payload.redirect)
       } catch {
         if (!cancelled) setError(t('callbackFailed'))
       }
@@ -96,7 +95,7 @@ function AuthConfirmContent() {
     return () => {
       cancelled = true
     }
-  }, [router, searchParams, supabase, t])
+  }, [next, router, searchParams, t])
 
   if (error) {
     return (

@@ -76,6 +76,7 @@ const APPROVED_ACTIONS = [
   'unfollow_user',
   'unfriend',
   'update_body_stats',
+  'update_fitness_profile',
   'update_profile_details',
 ].sort()
 

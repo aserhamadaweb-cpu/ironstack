@@ -16,7 +16,7 @@ export function AppShortcutGrid({ items }: { items: AppShortcut[] }) {
         <Link
           key={item.href}
           href={item.href}
-          prefetch
+          prefetch={false}
           className="is-row flex min-h-14 items-center gap-2.5 px-3 py-3 text-foreground active:opacity-80 sm:gap-3 sm:px-3.5"
         >
           <span

@@ -1,13 +1,29 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { readServerSessionClient } from '@/lib/auth/read-server-session'
 import { getCachedUserId } from '@/lib/offline/cache'
-import { buildAuthEntryHref } from '@/lib/auth-entry'
+import { buildAuthEntryHref, buildLoginPath } from '@/lib/auth-entry'
+import { LOCALE_CHOSEN_COOKIE } from '@/lib/i18n'
 import { isStandaloneDisplay } from '@/lib/pwa-client'
 
 type StandaloneRedirectProps = {
   children: React.ReactNode
+}
+
+function hasChosenLocaleClient(): boolean {
+  if (typeof document === 'undefined') return false
+  try {
+    return document.cookie
+      .split(';')
+      .some((part) => part.trim() === `${LOCALE_CHOSEN_COOKIE}=1`)
+  } catch {
+    return false
+  }
+}
+
+function authEntryHref(): string {
+  return hasChosenLocaleClient() ? buildLoginPath() : buildAuthEntryHref()
 }
 
 /**
@@ -32,24 +48,30 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
         if (!navigator.onLine) {
           const cachedUser = await getCachedUserId().catch(() => null)
           if (cancelled) return
-          window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
+          window.location.replace(
+            cachedUser ? '/dashboard/home' : authEntryHref(),
+          )
           return
         }
 
-        const supabase = createClient()
-        const { data } = await supabase.auth.getSession()
+        const server = await readServerSessionClient()
         if (cancelled) return
 
-        const session = data.session
-        const cachedUser = session?.user?.id
-          ? session.user.id
-          : await getCachedUserId().catch(() => null)
+        if (server?.userId) {
+          window.location.replace('/dashboard/home')
+          return
+        }
 
-        window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
+        const cachedUser = await getCachedUserId().catch(() => null)
+        window.location.replace(
+          cachedUser ? '/dashboard/home' : authEntryHref(),
+        )
       } catch {
         const cachedUser = await getCachedUserId().catch(() => null)
         if (!cancelled) {
-          window.location.replace(cachedUser ? '/dashboard/home' : buildAuthEntryHref())
+          window.location.replace(
+            cachedUser ? '/dashboard/home' : authEntryHref(),
+          )
         }
       }
     }
@@ -60,7 +82,6 @@ export function StandaloneRedirect({ children }: StandaloneRedirectProps) {
     }
   }, [])
 
-  // Blank until we know this is a normal browser tab (or we've navigated away).
   if (checking) {
     return (
       <div

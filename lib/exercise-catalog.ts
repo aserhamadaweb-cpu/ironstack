@@ -122,13 +122,36 @@ function searchHaystack(item: ExerciseCatalogItem): string {
     .toLowerCase()
 }
 
+/** Token match with light singular/plural tolerance (row ↔ rows). */
+function haystackHasToken(haystack: string, token: string): boolean {
+  if (!token) return true
+  if (haystack.includes(token)) return true
+  if (token.length > 3 && token.endsWith('s') && haystack.includes(token.slice(0, -1))) {
+    return true
+  }
+  if (token.length > 2 && !token.endsWith('s') && haystack.includes(`${token}s`)) {
+    return true
+  }
+  return false
+}
+
+function matchesSearchQuery(haystack: string, rawQuery: string): boolean {
+  const q = rawQuery.trim().toLowerCase()
+  if (!q) return true
+  if (haystack.includes(q)) return true
+  const tokens = q.split(/\s+/).filter((token) => token.length > 1)
+  if (tokens.length === 0) return haystack.includes(q)
+  // Order-independent: "seated cable row" matches "cable seated row".
+  return tokens.every((token) => haystackHasToken(haystack, token))
+}
+
 export function filterAndSortExercises(
   items: ExerciseCatalogItem[],
   query: ExerciseCatalogQuery,
 ): ExerciseCatalogItem[] {
   const q = query.search.trim().toLowerCase()
   const filtered = items.filter((item) => {
-    if (q && !searchHaystack(item).includes(q)) return false
+    if (q && !matchesSearchQuery(searchHaystack(item), q)) return false
     if (query.muscles.length > 0) {
       const muscle = item.muscleGroup
       if (!muscle || !query.muscles.includes(muscle)) return false

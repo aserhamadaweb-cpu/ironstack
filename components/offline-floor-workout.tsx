@@ -7,11 +7,13 @@ import { useTranslations } from 'next-intl'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
 import { OfflineStartSessionFlow } from '@/components/offline-start-session-flow'
+import { OfflineSessionLaunch } from '@/components/offline-session-launch'
 import { CTA_SECONDARY } from '@/lib/accent'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { getHomeSnapshot } from '@/lib/offline/cache'
 import { useOfflineStatus } from '@/lib/offline/provider'
 import { profileHref as buildProfileHref } from '@/lib/profile-path'
+import type { WeightUnit } from '@/lib/units'
 
 type OfflineFloorWorkoutProps = {
   displayName: string
@@ -32,25 +34,49 @@ export function OfflineFloorWorkout({
   const [cachedAvatar, setCachedAvatar] = useState(avatarUrl)
   const [cachedHref, setCachedHref] = useState(profileHref)
   const [cachedGuest, setCachedGuest] = useState(isGuest)
+  const [resumeSlug, setResumeSlug] = useState<string | null>(null)
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg')
 
   useEffect(() => {
+    let cancelled = false
     void getHomeSnapshot()
       .then((snap) => {
-        if (!snap) return
+        if (cancelled || !snap) return
         if (snap.displayName) setCachedName(snap.displayName)
         if (snap.avatarUrl) setCachedAvatar(snap.avatarUrl)
+        if (snap.weightUnit === 'lb' || snap.weightUnit === 'kg') {
+          setWeightUnit(snap.weightUnit)
+        }
         setCachedHref(
           buildProfileHref(snap.username, snap.userId) || profileHref,
         )
         setCachedGuest(snap.isGuest)
       })
       .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
   }, [profileHref])
+
+  // Resume only via ActiveWorkoutBanner — never auto-open a leftover session.
+
+  if (resumeSlug) {
+    return (
+      <OfflineSessionLaunch
+        slug={resumeSlug}
+        displayName={cachedName}
+        initials={initialsFrom(cachedName)}
+        weightUnit={weightUnit}
+        onExit={() => setResumeSlug(null)}
+        onSwitchSplit={setResumeSlug}
+      />
+    )
+  }
 
   return (
     <div className="relative min-h-svh">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-8%,rgba(232,181,74,0.14),transparent_55%)]" />
+        <div className="absolute inset-0 gold-radial-wash" />
       </div>
 
       <DashboardNav
@@ -62,7 +88,7 @@ export function OfflineFloorWorkout({
       />
 
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-        <ActiveWorkoutBanner />
+        <ActiveWorkoutBanner onResumeOffline={setResumeSlug} />
         <p className="inline-flex items-center gap-2 rounded-full border border-silver/25 bg-card px-3 py-1 text-[10px] font-bold tracking-[0.2em] text-muted-foreground">
           <WifiOff className="size-3 text-gold" aria-hidden="true" />
           {t('floorKicker')}
@@ -92,8 +118,12 @@ export function OfflineFloorWorkout({
         <OfflineStartSessionFlow
           displayName={cachedName}
           initials={initialsFrom(cachedName)}
-          navigateOnSelect
+          avatarUrl={cachedAvatar}
+          profileHref={cachedHref}
+          isGuest={cachedGuest}
+          weightUnit={weightUnit}
           className="mt-10"
+          onLaunch={setResumeSlug}
         />
       </main>
     </div>

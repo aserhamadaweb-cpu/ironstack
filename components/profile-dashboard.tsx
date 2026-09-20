@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Activity, Award, BrainCircuit, Compass, Flame, Medal, MessageSquare, Pencil, Settings, Target, Trophy } from 'lucide-react'
+import { Activity, Award, BrainCircuit, Compass, Dumbbell, Flame, Medal, MessageSquare, Pencil, Settings, Target, Trophy } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { AppShortcutGrid } from '@/components/app-shortcuts'
@@ -184,6 +184,11 @@ export function ProfileDashboard({
             <p className="section-kicker">{t('hubTitle')}</p>
             <AppShortcutGrid
               items={[
+                {
+                  href: '/dashboard/fitness-profile',
+                  label: t('fitnessProfile'),
+                  icon: Dumbbell,
+                },
                 {
                   href: '/dashboard/settings',
                   label: tNav('settings'),

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=375, initial-scale=1" />
+    <title>Save for Offline — progress & errors · 375px</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0c0c0e;
+        --card: #16161a;
+        --gold: #e8b54a;
+        --muted: #9a9aa3;
+        --border: rgba(255, 255, 255, 0.1);
+        --danger: #f07178;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 181, 74, 0.16), transparent 55%), var(--bg);
+        color: #f4f4f5;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 24px 0 48px;
+      }
+      .phone {
+        width: 375px;
+        padding: 16px;
+      }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+      .label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        margin: 20px 0 8px;
+        text-transform: uppercase;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--card);
+        padding: 20px;
+        margin-bottom: 12px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid rgba(232, 181, 74, 0.35);
+        background: rgba(232, 181, 74, 0.1);
+        color: var(--gold);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+      .badge.danger {
+        border-color: rgba(240, 113, 120, 0.45);
+        background: rgba(240, 113, 120, 0.12);
+        color: var(--danger);
+      }
+      .title { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+      .meta { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+      .cta, .toggle {
+        width: 100%;
+        min-height: 44px;
+        border-radius: 999px;
+        border: 0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .cta { background: var(--gold); color: #000; }
+      .toggle {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+      }
+      .toggle.busy {
+        border-color: rgba(232, 181, 74, 0.4);
+        color: var(--gold);
+        opacity: 0.85;
+      }
+      .toggle.danger {
+        border-color: rgba(240, 113, 120, 0.45);
+        background: rgba(240, 113, 120, 0.1);
+        color: var(--danger);
+      }
+      .toggle.saved {
+        border-color: rgba(232, 181, 74, 0.4);
+        background: rgba(232, 181, 74, 0.1);
+        color: var(--gold);
+      }
+      .spin {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(232, 181, 74, 0.25);
+        border-top-color: var(--gold);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .alert {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--danger);
+        line-height: 1.4;
+      }
+      .list-item {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 8px;
+        background: rgba(22, 22, 26, 0.8);
+      }
+      .list-item.broken { opacity: 0.95; }
+      .icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(232, 181, 74, 0.3);
+        background: rgba(232, 181, 74, 0.1);
+        color: var(--gold);
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+      .icon.danger {
+        border-color: rgba(240, 113, 120, 0.35);
+        background: rgba(240, 113, 120, 0.1);
+        color: var(--danger);
+      }
+      .list-title { font-weight: 600; font-size: 14px; }
+      .list-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+      .list-sub.danger { color: var(--danger); }
+    </style>
+  </head>
+  <body>
+    <main class="phone">
+      <h1>Save for Offline</h1>
+      <p class="sub">375px — in-progress, error, and incomplete states</p>
+
+      <p class="label">1 · Downloading (in progress)</p>
+      <article class="card">
+        <div class="row">
+          <span class="badge" style="border-color:var(--border);color:var(--muted);background:transparent">UPPER/LOWER</span>
+        </div>
+        <p class="title">Upper / Lower Strength</p>
+        <p class="meta">4 days / week</p>
+        <button class="cta" type="button">START SESSION</button>
+        <button class="toggle busy" type="button" aria-busy="true">
+          <span class="spin" aria-hidden="true"></span>
+          Downloading… 42%
+        </button>
+      </article>
+
+      <p class="label">2 · Network drop mid-save (rolled back)</p>
+      <article class="card">
+        <div class="row">
+          <span class="badge" style="border-color:var(--border);color:var(--muted);background:transparent">PUSH/PULL</span>
+        </div>
+        <p class="title">Push / Pull Hypertrophy</p>
+        <p class="meta">6 days / week</p>
+        <p class="alert" role="alert">
+          Download interrupted before exercise media finished. Nothing was saved — try again when you have a stable connection.
+        </p>
+        <button class="cta" type="button">START SESSION</button>
+        <button class="toggle" type="button">Save for Offline</button>
+      </article>
+
+      <p class="label">3 · Storage quota exceeded</p>
+      <article class="card">
+        <div class="row">
+          <span class="badge" style="border-color:var(--border);color:var(--muted);background:transparent">FULL BODY</span>
+        </div>
+        <p class="title">Full Body Conditioner</p>
+        <p class="meta">3 days / week</p>
+        <p class="alert" role="alert">
+          Not enough storage on this device to save that split offline. Free up space and try again.
+        </p>
+        <button class="cta" type="button">START SESSION</button>
+        <button class="toggle" type="button">Save for Offline</button>
+      </article>
+
+      <p class="label">4 · Incomplete pin (integrity check)</p>
+      <article class="card">
+        <div class="row">
+          <span class="badge danger">INCOMPLETE</span>
+        </div>
+        <p class="title">Bro Split Classic</p>
+        <p class="meta">5 days / week</p>
+        <button class="cta" type="button">START SESSION</button>
+        <button class="toggle danger" type="button">Incomplete · Retry save</button>
+      </article>
+
+      <p class="label">5 · Offline list — broken flagged</p>
+      <div class="list-item">
+        <div class="icon">▣</div>
+        <div>
+          <div class="list-title">Upper / Lower Strength</div>
+          <div class="list-sub">4 days</div>
+        </div>
+      </div>
+      <div class="list-item broken">
+        <div class="icon danger">!</div>
+        <div>
+          <div class="list-title">Bro Split Classic</div>
+          <div class="list-sub danger">Download incomplete — reconnect and tap Retry save</div>
+        </div>
+      </div>
+
+      <p class="label">6 · Happy path (complete)</p>
+      <article class="card">
+        <div class="row">
+          <span class="badge">OFFLINE</span>
+        </div>
+        <p class="title">Upper / Lower Strength</p>
+        <p class="meta">4 days / week</p>
+        <button class="cta" type="button">START SESSION</button>
+        <button class="toggle saved" type="button">Saved for Offline · Remove</button>
+      </article>
+    </main>
+  </body>
+</html>

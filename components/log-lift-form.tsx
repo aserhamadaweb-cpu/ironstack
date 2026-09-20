@@ -137,22 +137,28 @@ export function LogLiftForm({ onSubmit }: LogLiftFormProps) {
           </div>
         </div>
 
+        <Button type="submit" size="lg" className="h-11 w-full tracking-[0.15em]">
+          <Plus className="size-4" aria-hidden="true" />
+          LOG LIFT
+        </Button>
+
         {error && (
-          <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <p
+            role="alert"
+            className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
             {error}
           </p>
         )}
 
         {success && (
-          <p className="rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold">
+          <p
+            role="status"
+            className="rounded-xl border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-gold"
+          >
             {success}
           </p>
         )}
-
-        <Button type="submit" size="lg" className="h-11 w-full tracking-[0.15em]">
-          <Plus className="size-4" aria-hidden="true" />
-          LOG LIFT
-        </Button>
       </form>
     </section>
   )

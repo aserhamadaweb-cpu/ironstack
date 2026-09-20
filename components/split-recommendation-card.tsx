@@ -38,7 +38,7 @@ export function SplitRecommendationCard({
     <article
       className={`split-recommendation-card ${
         selected
-          ? 'border-gold/50 bg-gold/5 shadow-[0_0_0_1px_rgba(232,181,74,0.15)]'
+          ? 'border-gold/50 bg-gold/5 shadow-[0_0_0_1px_color-mix(in_srgb,var(--gold)_15%,transparent)]'
           : 'border-silver/20 bg-background/50'
       } rounded-2xl border transition`}
     >
@@ -87,9 +87,9 @@ export function SplitRecommendationCard({
           {rec.warnings && rec.warnings.length > 0 ? (
             <div
               role="note"
-              className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-3 text-xs text-muted-foreground"
+              className="rounded-xl border border-gold/30 bg-gold-tint px-3 py-3 text-xs text-muted-foreground"
             >
-              <p className="font-semibold text-amber-200/90">{t('warningsTitle')}</p>
+              <p className="font-semibold text-gold">{t('warningsTitle')}</p>
               <ul className="mt-2 list-disc space-y-1 ps-4">
                 {rec.warnings.map((warning) => (
                   <li key={warning} className="rec-copy break-words" dir="auto">
@@ -145,7 +145,7 @@ export function SplitRecommendationCard({
             type="button"
             disabled={busy}
             onClick={onSelect}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-gold px-4 text-xs font-bold tracking-[0.14em] text-black transition active:scale-[0.98] disabled:opacity-60"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-xs font-bold tracking-[0.14em] text-primary-foreground transition active:scale-[0.98] disabled:opacity-60"
           >
             {busy ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />

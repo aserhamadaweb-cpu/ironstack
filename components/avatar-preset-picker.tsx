@@ -10,6 +10,8 @@ type AvatarPresetPickerProps = {
   disabled?: boolean
   /** When true, selecting the active preset again clears it. */
   allowClear?: boolean
+  /** Show the “choose a preset” heading above the grid. */
+  heading?: boolean
 }
 
 export function AvatarPresetPicker({
@@ -17,14 +19,17 @@ export function AvatarPresetPicker({
   onChange,
   disabled,
   allowClear = true,
+  heading = true,
 }: AvatarPresetPickerProps) {
   const t = useTranslations('auth')
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-muted-foreground">
-        {t('choosePresetAvatar')}
-      </p>
+      {heading ? (
+        <p className="text-sm font-medium text-muted-foreground">
+          {t('choosePresetAvatar')}
+        </p>
+      ) : null}
       <div
         className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-8"
         role="listbox"
@@ -46,7 +51,7 @@ export function AvatarPresetPicker({
               }}
               className={`relative aspect-square min-h-11 min-w-11 overflow-hidden rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50 ${
                 selected
-                  ? 'border-gold shadow-[0_0_0_2px_rgba(232,181,74,0.35)]'
+                  ? 'border-gold shadow-[0_0_0_2px_color-mix(in_srgb,var(--gold)_35%,transparent)]'
                   : 'border-silver/20 hover:border-gold/40'
               }`}
             >

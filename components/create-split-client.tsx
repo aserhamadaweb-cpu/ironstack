@@ -24,6 +24,8 @@ type CreateSplitClientProps = {
   initials?: string
   customSplitCount?: number
   defaultHomeLibrary?: boolean
+  /** After first save from onboarding, send athlete into the app tour. */
+  startTourAfterSave?: boolean
 }
 
 export function CreateSplitClient({
@@ -32,6 +34,7 @@ export function CreateSplitClient({
   initials: initialsProp,
   customSplitCount,
   defaultHomeLibrary = false,
+  startTourAfterSave = false,
 }: CreateSplitClientProps) {
   const t = useTranslations('offline')
   const { online, hydrated } = useOfflineStatus()
@@ -130,6 +133,7 @@ export function CreateSplitClient({
       customSplitCount={count}
       maxCustomSplits={MAX_CUSTOM_SPLITS}
       defaultHomeLibrary={defaultHomeLibrary}
+      startTourAfterSave={startTourAfterSave}
     />
   )
 }

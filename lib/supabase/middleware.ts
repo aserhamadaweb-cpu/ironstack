@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { identityFromCookieList } from '@/lib/supabase/stored-user-id'
+import { supabaseCookieOptions } from '@/lib/supabase/cookie-options'
 import { ONBOARDING_COOKIE, ONBOARDING_PATH, HOME_PATH } from '@/lib/onboarding-types'
 import {
   hasChosenLocale,
@@ -54,6 +55,7 @@ export async function updateSession(request: NextRequest) {
           )
         },
       },
+      cookieOptions: supabaseCookieOptions,
     },
   )
 

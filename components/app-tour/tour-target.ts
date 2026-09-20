@@ -23,12 +23,24 @@ export function isTourTargetCandidate(el: HTMLElement): boolean {
   return true
 }
 
+/**
+ * Resolves a tour spotlight target.
+ * Comma-separated selectors are tried left-to-right (preference order),
+ * so empty-account fallbacks like offline-toggle → workout-splits work.
+ */
 export function findTourTarget(selector?: string): HTMLElement | null {
   if (!selector || typeof document === 'undefined') return null
-  const nodes = document.querySelectorAll(selector)
-  for (const node of nodes) {
-    if (node instanceof HTMLElement && isTourTargetCandidate(node)) {
-      return node
+  const parts = selector
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const ordered = parts.length > 0 ? parts : [selector]
+  for (const part of ordered) {
+    const nodes = document.querySelectorAll(part)
+    for (const node of nodes) {
+      if (node instanceof HTMLElement && isTourTargetCandidate(node)) {
+        return node
+      }
     }
   }
   return null

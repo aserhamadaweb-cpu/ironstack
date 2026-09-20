@@ -17,7 +17,15 @@ import { setPrimarySplitAction } from '@/lib/data/split-recommendation-actions'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
 import { createSplitChoiceHref } from '@/lib/split-create-paths'
 import { patchCachedSplitShared, refreshWorkoutCache } from '@/lib/offline/cache'
+import {
+  getOfflineSplitIds,
+  inspectOfflineSplit,
+  removeSplitFromOffline,
+  saveSplitForOffline,
+} from '@/lib/offline/offline-splits'
+import { offlineSaveErrorMessage } from '@/lib/offline/save-error-message'
 import { removeLocalSplit } from '@/lib/offline/split-store'
+import { subscribeOfflineCacheChanged } from '@/lib/offline/cached-user-splits'
 import { useOfflineStatus } from '@/lib/offline/provider'
 import { useActiveWorkout } from '@/lib/use-active-workout'
 
@@ -51,6 +59,12 @@ export function MySplitsCustomSection({
   const [shareSheetSplit, setShareSheetSplit] = useState<WorkoutSplitCardData | null>(
     null,
   )
+  const [offlineSaved, setOfflineSaved] = useState<Record<string, boolean>>({})
+  const [offlineIncomplete, setOfflineIncomplete] = useState<
+    Record<string, boolean>
+  >({})
+  const [offlineBusyId, setOfflineBusyId] = useState<string | null>(null)
+  const [offlineProgress, setOfflineProgress] = useState<number | null>(null)
 
   useEffect(() => {
     setSplits(initialSplits)
@@ -60,6 +74,40 @@ export function MySplitsCustomSection({
       ...Object.fromEntries(initialSplits.map((s) => [s.id, Boolean(s.isShared)])),
     }))
   }, [initialSplits, initialPrimaryId])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadPins = () => {
+      void getOfflineSplitIds()
+        .then(async (ids) => {
+          if (cancelled) return
+          const ready: Record<string, boolean> = {}
+          const incomplete: Record<string, boolean> = {}
+          await Promise.all(
+            ids.map(async (id) => {
+              const status = await inspectOfflineSplit(id)
+              if (status.ready) ready[id] = true
+              else incomplete[id] = true
+            }),
+          )
+          if (cancelled) return
+          setOfflineSaved(ready)
+          setOfflineIncomplete(incomplete)
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOfflineSaved({})
+            setOfflineIncomplete({})
+          }
+        })
+    }
+    loadPins()
+    const unsubscribe = subscribeOfflineCacheChanged(loadPins)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
 
   const sortedSplits = useMemo(() => {
     return [...splits].sort((a, b) => {
@@ -184,6 +232,64 @@ export function MySplitsCustomSection({
     })
   }
 
+  const handleToggleOffline = (splitId: string, next: boolean) => {
+    if (offlineBusyId || pending) return
+    requireAccount('saveSplit', () => {
+      if (offline) {
+        setError(tOffline('splitRequiresConnection'))
+        return
+      }
+      setError(null)
+      setOfflineBusyId(splitId)
+      setOfflineProgress(next ? 0 : null)
+      startTransition(async () => {
+        try {
+          if (next) {
+            const result = await saveSplitForOffline(splitId, {
+              onProgress: (p) => setOfflineProgress(p.percent),
+            })
+            if (!result.ok) {
+              setError(offlineSaveErrorMessage(tOffline, result))
+              return
+            }
+            setOfflineSaved((prev) => ({ ...prev, [splitId]: true }))
+            setOfflineIncomplete((prev) => {
+              const copy = { ...prev }
+              delete copy[splitId]
+              return copy
+            })
+          } else {
+            const result = await removeSplitFromOffline(splitId)
+            setOfflineSaved((prev) => {
+              const copy = { ...prev }
+              delete copy[splitId]
+              return copy
+            })
+            setOfflineIncomplete((prev) => {
+              const copy = { ...prev }
+              delete copy[splitId]
+              return copy
+            })
+            if (result.retainedForSession) {
+              setError(tOffline('offlineUnsaveKeptForSession'))
+            } else if (result.retainedForMutation) {
+              setError(tOffline('offlineUnsaveKeptForMutation'))
+            }
+          }
+        } catch (err) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : tOffline('offlineSaveFailed'),
+          )
+        } finally {
+          setOfflineBusyId(null)
+          setOfflineProgress(null)
+        }
+      })
+    })
+  }
+
   return (
     <>
       {error ? (
@@ -226,9 +332,15 @@ export function MySplitsCustomSection({
               split={split}
               primarySplitId={primarySplitId}
               isShared={Boolean(sharedMap[split.id] ?? split.isShared)}
+              savedForOffline={Boolean(offlineSaved[split.id])}
+              offlineIncomplete={Boolean(offlineIncomplete[split.id])}
+              savingOffline={offlineBusyId === split.id}
+              offlineProgress={
+                offlineBusyId === split.id ? offlineProgress : null
+              }
+              onToggleOffline={handleToggleOffline}
               onStart={startSplit}
               onDelete={handleDelete}
-              onShareToggle={handleShareToggle}
               onOpenShare={(split) => {
                 if (offline) {
                   setError(tOffline('splitRequiresConnection'))
@@ -238,7 +350,6 @@ export function MySplitsCustomSection({
               }}
               onSetPrimary={handleSetPrimary}
               deleting={deletingId === split.id}
-              sharing={sharingId === split.id}
               settingPrimary={primaryId === split.id}
               pending={pending}
             />
@@ -251,16 +362,17 @@ export function MySplitsCustomSection({
           open
           onClose={() => {
             setShareSheetSplit(null)
-            setSharedMap((prev) => ({
-              ...prev,
-              [shareSheetSplit.id]: true,
-            }))
             router.refresh()
           }}
           splitId={shareSheetSplit.id}
           splitName={shareSheetSplit.name}
           daysPerWeek={shareSheetSplit.days}
           category={shareSheetSplit.focus}
+          isSharedOnProfile={Boolean(
+            sharedMap[shareSheetSplit.id] ?? shareSheetSplit.isShared,
+          )}
+          profileSharePending={sharingId === shareSheetSplit.id}
+          onToggleProfileShare={() => handleShareToggle(shareSheetSplit.id)}
         />
       ) : null}
     </>

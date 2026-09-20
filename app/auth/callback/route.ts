@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { HOME_PATH } from '@/lib/onboarding-types'
+import { supabaseCookieOptions } from '@/lib/supabase/cookie-options'
 
 type CookieToSet = { name: string; value: string; options: CookieOptions }
 
@@ -50,13 +51,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(dest)
   }
 
-  // Hash tokens (#access_token=…) never reach the server — hand off to /auth/confirm.
+  // Hash tokens (#access_token=…) never reach the server — hand off to oauth-return.
   if (!code) {
-    const confirm = new URL('/auth/confirm', appOrigin(request))
+    const oauthReturn = new URL('/auth/oauth-return', appOrigin(request))
     searchParams.forEach((value, key) => {
-      if (key !== 'code') confirm.searchParams.set(key, value)
+      if (key !== 'code') oauthReturn.searchParams.set(key, value)
     })
-    return NextResponse.redirect(confirm)
+    return NextResponse.redirect(oauthReturn)
   }
 
   const pendingCookies: CookieToSet[] = []
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
           if (headers) Object.assign(pendingHeaders, headers)
         },
       },
+      cookieOptions: supabaseCookieOptions,
     },
   )
 

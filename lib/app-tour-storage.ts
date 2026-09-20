@@ -19,8 +19,10 @@ export function readAppTourState(
   const status = isAppTourStatus(rawStatus) ? rawStatus : null
   const step = clampTourStep(meta.app_tour_step)
 
-  const shouldAutoOffer =
-    status === 'pending' || status === 'active' || status === 'deferred'
+  // Only first-time `pending` gets ?tour=1 / login redirects.
+  // `active` resumes quietly from AppTourProvider; `deferred` stays silent
+  // until Settings → Restart tour (or an explicit ?tour=1).
+  const shouldAutoOffer = status === 'pending'
 
   return { status, step, shouldAutoOffer }
 }

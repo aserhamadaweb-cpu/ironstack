@@ -10,6 +10,7 @@ import {
 } from '@/lib/onboarding-types'
 import { isAppearanceMode, isThemePreference } from '@/lib/theme'
 import { isAvatarPresetPath } from '@/lib/avatar-presets'
+import { supabaseCookieOptions } from '@/lib/supabase/cookie-options'
 
 type CookieToSet = { name: string; value: string; options: CookieOptions }
 
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
           if (headers) Object.assign(pendingHeaders, headers)
         },
       },
+      cookieOptions: supabaseCookieOptions,
     },
   )
 
@@ -101,8 +103,13 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    const dest = new URL('/auth/error', appOrigin(request))
-    dest.searchParams.set('reason', code ? 'no_session' : 'missing_code')
+    if (code) {
+      const dest = new URL('/auth/error', appOrigin(request))
+      dest.searchParams.set('reason', 'no_session')
+      return NextResponse.redirect(dest)
+    }
+    const dest = new URL('/login', appOrigin(request))
+    dest.searchParams.set('error', 'session')
     return NextResponse.redirect(dest)
   }
 

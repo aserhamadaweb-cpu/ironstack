@@ -8,7 +8,8 @@ export async function abandonAnonymousSessionIfPresent(): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (user?.is_anonymous) {
-    await supabase.auth.signOut()
-  }
+  if (!user?.is_anonymous) return
+
+  // Global sign-out revokes the anonymous refresh token and clears auth cookies.
+  await supabase.auth.signOut({ scope: 'global' })
 }

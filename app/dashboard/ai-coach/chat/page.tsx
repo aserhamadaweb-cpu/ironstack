@@ -18,6 +18,11 @@ import {
 import { getActiveMemories } from '@/lib/ai/memory'
 import { getProfile } from '@/lib/data/queries'
 import { getIsGuestAction } from '@/lib/data/profile-actions'
+import { onboardingDataFromUser } from '@/lib/data/onboarding-read'
+import {
+  completenessFromOnboarding,
+  getMissingProfileFields,
+} from '@/lib/profile-completeness'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
 
@@ -83,6 +88,20 @@ export default async function AiCoachPage() {
       ])
 
     let chatMessages = mapMessagesWithUsedTools(messages)
+
+    const profile = profileResult.data
+    const onboarding = onboardingDataFromUser(user, profile ?? undefined)
+    const missing = getMissingProfileFields(
+      completenessFromOnboarding(onboarding, {
+        weightKg:
+          profile?.current_weight_kg != null
+            ? Number(profile.current_weight_kg)
+            : onboarding.weightKg,
+        heightCm: profile?.height_cm ?? onboarding.heightCm,
+        gender: profile?.gender ?? onboarding.gender,
+        birthDate: profile?.birth_date ?? null,
+      }),
+    )
 
     const pendingCelebrations = await getUnmentionedChatCelebrations(user.id)
     if (pendingCelebrations.length > 0) {
@@ -152,6 +171,8 @@ export default async function AiCoachPage() {
           category: m.category,
           updatedAt: m.updated_at,
         }))}
+        profileMissingCount={missing.length}
+        profileMissingLabels={missing}
       />
       </GuestPageGate>
       </OfflineConnectionGate>

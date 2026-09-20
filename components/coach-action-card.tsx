@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { safeDashboardHref, type CoachUiAction, type SplitProposal } from '@/lib/ai/action-types'
 import { CoachAgentActionCard } from '@/components/coach-agent-action-card'
+import { CoachProfileInterviewCard } from '@/components/coach-profile-interview-card'
 import { discardPendingSession } from '@/lib/offline/discard-session'
 
 function mapActionError(
@@ -26,6 +27,8 @@ type CoachActionCardProps = {
   action: CoachUiAction
   onActionChange: (messageId: string, next: CoachUiAction) => void
   onRevise: (proposal: SplitProposal) => void
+  /** After profile interview saves, continue the original ask (e.g. build a split). */
+  onResumePrompt?: (prompt: string) => void
   disabled?: boolean
 }
 
@@ -35,6 +38,7 @@ export function CoachActionCard({
   action,
   onActionChange,
   onRevise,
+  onResumePrompt,
   disabled = false,
 }: CoachActionCardProps) {
   const t = useTranslations('coach')
@@ -48,7 +52,9 @@ export function CoachActionCard({
   const confirm = async (
     kind: 'create_split' | 'update_split' | 'discard_session',
   ) => {
-    if (action.type === 'agent_action') return
+    if (action.type === 'agent_action' || action.type === 'profile_interview') {
+      return
+    }
     if (lock.current || busy || disabled) return
     lock.current = true
     setBusy(true)
@@ -60,7 +66,7 @@ export function CoachActionCard({
         body: JSON.stringify({
           action: kind,
           conversationId,
-          proposal: action.type === 'split_preview' ? action.proposal : action.proposal,
+          proposal: action.proposal,
         }),
       })
       const data = (await res.json()) as {
@@ -78,12 +84,14 @@ export function CoachActionCard({
           safeDashboardHref(data.href) ||
           safeDashboardHref(
             data.splitId ? `/dashboard/splits/${data.splitId}` : null,
-          )
+          ) ||
+          '/dashboard/workout'
         onActionChange(messageId, {
           ...action,
           status: 'saved',
-          splitHref: href ?? '/dashboard/workout',
+          splitHref: href,
         })
+        router.push(href)
         router.refresh()
       } else {
         if (kind === 'discard_session' && action.proposal.sessionId) {
@@ -110,6 +118,19 @@ export function CoachActionCard({
     )
   }
 
+  if (action.type === 'profile_interview') {
+    return (
+      <CoachProfileInterviewCard
+        messageId={messageId}
+        conversationId={conversationId}
+        action={action}
+        disabled={disabled}
+        onActionChange={onActionChange}
+        onResume={onResumePrompt}
+      />
+    )
+  }
+
   if (action.type === 'split_preview') {
     const saved = action.status === 'saved'
     const cancelled = action.status === 'cancelled'
@@ -127,9 +148,9 @@ export function CoachActionCard({
         {(action.proposal.warnings ?? []).length > 0 && (
           <div
             role="note"
-            className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-3 text-xs text-muted-foreground"
+            className="mt-3 rounded-xl border border-gold/30 bg-gold-tint px-3 py-3 text-xs text-muted-foreground"
           >
-            <p className="font-semibold text-amber-200/90">{tRec('warningsTitle')}</p>
+            <p className="font-semibold text-gold">{tRec('warningsTitle')}</p>
             <ul className="mt-2 list-disc space-y-1 ps-4">
               {(action.proposal.warnings ?? []).map((warning) => (
                 <li key={warning} className="break-words" dir="auto">

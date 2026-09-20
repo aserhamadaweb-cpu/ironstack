@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -23,14 +24,11 @@ import {
   X,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { useReducedMotion } from 'framer-motion'
 import { ChooseUsernameGate } from '@/components/choose-username-gate'
 import { CoachSuggestionToast } from '@/components/coach-suggestion-toast'
-import { FloatingActions } from '@/components/floating-actions'
 import { GuestBanner } from '@/components/guest-banner'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { IronStackMark } from '@/components/ironstack-mark'
-import { triggerIronStackNavTransition } from '@/components/nav-transition-overlay'
 import { useGuardedNavigation } from '@/lib/use-guarded-navigation'
 import { NotificationBell } from '@/components/notification-bell'
 import { OfflineStatusBadges } from '@/components/offline-status-badges'
@@ -38,11 +36,18 @@ import { useIsGuest } from '@/components/use-is-guest'
 import { useSuggestionBadge } from '@/components/use-suggestion-badge'
 import { getHomeSnapshot } from '@/lib/offline/cache'
 import { useOfflineStatus } from '@/lib/offline/provider'
+import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import {
   APP_TOUR_CLOSE_SIDEBAR_EVENT,
   APP_TOUR_END_EVENT,
   APP_TOUR_OPEN_SIDEBAR_EVENT,
 } from '@/lib/app-tour'
+
+const FloatingActions = dynamic(
+  () =>
+    import('@/components/floating-actions').then((m) => m.FloatingActions),
+  { ssr: false },
+)
 
 const NAV_AVATAR_STORAGE = 'ironstack-nav-avatar'
 
@@ -148,22 +153,11 @@ const sidebarLinks: NavLink[] = [
   { href: '/dashboard/settings', id: 'settings', icon: Settings },
 ]
 
-const PREFETCH_ROUTES = [
+/** Only warm the primary tab destinations — never the full sidebar catalog. */
+const TAB_PREFETCH_ROUTES = [
   '/dashboard/home',
   '/dashboard/workout',
-  '/dashboard/messages',
-  '/dashboard/challenges',
   '/dashboard/profile',
-  '/dashboard/settings',
-  '/dashboard/ai-coach',
-  '/dashboard/explore',
-  '/dashboard/splits',
-  '/dashboard/splits/new',
-  '/dashboard/splits/ai-builder',
-  '/dashboard/splits/create',
-  '/dashboard/exercises',
-  '/dashboard/home-workouts',
-  '/dashboard/history',
 ]
 
 function isTabActive(pathname: string, id: TabId, href: string) {
@@ -281,30 +275,26 @@ function NavFace({
 export function DashboardNav({
   userName = 'Athlete',
   initials = 'A',
-  profileHref,
+  profileHref: _profileHref,
   avatarUrl,
   isGuest: isGuestProp,
 }: DashboardNavProps) {
   const t = useTranslations('nav')
   const pathname = usePathname()
   const router = useRouter()
-  const reduceMotion = useReducedMotion()
   const { isGuest: isGuestClient } = useIsGuest()
   const { count: rawSuggestionCount } = useSuggestionBadge()
   const { online, hydrated } = useOfflineStatus()
   const floorMode = hydrated && !online
+  const embeddedSession = useEmbeddedSessionActive()
   const isGuest = Boolean(isGuestProp) || isGuestClient
   const { openUpgrade } = useGuestGate()
   const { onNavClick } = useGuardedNavigation()
-  const hideTabBar = shouldHideTabBar(pathname)
+  const hideTabBar = shouldHideTabBar(pathname) || embeddedSession
   const [menuOpen, setMenuOpen] = useState(false)
+  const [cachedPhoto, setCachedPhoto] = useState<string | null>(readStoredNavAvatar)
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
-
-  /** Arm once — overlay plays a single slam after the destination paints. */
-  const onPrimaryTabClick = useCallback(() => {
-    if (!reduceMotion) triggerIronStackNavTransition()
-  }, [reduceMotion])
 
   const openGuestLock = useCallback(
     () => openUpgrade('messages'),
@@ -364,17 +354,27 @@ export function DashboardNav({
     }
   }, [menuOpen, closeMenu])
 
-  // Warm the core destinations so tab/sidebar taps feel instant.
+  // Warm only primary tabs on idle — blasting 15+ RSC routes starved bad networks
+  // and made the app look like it was loading pages the user never opened.
   useEffect(() => {
-    for (const href of PREFETCH_ROUTES) {
-      router.prefetch(href)
+    if (typeof window === 'undefined') return
+    let cancelled = false
+    const run = () => {
+      if (cancelled) return
+      for (const href of TAB_PREFETCH_ROUTES) {
+        router.prefetch(href)
+      }
+    }
+    const ric = window.requestIdleCallback?.(run, { timeout: 4_000 })
+    const t = ric == null ? window.setTimeout(run, 1_200) : null
+    return () => {
+      cancelled = true
+      if (ric != null) window.cancelIdleCallback?.(ric)
+      if (t != null) window.clearTimeout(t)
     }
   }, [router])
 
-  const profileLinkHref = floorMode
-    ? '/dashboard/profile'
-    : profileHref?.trim() || '/dashboard/profile'
-  const [cachedPhoto, setCachedPhoto] = useState<string | null>(readStoredNavAvatar)
+  const profileLinkHref = '/dashboard/profile'
 
   useEffect(() => {
     if (avatarUrl !== undefined) {
@@ -399,26 +399,24 @@ export function DashboardNav({
     pathname.startsWith('/profile/') ||
     pathname.startsWith('/dashboard/profile')
 
-  const visibleTabs = tabs
+  const visibleTabs = floorMode
+    ? tabs.filter((tab) => tab.id === 'home')
+    : tabs
 
   const visibleSidebarLinks = sidebarLinks.filter((link) => {
     if (isGuest && link.id === 'coach') return false
     if (floorMode) {
-      return (
-        link.id === 'home' ||
-        link.id === 'workout' ||
-        link.id === 'exercises' ||
-        link.id === 'history' ||
-        link.id === 'settings'
-      )
+      return link.id === 'home'
     }
     return true
   })
 
-  const allSidebarLinks: NavLink[] = [
-    ...visibleSidebarLinks,
-    { href: profileLinkHref, id: 'profile', icon: User },
-  ]
+  const allSidebarLinks: NavLink[] = floorMode
+    ? visibleSidebarLinks
+    : [
+        ...visibleSidebarLinks,
+        { href: profileLinkHref, id: 'profile', icon: User },
+      ]
 
   const labelFor = (id: NavId) => t(id)
   const suggestionCount = isGuest ? 0 : rawSuggestionCount
@@ -456,6 +454,7 @@ export function DashboardNav({
 
             <Link
               href="/dashboard/home"
+              prefetch={false}
               className="flex min-h-11 min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-1 transition-opacity active:opacity-70"
             >
               <IronStackMark size="sm" className="shrink-0" />
@@ -469,35 +468,41 @@ export function DashboardNav({
             <OfflineStatusBadges />
             {!isGuest && !floorMode ? <NotificationBell /> : null}
 
-            <Link
-              href="/dashboard/settings"
-              aria-label={t('settings')}
-              className={`inline-flex size-11 items-center justify-center rounded-lg border transition-colors active:opacity-80 ${
-                isSidebarActive(pathname, 'settings', '/dashboard/settings')
-                  ? 'border-gold/40 bg-gold-tint text-gold'
-                  : 'border-border text-muted-foreground active:border-gold/40 active:text-gold'
-              }`}
-            >
-              <Settings className="size-4" aria-hidden="true" />
-            </Link>
-
-            {onProfile ? (
-              <div
-                className="inline-flex size-11 items-center justify-center"
-                aria-current="page"
-              >
-                <NavFace photo={photo} initials={initials} />
-                <span className="sr-only">{userName}</span>
-              </div>
-            ) : (
+            {!floorMode ? (
               <Link
-                href={profileLinkHref}
-                aria-label={t('profile')}
-                className="inline-flex size-11 items-center justify-center rounded-full transition-opacity active:opacity-80"
+                href="/dashboard/settings"
+                prefetch={false}
+                aria-label={t('settings')}
+                className={`inline-flex size-11 items-center justify-center rounded-lg border transition-colors active:opacity-80 ${
+                  isSidebarActive(pathname, 'settings', '/dashboard/settings')
+                    ? 'border-gold/40 bg-gold-tint text-gold'
+                    : 'border-border text-muted-foreground active:border-gold/40 active:text-gold'
+                }`}
               >
-                <NavFace photo={photo} initials={initials} />
+                <Settings className="size-4" aria-hidden="true" />
               </Link>
-            )}
+            ) : null}
+
+            {!floorMode ? (
+              onProfile ? (
+                <div
+                  className="inline-flex size-11 items-center justify-center"
+                  aria-current="page"
+                >
+                  <NavFace photo={photo} initials={initials} />
+                  <span className="sr-only">{userName}</span>
+                </div>
+              ) : (
+                <Link
+                  href={profileLinkHref}
+                  prefetch={false}
+                  aria-label={t('profile')}
+                  className="inline-flex size-11 items-center justify-center rounded-full transition-opacity active:opacity-80"
+                >
+                  <NavFace photo={photo} initials={initials} />
+                </Link>
+              )
+            ) : null}
           </div>
         </div>
       </header>
@@ -584,6 +589,7 @@ export function DashboardNav({
                   ) : (
                     <Link
                       href={link.href}
+                      prefetch={false}
                       data-tour={tourAttr}
                       className="flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm font-semibold tracking-[0.12em] text-muted-foreground transition-colors active:bg-silver/10 active:text-foreground lg:hover:bg-silver/10 lg:hover:text-foreground"
                       onClick={(e) => {
@@ -638,10 +644,9 @@ export function DashboardNav({
                   href={href}
                   data-tour={tourAttr}
                   className={className}
-                  prefetch
+                  prefetch={false}
                   onClick={(e) => {
                     onNavClick(href, e)
-                    onPrimaryTabClick()
                   }}
                 >
                   <Icon className="size-5" aria-hidden="true" />
@@ -653,8 +658,12 @@ export function DashboardNav({
         </nav>
       )}
 
-      {!floorMode ? <FloatingActions onGuestMessages={openGuestLock} /> : null}
-      {!floorMode && !isGuest ? <CoachSuggestionToast /> : null}
+      {!floorMode && !embeddedSession ? (
+        <FloatingActions onGuestMessages={openGuestLock} />
+      ) : null}
+      {!floorMode && !embeddedSession && !isGuest ? (
+        <CoachSuggestionToast />
+      ) : null}
     </>
   )
 }

@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Send,
   Share2,
+  UserRound,
   Users,
   X,
 } from 'lucide-react'
@@ -31,6 +32,10 @@ type SplitShareSheetProps = {
   splitName: string
   daysPerWeek: number
   category?: string | null
+  /** When set, show Share to profile inside this sheet. */
+  isSharedOnProfile?: boolean
+  profileSharePending?: boolean
+  onToggleProfileShare?: () => void
 }
 
 type SheetStep = 'menu' | 'messages'
@@ -42,6 +47,9 @@ export function SplitShareSheet({
   splitName,
   daysPerWeek,
   category,
+  isSharedOnProfile = false,
+  profileSharePending = false,
+  onToggleProfileShare,
 }: SplitShareSheetProps) {
   const t = useTranslations('splitShare')
   const { isGuest, openUpgrade } = useGuestGate()
@@ -247,6 +255,45 @@ export function SplitShareSheet({
             <div className="flex-1 overflow-y-auto px-4 py-4">
               {step === 'menu' ? (
                 <div className="space-y-3">
+                  {onToggleProfileShare ? (
+                    <button
+                      type="button"
+                      disabled={profileSharePending || pending}
+                      onClick={onToggleProfileShare}
+                      className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-start transition disabled:opacity-60 ${
+                        isSharedOnProfile
+                          ? 'border-blue/35 bg-blue-tint/30 hover:border-blue/50'
+                          : 'border-silver/15 bg-background/40 hover:border-gold/35 hover:bg-background/70'
+                      }`}
+                    >
+                      <span
+                        className={`flex size-10 items-center justify-center rounded-xl ${
+                          isSharedOnProfile
+                            ? 'bg-blue-tint/60 text-blue'
+                            : 'bg-background/80 text-muted-foreground'
+                        }`}
+                      >
+                        {profileSharePending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <UserRound className="size-4" aria-hidden="true" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-foreground">
+                          {isSharedOnProfile
+                            ? t('profileShared')
+                            : t('shareToProfile')}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {isSharedOnProfile
+                            ? t('profileSharedHint')
+                            : t('shareToProfileHint')}
+                        </span>
+                      </span>
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={() => setStep('messages')}

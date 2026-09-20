@@ -14,7 +14,7 @@ import {
   logBodyWeightAction,
   updateBodyStatsAction,
 } from '@/lib/data/profile-actions'
-import { CTA_PRIMARY } from '@/lib/accent'
+import { CHOICE_IDLE, CHOICE_SELECTED, CTA_PRIMARY } from '@/lib/accent'
 import { isTemporaryUsername } from '@/lib/avatar-presets'
 import { normalizeUsername } from '@/lib/username'
 import { uploadProfileAvatar } from '@/lib/upload-profile-avatar.client'
@@ -337,8 +337,8 @@ export function ChooseUsernameGate() {
                       onClick={() => setUnit(option)}
                       className={`min-h-8 rounded-md px-2.5 text-[10px] font-bold tracking-[0.12em] ${
                         unit === option
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground'
+                          ? CHOICE_SELECTED
+                          : CHOICE_IDLE
                       }`}
                     >
                       {option.toUpperCase()}
@@ -419,8 +419,8 @@ export function ChooseUsernameGate() {
                       onClick={() => setGender(option)}
                       className={`min-h-10 rounded-lg px-4 text-xs font-semibold tracking-[0.12em] ${
                         gender === option
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
+                          ? CHOICE_SELECTED
+                          : CHOICE_IDLE
                       }`}
                     >
                       {option === 'male' ? t('bodyMale') : t('bodyFemale')}
@@ -458,7 +458,7 @@ export function ChooseUsernameGate() {
                 (username.length < 3 || displayName.trim().length < 2)) ||
               (needsBodyStats && !gender)
             }
-            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full text-xs font-bold tracking-[0.14em] disabled:opacity-60 ${CTA_PRIMARY}`}
+            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 ${CTA_PRIMARY} tracking-[0.14em] disabled:opacity-60`}
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
             {tGuest('completeSubmit')}

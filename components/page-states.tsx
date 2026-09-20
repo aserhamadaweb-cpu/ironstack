@@ -5,7 +5,7 @@ import { CTA_PRIMARY, CTA_SECONDARY } from '@/lib/accent'
 
 export function PageLoading({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+    <div className="flex min-h-svh w-full flex-col items-center justify-center gap-3 px-6 text-center">
       <Loader2 className="size-7 animate-spin text-gold" aria-hidden="true" />
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>

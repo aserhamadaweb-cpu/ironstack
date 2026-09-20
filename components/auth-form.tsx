@@ -137,7 +137,7 @@ export function AuthForm({ next = '/dashboard/home' }: { next?: string }) {
           type="submit"
           disabled={pending}
           size="lg"
-          className="cta-pulse mt-4 min-h-14 w-full bg-gold px-10 py-4 text-sm font-bold tracking-[0.25em] text-black shadow-[0_0_28px_-8px_rgba(232,181,74,0.55)] hover:bg-gold/90"
+          className="cta-pulse btn-pill btn-pill-primary mt-4 min-h-14 w-full px-10 py-4 text-sm font-bold tracking-[0.25em]"
         >
           {pending
             ? t('pleaseWait')

@@ -46,25 +46,28 @@ const withPWA = withPWAInit({
         handler: 'CacheFirst',
         options: {
           cacheName: 'exercise-gifs',
-          expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 14 },
+          // Multi-pin programs + warmed GIFs; keep ahead of prefetch cap (500).
+          expiration: { maxEntries: 1200, maxAgeSeconds: 60 * 60 * 24 * 30 },
           cacheableResponse: { statuses: [0, 200] },
         },
       },
       // Document navigations are handled in worker/index.js (network-only, no stale HTML cache).
       {
         urlPattern: /\/_next\/static\/.*/i,
-        handler: 'CacheFirst',
+        handler: 'NetworkFirst',
         options: {
           cacheName: 'next-static',
-          expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 30 },
+          networkTimeoutSeconds: 12,
+          expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 7 },
         },
       },
       {
         urlPattern: /\.(?:js|css)$/i,
-        handler: 'StaleWhileRevalidate',
+        handler: 'NetworkFirst',
         options: {
           cacheName: 'static-scripts',
-          expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 7 },
+          networkTimeoutSeconds: 12,
+          expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 2 },
         },
       },
       {

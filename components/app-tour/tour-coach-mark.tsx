@@ -321,7 +321,10 @@ function TourCoachMarkShell({
 function TourLoadingContent() {
   const t = useTranslations('tour')
   return (
-    <div className="flex min-h-[4rem] items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+    <div
+      className="flex min-h-[4rem] items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
+      data-tour-ui="loading"
+    >
       <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
       {t('loadingStep')}
     </div>
@@ -331,7 +334,7 @@ function TourLoadingContent() {
 function TourTargetMissedContent() {
   const t = useTranslations('tour')
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-tour-ui="missed">
       <p className="text-xs leading-relaxed text-muted-foreground">
         {t('targetMissed')}
       </p>
@@ -392,10 +395,6 @@ export function TourCoachMark({
     let pollTimer = 0
     let attempt = 0
 
-    setLocateState('pending')
-    setSpot(null)
-    setTooltipLayout(null)
-
     const markFound = (rect: SpotlightRect) => {
       setLocateState('found')
       setSpot(rect)
@@ -435,6 +434,16 @@ export function TourCoachMark({
       setTooltipLayout(null)
     }
 
+    // Same-page Next: if the target is already painted, skip the loading flash.
+    const immediate = findTourTarget(step.target)
+    if (immediate) {
+      bringIntoViewThenMeasure(immediate)
+    } else {
+      setLocateState('pending')
+      setSpot(null)
+      setTooltipLayout(null)
+    }
+
     const tryLocate = () => {
       if (cancelled) return
       const el = findTourTarget(step.target)
@@ -450,7 +459,9 @@ export function TourCoachMark({
       pollTimer = window.setTimeout(tryLocate, TOUR_TARGET_POLL_INTERVAL_MS)
     }
 
-    pollTimer = window.setTimeout(tryLocate, 80)
+    if (!immediate) {
+      tryLocate()
+    }
 
     const scheduleMeasure = () => {
       cancelAnimationFrame(raf)
@@ -483,7 +494,9 @@ export function TourCoachMark({
   ) : locateState === 'pending' ? (
     <TourLoadingContent />
   ) : (
-    <TourCoachMarkContent step={step} />
+    <div data-tour-ui="found">
+      <TourCoachMarkContent step={step} />
+    </div>
   )
 
   const shellProps = {
@@ -506,7 +519,9 @@ export function TourCoachMark({
           aria-hidden="true"
         />
         <TourCoachMarkShell {...shellProps} isDone>
-          <TourCoachMarkContent step={step} />
+          <div data-tour-ui="done">
+            <TourCoachMarkContent step={step} />
+          </div>
         </TourCoachMarkShell>
       </>
     )
@@ -546,7 +561,9 @@ export function TourCoachMark({
           spot={spot}
           showArrow
         >
-          <TourCoachMarkContent step={step} />
+          <div data-tour-ui="found">
+            <TourCoachMarkContent step={step} />
+          </div>
         </TourCoachMarkShell>
       ) : null}
     </>

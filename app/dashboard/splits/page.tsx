@@ -7,7 +7,6 @@ import { DashboardNav } from '@/components/dashboard-nav'
 import { MySplitsCustomSection } from '@/components/my-splits-custom-section'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { OfflineCreateSplitLink } from '@/components/offline-create-split-link'
-import { SplitRecommendationsBanner } from '@/components/split-recommendations-banner'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
 import { initialsFrom } from '@/lib/dashboard-utils'
@@ -87,8 +86,6 @@ export default async function MySplitsPage() {
             {t('createSplit')}
           </OfflineCreateSplitLink>
         </header>
-
-        <SplitRecommendationsBanner />
 
         {splitsResult.error ? (
           <p role="alert" className="text-sm text-destructive">

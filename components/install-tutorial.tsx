@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ImageIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
   detectInstallTutorialPlatform,
@@ -43,18 +43,6 @@ function StepImage({
   )
 }
 
-function StepPlaceholder() {
-  return (
-    <div
-      className="mx-auto flex aspect-[9/19.5] w-full max-w-[min(100%,20rem)] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-silver/25 bg-background/40 px-4 text-center"
-      aria-hidden="true"
-    >
-      <ImageIcon className="size-8 text-muted-foreground/50" />
-      <p className="text-xs text-muted-foreground">Screenshot coming soon</p>
-    </div>
-  )
-}
-
 export function InstallTutorial({ platform, className = '' }: InstallTutorialProps) {
   const t = useTranslations('installTutorial')
   const resolvedPlatform = platform ?? detectInstallTutorialPlatform()
@@ -86,13 +74,16 @@ export function InstallTutorial({ platform, className = '' }: InstallTutorialPro
   const stepKey = `${resolvedPlatform}.${current.id}` as const
   const title = t(`${stepKey}.title`)
   const caption = t(`${stepKey}.caption`)
-  const showImage =
-    current.imageSrc != null && !brokenImages[current.id]
+  const hasImageSlot = current.imageSrc != null
+  const showImage = hasImageSlot && !brokenImages[current.id]
 
   return (
     <div
-      className={`flex w-full max-w-[min(100%,23rem)] flex-col gap-3 ${className}`}
+      className={`flex w-full max-w-[min(100%,23rem)] flex-col ${
+        hasImageSlot ? 'gap-3' : 'gap-4'
+      } ${className}`}
       data-install-tutorial={resolvedPlatform}
+      data-install-layout={hasImageSlot ? 'image' : 'text'}
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold tracking-[0.28em] text-gold uppercase">
@@ -103,23 +94,39 @@ export function InstallTutorial({ platform, className = '' }: InstallTutorialPro
         </p>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <p className="text-xs leading-relaxed text-muted-foreground">{caption}</p>
-      </div>
-
-      {showImage ? (
-        <StepImage
-          src={current.imageSrc!}
-          alt={title}
-          onMissing={() => markBroken(current.id)}
-        />
+      {hasImageSlot ? (
+        <>
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {caption}
+            </p>
+          </div>
+          {showImage ? (
+            <StepImage
+              src={current.imageSrc!}
+              alt={title}
+              onMissing={() => markBroken(current.id)}
+            />
+          ) : null}
+        </>
       ) : (
-        <StepPlaceholder />
+        <div className="rounded-xl border border-silver/15 bg-background/50 px-4 py-4 sm:px-5 sm:py-5">
+          <h3 className="font-heading text-base font-semibold leading-snug text-foreground sm:text-lg">
+            {title}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {caption}
+          </p>
+        </div>
       )}
 
       {stepDefs.length > 1 ? (
-        <div className="flex items-center justify-between gap-2 pt-1">
+        <div
+          className={`flex items-center justify-between gap-2 ${
+            hasImageSlot ? 'pt-1' : 'pt-0'
+          }`}
+        >
           <button
             type="button"
             disabled={stepIndex <= 0}
@@ -130,7 +137,11 @@ export function InstallTutorial({ platform, className = '' }: InstallTutorialPro
             <ChevronLeft className="size-4 rtl-flip" aria-hidden="true" />
           </button>
 
-          <div className="flex flex-1 justify-center gap-1.5" role="tablist" aria-label={t('stepsLabel')}>
+          <div
+            className="flex flex-1 justify-center gap-1.5"
+            role="tablist"
+            aria-label={t('stepsLabel')}
+          >
             {stepDefs.map((def, index) => (
               <button
                 key={def.id}
@@ -140,7 +151,9 @@ export function InstallTutorial({ platform, className = '' }: InstallTutorialPro
                 aria-label={t('goToStep', { step: index + 1 })}
                 onClick={() => setStepIndex(index)}
                 className={`size-2 rounded-full transition ${
-                  index === stepIndex ? 'bg-gold' : 'bg-silver/30 hover:bg-silver/50'
+                  index === stepIndex
+                    ? 'bg-gold'
+                    : 'bg-silver/30 hover:bg-silver/50'
                 }`}
               />
             ))}

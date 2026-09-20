@@ -67,6 +67,14 @@ type SuggestionContext = {
   lastBodyWeightAt: string | null
   bodyWeightCount: number
   hasHeight: boolean
+  hasWeight: boolean
+  hasGender: boolean
+  hasAge: boolean
+  hasPrimaryGoal: boolean
+  hasFitnessLevel: boolean
+  hasDaysPerWeek: boolean
+  hasWorkoutDuration: boolean
+  hasTrainingLocation: boolean
   hasBio: boolean
   hasAvatar: boolean
   noteCount: number
@@ -122,7 +130,9 @@ async function loadContext(
       .limit(1),
     supabase
       .from('profiles')
-      .select('height_cm, bio, avatar_url')
+      .select(
+        'height_cm, gender, birth_date, current_weight_kg, bio, avatar_url, display_name, username, preferred_unit, language, theme_preference',
+      )
       .eq('id', userId)
       .maybeSingle(),
     supabase
@@ -171,6 +181,38 @@ async function loadContext(
 
   const splitRows = splits.data ?? []
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  let hasPrimaryGoal = false
+  let hasFitnessLevel = false
+  let hasDaysPerWeek = false
+  let hasWorkoutDuration = false
+  let hasTrainingLocation = false
+  let hasAge = Boolean(profile.data?.birth_date)
+  let hasHeight = Boolean(profile.data?.height_cm)
+  let hasGender = Boolean(profile.data?.gender)
+  let weightKg =
+    profile.data?.current_weight_kg != null
+      ? Number(profile.data.current_weight_kg)
+      : null
+
+  if (user && user.id === userId) {
+    const { onboardingDataFromUser } = await import('@/lib/data/onboarding-read')
+    const onboarding = onboardingDataFromUser(user, profile.data ?? undefined)
+    hasPrimaryGoal = Boolean(onboarding.primaryGoal)
+    hasFitnessLevel = Boolean(onboarding.fitnessLevel)
+    hasDaysPerWeek = onboarding.daysPerWeek != null
+    hasWorkoutDuration = Boolean(onboarding.workoutDuration)
+    hasTrainingLocation = Boolean(onboarding.trainingLocation)
+    hasAge = hasAge || Boolean(onboarding.ageRange)
+    hasHeight = hasHeight || onboarding.heightCm != null
+    hasGender = hasGender || Boolean(onboarding.gender)
+    if (weightKg == null && onboarding.weightKg != null) {
+      weightKg = onboarding.weightKg
+    }
+  }
+
   return {
     splitCount: splitRows.length,
     sharedSplitCount: splitRows.filter((row) => row.is_shared).length,
@@ -179,7 +221,15 @@ async function loadContext(
     staleActiveSessionAt: activeSession.data?.[0]?.started_at ?? null,
     lastBodyWeightAt: bodyWeights.data?.[0]?.logged_at ?? null,
     bodyWeightCount: bodyWeightCount.count ?? 0,
-    hasHeight: Boolean(profile.data?.height_cm),
+    hasHeight,
+    hasWeight: weightKg != null && Number.isFinite(weightKg),
+    hasGender,
+    hasAge,
+    hasPrimaryGoal,
+    hasFitnessLevel,
+    hasDaysPerWeek,
+    hasWorkoutDuration,
+    hasTrainingLocation,
     hasBio: Boolean(profile.data?.bio?.trim()),
     hasAvatar: Boolean(profile.data?.avatar_url),
     noteCount: notes.count ?? 0,
@@ -371,6 +421,34 @@ function buildCandidates(ctx: SuggestionContext): Candidate[] {
       ctaHref: '/dashboard/profile',
       priority: 20,
       ttlDays: 30,
+    })
+  }
+
+  const fitnessMissing = [
+    !ctx.hasWeight ? 'weight' : null,
+    !ctx.hasHeight ? 'height' : null,
+    !ctx.hasGender ? 'sex' : null,
+    !ctx.hasAge ? 'age' : null,
+    !ctx.hasPrimaryGoal ? 'training goal' : null,
+    !ctx.hasFitnessLevel ? 'fitness level' : null,
+    !ctx.hasDaysPerWeek ? 'days per week' : null,
+    !ctx.hasWorkoutDuration ? 'session length' : null,
+    !ctx.hasTrainingLocation ? 'training location' : null,
+  ].filter(Boolean) as string[]
+
+  if (fitnessMissing.length > 0) {
+    out.push({
+      kind: 'fitness_profile_incomplete',
+      dedupeKey: `fitness_incomplete:${fitnessMissing.join('+')}`,
+      title: 'Finish your fitness profile for better coaching',
+      body: `Still missing ${fitnessMissing.slice(0, 4).join(', ')}${
+        fitnessMissing.length > 4 ? ', and more' : ''
+      }. Tell me the details in chat and I'll save them, or open Fitness profile.`,
+      prompt:
+        'My fitness profile is incomplete. Ask me for the missing details and save them.',
+      ctaHref: '/dashboard/fitness-profile',
+      priority: 55,
+      ttlDays: 21,
     })
   }
 

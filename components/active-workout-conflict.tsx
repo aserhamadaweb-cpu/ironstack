@@ -6,20 +6,26 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { clearUnfinishedWorkoutReminder, type ActiveWorkoutView } from '@/lib/active-workout'
 import { discardPendingSession } from '@/lib/offline/discard-session'
+import { useOfflineStatus } from '@/lib/offline/provider'
 
 type ActiveWorkoutConflictProps = {
   active: ActiveWorkoutView
   onResolved: () => void
   onStay?: () => void
+  /** Prefer this while offline — never Link to a server session route. */
+  onResumeOffline?: (splitSlug: string) => void
 }
 
 export function ActiveWorkoutConflict({
   active,
   onResolved,
   onStay,
+  onResumeOffline,
 }: ActiveWorkoutConflictProps) {
   const t = useTranslations('activeWorkout')
   const router = useRouter()
+  const { online, hydrated } = useOfflineStatus()
+  const offline = !hydrated || !online
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,11 +45,26 @@ export function ActiveWorkoutConflict({
       setConfirmDiscard(false)
       setBusy(false)
       onResolved()
-      router.refresh()
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        router.refresh()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('discardFailed'))
       setBusy(false)
     }
+  }
+
+  const resume = () => {
+    if (onResumeOffline) {
+      onResumeOffline(active.splitId)
+      return
+    }
+    if (offline) {
+      // Avoid silent no-op when offline without an embedded launcher.
+      router.push('/dashboard/home')
+      return
+    }
+    router.push(active.href)
   }
 
   useEffect(() => {
@@ -107,12 +128,22 @@ export function ActiveWorkoutConflict({
           </div>
         ) : (
           <div className="mt-5 flex flex-col gap-2">
-            <Link
-              href={active.href}
-              className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-sm font-bold tracking-[0.12em] text-primary-foreground"
-            >
-              {t('resume')}
-            </Link>
+            {offline || onResumeOffline ? (
+              <button
+                type="button"
+                onClick={resume}
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-sm font-bold tracking-[0.12em] text-primary-foreground"
+              >
+                {t('resume')}
+              </button>
+            ) : (
+              <Link
+                href={active.href}
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-sm font-bold tracking-[0.12em] text-primary-foreground"
+              >
+                {t('resume')}
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => setConfirmDiscard(true)}

@@ -1,33 +1,36 @@
-import { getCachedSplits, getCachedUserId } from '@/lib/offline/cache'
+import {
+  listOfflineSavedSplits,
+  listOfflineUserSplitsForStart,
+  type OfflineSavedSplit,
+} from '@/lib/offline/offline-splits'
+import { OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
 
-export type CachedUserSplit = {
-  id: string
-  slug: string
-  name: string
-  days: number
-}
+export type CachedUserSplit = OfflineSavedSplit
 
-/** Splits the signed-in user owns — excludes platform/system programs. */
-export function filterCachedUserSplits(
-  rows: Awaited<ReturnType<typeof getCachedSplits>>,
-  userId: string | null | undefined,
-): CachedUserSplit[] {
-  if (!userId) return []
-  return rows
-    .filter((row) => row.row.user_id === userId && !row.row.is_system)
-    .map((row) => ({
-      id: row.id,
-      slug: row.detail.slug,
-      name: row.detail.name,
-      days: row.detail.daysPerWeek,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-}
-
+/**
+ * Splits explicitly saved for offline (pin set).
+ * Not "whatever happened to be auto-cached."
+ */
 export async function listCachedUserSplits(): Promise<CachedUserSplit[]> {
-  const [rows, uid] = await Promise.all([
-    getCachedSplits().catch(() => []),
-    getCachedUserId().catch(() => null),
-  ])
-  return filterCachedUserSplits(rows, uid)
+  return listOfflineSavedSplits()
+}
+
+/**
+ * Offline Start Session: splits saved for offline (pins only).
+ */
+export async function listStartableOfflineSplits(): Promise<CachedUserSplit[]> {
+  return listOfflineUserSplitsForStart()
+}
+
+/** Subscribe to offline cache/session changes for split pickers. */
+export function subscribeOfflineCacheChanged(onChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined
+  window.addEventListener(OFFLINE_CHANGED_EVENT, onChange)
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener(OFFLINE_CHANGED_EVENT, onChange)
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
 }

@@ -146,32 +146,38 @@ async function insertUserSplitRow(
     base.source_split_id = input.sourceSplitId
   }
 
-  // Order matters: some live DBs only allow non-null category on system rows
-  // (user_id is null). Prefer null for user-owned splits first.
-  const attempts: Array<Record<string, unknown>> = [
-    { ...base, category: null },
-    { ...base },
-  ]
+  // Prefer a known-good category first — many live DBs enforce NOT NULL on
+  // splits.category (23502). Null / omitted follow for schemas that ban
+  // non-null category on user-owned rows.
+  const attempts: Array<Record<string, unknown>> = []
   if (category) {
     attempts.push({ ...base, category })
   }
+  attempts.push({ ...base })
+  attempts.push({ ...base, category: null })
 
   // Fallback if source_split_id / is_shared columns are not migrated yet.
   if (input.sourceSplitId) {
     const withoutSource = { ...base }
     delete withoutSource.source_split_id
-    attempts.push({ ...withoutSource, category: null })
+    if (category) {
+      attempts.push({ ...withoutSource, category })
+    }
     attempts.push(withoutSource)
+    attempts.push({ ...withoutSource, category: null })
   }
-  const withoutSharedFlags = {
+  const withoutSharedFlags: Record<string, unknown> = {
     user_id: input.userId,
     name: input.name,
     description: input.description,
     days_per_week: input.daysPerWeek,
     is_system: false,
-    category: null as string | null,
+  }
+  if (category) {
+    attempts.push({ ...withoutSharedFlags, category })
   }
   attempts.push(withoutSharedFlags)
+  attempts.push({ ...withoutSharedFlags, category: null })
 
   let lastError: { message?: string; code?: string } | null = null
 

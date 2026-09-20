@@ -52,13 +52,7 @@ export function OfflineConnectionGate({
         tone="gold"
       />
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href="/dashboard/workout" className={CTA_SECONDARY}>
-          {t('openWorkout')}
-        </Link>
-        <Link
-          href="/dashboard/home"
-          className="inline-flex min-h-11 items-center px-4 text-xs font-semibold tracking-[0.12em] text-muted-foreground transition hover:text-gold"
-        >
+        <Link href="/dashboard/home" className={CTA_SECONDARY}>
           {t('floorBackHome')}
         </Link>
       </div>

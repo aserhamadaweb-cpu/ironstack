@@ -100,6 +100,15 @@ export async function finalizeEmailSignupAction(input: {
     data: {
       username,
       display_name: displayName,
+      onboarding_completed: false,
+      onboarding_step: 1,
+      onboarding_v1: {
+        version: 3,
+        step: 1,
+        displayName,
+        username,
+        appearance: 'system',
+      },
     },
   })
 

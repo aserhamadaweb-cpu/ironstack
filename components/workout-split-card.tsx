@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import {
   CalendarDays,
   Clock3,
+  Download,
   Dumbbell,
   Loader2,
   Play,
@@ -33,13 +34,18 @@ type WorkoutSplitCardProps = {
   isShared?: boolean
   /** Train tab — start + view only. */
   compact?: boolean
+  savedForOffline?: boolean
+  /** Pin exists but integrity check failed — offer retry instead of "saved". */
+  offlineIncomplete?: boolean
+  savingOffline?: boolean
+  /** 0–100 while downloading; null when idle. */
+  offlineProgress?: number | null
+  onToggleOffline?: (id: string, next: boolean) => void
   onStart: (slug: string) => void
   onDelete?: (id: string, name: string) => void
-  onShareToggle?: (id: string) => void
   onOpenShare?: (split: WorkoutSplitCardData) => void
   onSetPrimary?: (id: string) => void
   deleting?: boolean
-  sharing?: boolean
   settingPrimary?: boolean
   pending?: boolean
 }
@@ -53,13 +59,16 @@ export function WorkoutSplitCard({
   primarySplitId = null,
   isShared = false,
   compact = false,
+  savedForOffline = false,
+  offlineIncomplete = false,
+  savingOffline = false,
+  offlineProgress = null,
+  onToggleOffline,
   onStart,
   onDelete,
-  onShareToggle,
   onOpenShare,
   onSetPrimary,
   deleting = false,
-  sharing = false,
   settingPrimary = false,
   pending = false,
 }: WorkoutSplitCardProps) {
@@ -86,6 +95,17 @@ export function WorkoutSplitCard({
           {isPrimary ? (
             <span className="inline-flex max-w-full items-center rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-gold">
               {t('activeProgramBadge')}
+            </span>
+          ) : null}
+          {offlineIncomplete ? (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-destructive">
+              <Download className="size-3 shrink-0" aria-hidden="true" />
+              {t('offlineIncompleteBadge')}
+            </span>
+          ) : savedForOffline ? (
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-gold">
+              <Download className="size-3 shrink-0" aria-hidden="true" />
+              {t('offlineSavedBadge')}
             </span>
           ) : null}
           {isShared ? (
@@ -150,10 +170,48 @@ export function WorkoutSplitCard({
         </button>
         <Link
           href={`/dashboard/splits/${split.slug}`}
+          prefetch={false}
           className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-silver/15 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold"
         >
           {t('viewSplit')}
         </Link>
+        {onToggleOffline ? (
+          <button
+            type="button"
+            data-tour="workout-offline-toggle"
+            onClick={() =>
+              onToggleOffline(
+                split.id,
+                offlineIncomplete ? true : !savedForOffline,
+              )
+            }
+            disabled={savingOffline || pending}
+            aria-pressed={savedForOffline && !offlineIncomplete}
+            aria-busy={savingOffline}
+            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border text-xs font-semibold tracking-[0.12em] transition disabled:opacity-60 ${
+              offlineIncomplete
+                ? 'border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/55'
+                : savedForOffline
+                  ? 'border-gold/40 bg-gold/10 text-gold hover:border-gold/55'
+                  : 'border-silver/15 text-muted-foreground hover:border-gold/35 hover:text-gold'
+            }`}
+          >
+            {savingOffline ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="size-3.5" aria-hidden="true" />
+            )}
+            {savingOffline
+              ? offlineProgress != null
+                ? t('offlineDownloading', { percent: offlineProgress })
+                : t('offlineDownloadingSimple')
+              : offlineIncomplete
+                ? t('offlineRetryToggle')
+                : savedForOffline
+                  ? t('offlineSavedToggle')
+                  : t('saveForOffline')}
+          </button>
+        ) : null}
         {!compact && !isPrimary && onSetPrimary ? (
           <button
             type="button"
@@ -178,25 +236,6 @@ export function WorkoutSplitCard({
           >
             <Share2 className="size-3.5" aria-hidden="true" />
             {tShare('shareSplit')}
-          </button>
-        ) : null}
-        {!compact && onShareToggle ? (
-          <button
-            type="button"
-            onClick={() => onShareToggle(split.id)}
-            disabled={sharing || pending}
-            className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border text-xs font-semibold tracking-[0.12em] transition disabled:opacity-60 ${
-              isShared
-                ? 'border-blue/35 bg-blue-tint/30 text-blue hover:border-blue/50'
-                : 'border-silver/15 text-muted-foreground hover:border-blue/35 hover:text-blue'
-            }`}
-          >
-            {sharing ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Share2 className="size-3.5" aria-hidden="true" />
-            )}
-            {isShared ? t('sharedUnshare') : t('shareToProfile')}
           </button>
         ) : null}
       </div>

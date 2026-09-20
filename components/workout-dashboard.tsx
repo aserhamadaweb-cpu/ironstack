@@ -37,7 +37,16 @@ import {
   getCachedUserId,
   getHomeSnapshot,
 } from '@/lib/offline/cache'
+import {
+  getOfflineSplitIds,
+  inspectOfflineSplit,
+  removeSplitFromOffline,
+  saveSplitForOffline,
+} from '@/lib/offline/offline-splits'
+import { offlineSaveErrorMessage } from '@/lib/offline/save-error-message'
+import { subscribeOfflineCacheChanged } from '@/lib/offline/cached-user-splits'
 import { useOfflineStatus } from '@/lib/offline/provider'
+import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import {
   listLocalCompletedSessions,
   OFFLINE_CHANGED_EVENT,
@@ -131,6 +140,7 @@ export function WorkoutDashboard({
   const router = useRouter()
   const { requireAccount } = useGuestGate()
   const { online, hydrated, refresh, lastError, syncing } = useOfflineStatus()
+  const embeddedSession = useEmbeddedSessionActive()
   const [featuredSplit, setFeaturedSplit] = useState(initialFeaturedSplit)
   const [splitCount, setSplitCount] = useState(initialTotalCustomSplits)
   const [snapshot, setSnapshot] = useState<Awaited<
@@ -144,12 +154,52 @@ export function WorkoutDashboard({
   const [retryNonce, setRetryNonce] = useState(0)
   const { active: activeWorkout, refresh: refreshActiveWorkout } = useActiveWorkout()
   const [startBlocked, setStartBlocked] = useState(false)
+  const [offlineSaved, setOfflineSaved] = useState(false)
+  const [offlineIncomplete, setOfflineIncomplete] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  const [offlineProgress, setOfflineProgress] = useState<number | null>(null)
+  const [offlineError, setOfflineError] = useState<string | null>(null)
+  const tOffline = useTranslations('offline')
 
   useEffect(() => {
     void getHomeSnapshot()
       .then(setSnapshot)
       .catch(() => setSnapshot(null))
   }, [])
+
+  useEffect(() => {
+    const featuredId = featuredSplit?.id
+    if (!featuredId) {
+      setOfflineSaved(false)
+      setOfflineIncomplete(false)
+      return
+    }
+    let cancelled = false
+    const loadPins = () => {
+      void Promise.all([
+        getOfflineSplitIds(),
+        inspectOfflineSplit(featuredId),
+      ])
+        .then(([ids, status]) => {
+          if (cancelled) return
+          const pinned = ids.includes(featuredId)
+          setOfflineSaved(pinned && status.ready)
+          setOfflineIncomplete(pinned && !status.ready)
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOfflineSaved(false)
+            setOfflineIncomplete(false)
+          }
+        })
+    }
+    loadPins()
+    const unsubscribe = subscribeOfflineCacheChanged(loadPins)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [featuredSplit?.id])
 
   useEffect(() => {
     if (!hydrated) return
@@ -328,9 +378,12 @@ export function WorkoutDashboard({
           }
         }
 
-        const slugs = merged.map((s) => s.slug)
-        for (const slug of slugs) {
-          router.prefetch(`/dashboard/splits/${slug}/session`)
+        // Prefetch only the featured/next session — not every custom split RSC tree.
+        const featuredSlug =
+          merged.find((s) => s.id === primarySplitId || s.slug === primarySplitId)
+            ?.slug ?? merged[0]?.slug
+        if (featuredSlug) {
+          router.prefetch(`/dashboard/splits/${featuredSlug}/session`)
         }
       } catch {
         /* IndexedDB unavailable */
@@ -385,11 +438,56 @@ export function WorkoutDashboard({
     })
   }
 
+  const handleToggleOffline = (splitId: string, next: boolean) => {
+    if (offlineBusy) return
+    requireAccount('saveSplit', () => {
+      if (!online) {
+        setOfflineError(tOffline('splitRequiresConnection'))
+        return
+      }
+      setOfflineError(null)
+      setOfflineBusy(true)
+      setOfflineProgress(next ? 0 : null)
+      void (async () => {
+        try {
+          if (next) {
+            const result = await saveSplitForOffline(splitId, {
+              onProgress: (p) => setOfflineProgress(p.percent),
+            })
+            if (!result.ok) {
+              setOfflineError(offlineSaveErrorMessage(tOffline, result))
+              setOfflineSaved(false)
+              return
+            }
+            setOfflineSaved(true)
+            setOfflineIncomplete(false)
+          } else {
+            const result = await removeSplitFromOffline(splitId)
+            setOfflineSaved(false)
+            setOfflineIncomplete(false)
+            if (result.retainedForSession) {
+              setOfflineError(tOffline('offlineUnsaveKeptForSession'))
+            } else if (result.retainedForMutation) {
+              setOfflineError(tOffline('offlineUnsaveKeptForMutation'))
+            }
+          }
+        } catch (err) {
+          setOfflineError(
+            err instanceof Error ? err.message : tOffline('offlineSaveFailed'),
+          )
+        } finally {
+          setOfflineBusy(false)
+          setOfflineProgress(null)
+        }
+      })()
+    })
+  }
+
   const goCreateSplit = () => {
     requireAccount('createSplit', () => router.push(createSplitChoiceHref()))
   }
 
-  if (hydrated && !online) {
+  if (hydrated && (!online || embeddedSession)) {
     return (
       <OfflineFloorWorkout
         displayName={resolvedName}
@@ -626,7 +724,7 @@ export function WorkoutDashboard({
                 <Link
                   href="/dashboard/splits"
                   data-tour="workout-my-splits-link"
-                  className={`${CTA_PRIMARY} inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2.5 px-6 text-sm font-bold tracking-[0.12em] sm:w-auto sm:min-w-[12rem]`}
+                  className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2.5 rounded-full border border-silver/25 px-6 text-sm font-semibold tracking-[0.12em] text-muted-foreground transition hover:border-gold/35 hover:text-foreground sm:w-auto sm:min-w-[12rem]"
                 >
                   {t('manageYourSplits')}
                   <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
@@ -644,11 +742,21 @@ export function WorkoutDashboard({
                 />
               ) : (
                 <div className="max-w-xl" data-tour="workout-featured-split">
+                  {offlineError ? (
+                    <p role="alert" className="mb-3 text-sm text-destructive">
+                      {offlineError}
+                    </p>
+                  ) : null}
                   <WorkoutSplitCard
                     split={featuredSplit}
                     primarySplitId={primarySplitId}
                     isShared={Boolean(featuredSplit.isShared)}
                     compact
+                    savedForOffline={offlineSaved}
+                    offlineIncomplete={offlineIncomplete}
+                    savingOffline={offlineBusy}
+                    offlineProgress={offlineProgress}
+                    onToggleOffline={handleToggleOffline}
                     onStart={startSplit}
                   />
                 </div>
@@ -677,6 +785,23 @@ export function WorkoutDashboard({
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">
                     {t('noSessionsRecapBody')}
                   </p>
+                  {featuredSplit ? (
+                    <button
+                      type="button"
+                      onClick={() => startSplit(featuredSplit.slug)}
+                      className={`cta-pulse mt-5 px-6 ${CTA_PRIMARY}`}
+                    >
+                      {t('startSession')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={goCreateSplit}
+                      className={`cta-pulse mt-5 px-6 ${CTA_PRIMARY}`}
+                    >
+                      {t('createSplit')}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <article className="glass-card rounded-2xl border border-border bg-card p-5 sm:p-7">

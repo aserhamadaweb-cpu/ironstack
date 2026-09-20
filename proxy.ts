@@ -7,6 +7,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * Skip static assets and auth cookie APIs — middleware getClaims on
+     * /api/auth/oauth-session raced setSession and caused production 400s.
+     */
+    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|api/auth/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

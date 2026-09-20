@@ -16,6 +16,7 @@ import {
 import { OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
 import { rememberDeletedSplit, getDeletedSplitIds } from '@/lib/offline/deleted-splits'
 import { upsertRows } from '@/lib/offline/rest-upsert'
+import type { SplitDetail } from '@/lib/split-data'
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -25,11 +26,88 @@ function notify() {
   window.dispatchEvent(new Event(OFFLINE_CHANGED_EVENT))
 }
 
+/**
+ * Keep a full SplitDetail in IndexedDB so going offline mid-session can still
+ * resolve the program (even if it was only loaded from the network).
+ * Does not add a pin — offline *picker* still uses meta.offlineSplitIds.
+ */
+export async function ensureSplitCachedForSession(
+  detail: SplitDetail,
+): Promise<void> {
+  if (!detail?.slug) return
+  const db = await getOfflineDb()
+  const existing = await db.get('splits', detail.slug)
+  const now = new Date().toISOString()
+  if (existing) {
+    await db.put('splits', {
+      ...existing,
+      detail,
+      updatedAt: now,
+    })
+    return
+  }
+
+  const synthetic = {
+    id: detail.slug,
+    user_id: detail.userId ?? null,
+    name: detail.name,
+    description: detail.description ?? null,
+    days_per_week: detail.daysPerWeek,
+    is_system: Boolean(detail.isSystem),
+    is_shared: Boolean(detail.isShared),
+    share_token: null,
+    source_split_id: null,
+    category: detail.tag ?? null,
+    created_at: now,
+    updated_at: now,
+    split_days: detail.schedule.map((day, dayOrder) => ({
+      id: day.id,
+      split_id: detail.slug,
+      name: day.focus,
+      day_order: dayOrder,
+      subtitle: day.note || null,
+      created_at: now,
+      split_day_exercises: day.exercises.map((exercise, exerciseOrder) => ({
+        id: exercise.id,
+        split_day_id: day.id,
+        lift_type_id: exercise.liftTypeId ?? '',
+        target_sets: exercise.sets,
+        target_reps_min: null,
+        target_reps_max: null,
+        exercise_order: exerciseOrder,
+        created_at: now,
+        lift_types: {
+          id: exercise.liftTypeId ?? exercise.id,
+          slug: exercise.liftTypeId ?? exercise.id,
+          name: exercise.name,
+          image_url: exercise.image ?? null,
+          muscle_group: exercise.muscle,
+          // LiftType.category is non-null string in DB types.
+          category: exercise.category || 'strength',
+        },
+      })),
+    })),
+  } as SplitDetailRow
+
+  await db.put('splits', {
+    id: detail.slug,
+    detail,
+    row: synthetic,
+    updatedAt: now,
+  })
+}
+
 export async function removeLocalSplit(splitId: string) {
   const db = await getOfflineDb()
   await db.delete('splits', splitId)
   await db.delete('splitMutations', splitId)
   await rememberDeletedSplit(splitId)
+  try {
+    const { clearOfflinePin } = await import('@/lib/offline/offline-splits')
+    await clearOfflinePin(splitId)
+  } catch {
+    /* pin clear is best-effort */
+  }
   notify()
 }
 
@@ -274,11 +352,13 @@ export async function enqueueMissingSplitMutations(): Promise<number> {
 
     let missingOnServer = true
     if (supabase) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('splits')
         .select('id')
         .eq('id', split.id)
         .maybeSingle()
+      // Query failure must not mean "missing" — that would enqueue a false create.
+      if (error) continue
       missingOnServer = !data?.id
     }
     if (!missingOnServer) continue

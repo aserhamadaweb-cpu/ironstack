@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
 import { identityFromCookieList } from '@/lib/supabase/stored-user-id'
+import { supabaseCookieOptions } from '@/lib/supabase/cookie-options'
 
 /** One Supabase client per request — avoids re-reading cookies on every query. */
 export const createClient = cache(async () => {
@@ -25,6 +26,7 @@ export const createClient = cache(async () => {
           }
         },
       },
+      cookieOptions: supabaseCookieOptions,
     },
   )
 })

@@ -1,6 +1,7 @@
 import type { SplitDetailRow } from '@/lib/database.types'
 import type { MuscleGroup, SplitDetail } from '@/lib/split-data'
 import { formatTargetReps } from '@/lib/split-reps'
+import { gifUrlFromImageUrl } from '@/lib/exercises/paths'
 
 const MUSCLE_FALLBACK: MuscleGroup = 'Core'
 
@@ -44,20 +45,24 @@ export function toSplitDetail(row: SplitDetailRow): SplitDetail {
       id: day.id,
       focus: day.name,
       note: day.subtitle ?? '',
-      exercises: (day.split_day_exercises ?? []).map((exercise) => ({
-        id: exercise.id,
-        name: exercise.lift_types?.name ?? 'Exercise',
-        sets: exercise.target_sets,
-        reps: formatTargetReps(
-          exercise.target_reps_min,
-          exercise.target_reps_max,
-          exercise.lift_types?.category === 'cardio' ? '30' : '8–12',
-        ),
-        muscle: asMuscle(exercise.lift_types?.muscle_group),
-        category: exercise.lift_types?.category ?? undefined,
-        image: exercise.lift_types?.image_url ?? undefined,
-        liftTypeId: exercise.lift_types?.id ?? exercise.lift_type_id,
-      })),
+      exercises: (day.split_day_exercises ?? []).map((exercise) => {
+        const image = exercise.lift_types?.image_url ?? undefined
+        return {
+          id: exercise.id,
+          name: exercise.lift_types?.name ?? 'Exercise',
+          sets: exercise.target_sets,
+          reps: formatTargetReps(
+            exercise.target_reps_min,
+            exercise.target_reps_max,
+            exercise.lift_types?.category === 'cardio' ? '30' : '8–12',
+          ),
+          muscle: asMuscle(exercise.lift_types?.muscle_group),
+          category: exercise.lift_types?.category ?? undefined,
+          image,
+          gif: gifUrlFromImageUrl(image) ?? undefined,
+          liftTypeId: exercise.lift_types?.id ?? exercise.lift_type_id,
+        }
+      }),
     })),
   }
 }

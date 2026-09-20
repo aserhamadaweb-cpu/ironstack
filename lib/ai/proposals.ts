@@ -1,12 +1,8 @@
 import { getExerciseById } from '@/lib/exercises/catalog'
 import { isHomeEquipment } from '@/lib/exercises/home-workouts'
 import {
-  aliasSearchQuery,
   catalogExerciseToLibrary,
-  pickBestCatalogMatch,
-  resolveCatalogId,
-  resolveExerciseIdAlias,
-  searchCatalogExercises,
+  resolveExerciseRef,
 } from '@/lib/ai/catalog-lookup'
 import type {
   SplitProposal,
@@ -65,48 +61,16 @@ function asPositiveInt(value: unknown, fallback: number, min: number, max: numbe
 function hydrateExercise(
   raw: RawExercise,
   homeOnly: boolean,
-): { ok: true; exercise: SplitProposalExercise } | { ok: false; error: string } {
+):
+  | { ok: true; exercise: SplitProposalExercise; substitutedFrom?: string }
+  | { ok: false; error: string } {
   const idRaw = String(raw.exercise_id ?? raw.exerciseId ?? '').trim()
   const nameRaw = String(raw.name ?? '').trim()
-  let resolved = resolveCatalogId(idRaw || nameRaw)
-  if (!resolved.id && nameRaw) {
-    const idAlias = resolveExerciseIdAlias(nameRaw)
-    if (idAlias && getExerciseById(idAlias)) {
-      resolved = { id: idAlias, matches: [] }
-    }
-  }
-  if (!resolved.id && nameRaw) {
-    const searchQuery = aliasSearchQuery(nameRaw)
-    const hits = searchCatalogExercises({ query: searchQuery, limit: 12 })
-    if (hits.length === 1) {
-      resolved = { id: hits[0].id, matches: [] }
-    } else if (hits.length > 1) {
-      const key = normalizeKey(nameRaw)
-      const exact = hits.find((hit) => normalizeKey(hit.name) === key)
-      if (exact) {
-        resolved = { id: exact.id, matches: [] }
-      } else {
-        const picked = pickBestCatalogMatch(nameRaw, hits, { homeOnly })
-        if (picked) resolved = { id: picked.id, matches: [] }
-      }
-    } else if (searchQuery !== nameRaw) {
-      const retryHits = searchCatalogExercises({ query: nameRaw, limit: 12 })
-      const picked = pickBestCatalogMatch(nameRaw, retryHits, { homeOnly })
-      if (picked) resolved = { id: picked.id, matches: [] }
-    }
-  }
+  const resolved = resolveExerciseRef(idRaw, nameRaw, { homeOnly })
   if (!resolved.id) {
-    if (resolved.matches.length > 1) {
-      return {
-        ok: false,
-        error: `Ambiguous exercise "${nameRaw || idRaw}". Use a catalog id: ${resolved.matches
-          .map((m) => `${m.name} (${m.id})`)
-          .join(', ')}.`,
-      }
-    }
     return {
       ok: false,
-      error: `Unknown exercise "${nameRaw || idRaw}". Search the catalog and use a real exercise id.`,
+      error: `Unknown exercise "${nameRaw || idRaw}".`,
     }
   }
   const catalog = getExerciseById(resolved.id)
@@ -121,6 +85,12 @@ function hydrateExercise(
   }
   const sets = asPositiveInt(raw.sets, 3, 1, 10)
   const reps = String(raw.reps ?? '8–12').trim() || '8–12'
+  const substitutedFrom =
+    nameRaw &&
+    normalizeKey(nameRaw) !== normalizeKey(catalog.name) &&
+    resolved.matchedAs
+      ? nameRaw
+      : undefined
   return {
     ok: true,
     exercise: {
@@ -132,7 +102,39 @@ function hydrateExercise(
       reps,
       homeSuitable: isHomeEquipment(catalog.equipment),
     },
+    substitutedFrom,
   }
+}
+
+/** Safe defaults when a day would otherwise be empty after unknown-name skips. */
+const DAY_FALLBACK_IDS: Array<{ match: RegExp; ids: string[] }> = [
+  { match: /\b(chest|push|bench|pec)\b/i, ids: ['0025', '0048', '0226'] },
+  { match: /\b(back|pull|lat|row)\b/i, ids: ['0861', '2330', '0027'] },
+  { match: /\b(leg|quad|squat|glute|ham)\b/i, ids: ['0043', '0585', '0085'] },
+  { match: /\b(shoulder|delt|press|arm|bicep|tricep)\b/i, ids: ['0091', '0334', '0060'] },
+  { match: /\b(core|abs|cardio)\b/i, ids: ['0274', '0871'] },
+]
+
+const GENERIC_FALLBACK_IDS = ['0025', '0861', '0043', '0091', '0060']
+
+function fallbackExercisesForDay(
+  dayName: string,
+  homeOnly: boolean,
+  used: Set<string>,
+  count: number,
+): SplitProposalExercise[] {
+  const pool =
+    DAY_FALLBACK_IDS.find((row) => row.match.test(dayName))?.ids ?? GENERIC_FALLBACK_IDS
+  const out: SplitProposalExercise[] = []
+  for (const id of [...pool, ...GENERIC_FALLBACK_IDS]) {
+    if (out.length >= count) break
+    if (used.has(id)) continue
+    const result = hydrateExercise({ exercise_id: id, sets: 3, reps: '8–12' }, homeOnly)
+    if (!result.ok) continue
+    used.add(result.exercise.exerciseId)
+    out.push(result.exercise)
+  }
+  return out
 }
 
 export function buildSplitProposal(input: {
@@ -155,9 +157,13 @@ export function buildSplitProposal(input: {
     return { ok: false, error: 'A split needs between 1 and 7 training days.' }
   }
 
+  const homeOnly = Boolean(input.homeOnly)
+  const warnings: string[] = []
   const days: SplitProposalDay[] = []
+
   for (let i = 0; i < rawDays.length; i += 1) {
     const raw = rawDays[i] ?? {}
+    const dayName = String(raw.name ?? `Day ${i + 1}`).trim() || `Day ${i + 1}`
     const exercisesRaw = coerceArray(raw.exercises) as RawExercise[]
     if (exercisesRaw.length < 1 || exercisesRaw.length > 12) {
       return {
@@ -168,20 +174,43 @@ export function buildSplitProposal(input: {
     const exercises: SplitProposalExercise[] = []
     const seen = new Set<string>()
     for (const row of exercisesRaw) {
-      const result = hydrateExercise(row, Boolean(input.homeOnly))
-      if (!result.ok) return result
+      const label = String(row.name ?? row.exercise_id ?? row.exerciseId ?? 'exercise').trim()
+      const result = hydrateExercise(row, homeOnly)
+      if (!result.ok) {
+        // Never abort the whole split for one bad nickname — day defaults fill gaps.
+        warnings.push(`Couldn’t resolve “${label}” on ${dayName}; used a catalog stand-in if needed.`)
+        continue
+      }
       if (seen.has(result.exercise.exerciseId)) continue
       seen.add(result.exercise.exerciseId)
+      if (result.substitutedFrom) {
+        warnings.push(
+          `Mapped “${result.substitutedFrom}” → ${result.exercise.name} on ${dayName}.`,
+        )
+      }
       exercises.push(result.exercise)
     }
+
     if (exercises.length === 0) {
-      return {
-        ok: false,
-        error: `Day ${i + 1} must have between 1 and 12 catalog exercises.`,
+      const filled = fallbackExercisesForDay(dayName, homeOnly, seen, 4)
+      if (filled.length === 0) {
+        return {
+          ok: false,
+          error: `Day ${i + 1} needs at least one catalog exercise we can resolve.`,
+        }
+      }
+      warnings.push(`Used catalog defaults for ${dayName} after unknown exercise names.`)
+      exercises.push(...filled)
+    } else if (exercises.length < Math.min(3, exercisesRaw.length)) {
+      // Partial day — top up so the plan stays usable.
+      const needed = Math.min(4, exercisesRaw.length) - exercises.length
+      if (needed > 0) {
+        exercises.push(...fallbackExercisesForDay(dayName, homeOnly, seen, needed))
       }
     }
+
     days.push({
-      name: String(raw.name ?? `Day ${i + 1}`).trim() || `Day ${i + 1}`,
+      name: dayName,
       subtitle: String(raw.subtitle ?? '').trim() || null,
       exercises,
     })
@@ -215,12 +244,15 @@ export function buildSplitProposal(input: {
       kind: input.kind,
       splitId,
       name,
-      description: String(input.description ?? '').trim() || `${days.length}-day plan from IronStack Coach.`,
+      description:
+        String(input.description ?? '').trim() ||
+        `${days.length}-day plan from IronStack Coach.`,
       daysPerWeek: asPositiveInt(input.daysPerWeek, days.length, 1, 7),
       days,
       assumptions,
       questions,
       basedOn,
+      warnings: warnings.slice(0, 12),
     },
   }
 }

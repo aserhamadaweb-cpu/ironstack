@@ -168,7 +168,7 @@ export function LeaderboardSection({
                     href={href}
                     className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-start transition hover:border-gold/30 sm:gap-4 sm:px-4 ${
                       isYou
-                        ? 'border-gold/40 bg-gold/[0.08] shadow-[0_0_24px_-12px_rgba(232,181,74,0.4)]'
+                        ? 'border-gold/40 bg-gold/[0.08] shadow-[0_0_24px_-12px_color-mix(in_srgb,var(--gold)_40%,transparent)]'
                         : 'border-silver/10 bg-background/40'
                     }`}
                   >
@@ -178,7 +178,7 @@ export function LeaderboardSection({
                   <div
                     className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-start sm:gap-4 sm:px-4 ${
                       isYou
-                        ? 'border-gold/40 bg-gold/[0.08] shadow-[0_0_24px_-12px_rgba(232,181,74,0.4)]'
+                        ? 'border-gold/40 bg-gold/[0.08] shadow-[0_0_24px_-12px_color-mix(in_srgb,var(--gold)_40%,transparent)]'
                         : 'border-silver/10 bg-background/40'
                     }`}
                   >

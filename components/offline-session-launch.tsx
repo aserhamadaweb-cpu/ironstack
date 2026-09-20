@@ -2,6 +2,7 @@
 
 import { ActiveSessionGate } from '@/components/active-session-gate'
 import { initialsFrom } from '@/lib/dashboard-utils'
+import { useRegisterEmbeddedSession } from '@/lib/offline/embedded-session'
 import type { WeightUnit } from '@/lib/units'
 
 type OfflineSessionLaunchProps = {
@@ -9,6 +10,8 @@ type OfflineSessionLaunchProps = {
   displayName: string
   initials?: string
   weightUnit?: WeightUnit
+  onExit?: () => void
+  onSwitchSplit?: (splitSlug: string) => void
 }
 
 export function OfflineSessionLaunch({
@@ -16,7 +19,10 @@ export function OfflineSessionLaunch({
   displayName,
   initials,
   weightUnit = 'kg',
+  onExit,
+  onSwitchSplit,
 }: OfflineSessionLaunchProps) {
+  useRegisterEmbeddedSession()
   return (
     <ActiveSessionGate
       slug={slug}
@@ -24,6 +30,8 @@ export function OfflineSessionLaunch({
       initials={initials || initialsFrom(displayName)}
       isFirstEver={false}
       weightUnit={weightUnit}
+      onExit={onExit}
+      onSwitchSplit={onSwitchSplit}
     />
   )
 }

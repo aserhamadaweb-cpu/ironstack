@@ -29,6 +29,10 @@ import {
   formatSessionContextForPrompt,
   parseSessionCoachContext,
 } from '@/lib/ai/session-context'
+import {
+  formatAthleteContextForPrompt,
+  loadAthleteContext,
+} from '@/lib/ai/athlete-context'
 import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
@@ -199,8 +203,12 @@ export async function POST(request: Request) {
         .maybeSingle()
         .then((r) => (r.data?.language === 'ar' ? 'ar' : 'en') as 'en' | 'ar')
 
-      const [memories] = await Promise.all([getActiveMemories(user.id)])
+      const [memories, athlete] = await Promise.all([
+        getActiveMemories(user.id),
+        loadAthleteContext(user.id),
+      ])
       const memoryBlock = [
+        athlete ? formatAthleteContextForPrompt(athlete) : '',
         formatMemoriesForPrompt(memories),
         formatSessionContextForPrompt(sessionContext),
       ]
@@ -213,7 +221,7 @@ export async function POST(request: Request) {
         history: clientHistory,
         userMessage: message,
         memoryBlock,
-        locale: profileLang,
+        locale: athlete?.language === 'ar' ? 'ar' : profileLang,
         liveSessionMode: true,
       })
 
@@ -263,7 +271,8 @@ export async function POST(request: Request) {
     const revisePendingSplit =
       Boolean(reviseProposal) && reviseProposal!.kind === 'create_split'
 
-    const [celebrations, memories, profileLang, splitContext] = await Promise.all([
+    const [celebrations, memories, profileLang, splitContext, athlete] =
+      await Promise.all([
       getUnmentionedChatCelebrations(user.id),
       getActiveMemories(user.id),
       supabase
@@ -273,7 +282,85 @@ export async function POST(request: Request) {
         .maybeSingle()
         .then((r) => (r.data?.language === 'ar' ? 'ar' : 'en') as 'en' | 'ar'),
       splitBuildMode ? loadSplitBuildContext(user.id) : Promise.resolve(null),
+      loadAthleteContext(user.id),
     ])
+
+    const locale = athlete?.language === 'ar' ? 'ar' : profileLang
+    const wantsProfileHelp =
+      /\b(finish|complete|fill|update|set up|setup)\b.*\b(profile|fitness|body|weight|height|goal)\b/i.test(
+        message,
+      ) ||
+      /\b(help me.*(profile|missing)|my fitness profile is incomplete)\b/i.test(
+        message,
+      ) ||
+      /أكمل|ملف اللياقة|الملف الرياضي|وزني|طولي/i.test(message)
+
+    const needsProfileInterview =
+      Boolean(athlete?.missingFields.length) &&
+      !reviseProposal &&
+      (splitBuildMode || wantsProfileHelp)
+
+    if (needsProfileInterview && athlete) {
+      const { orderProfileInterviewFields } = await import(
+        '@/lib/ai/profile-interview'
+      )
+      const interviewPayload = {
+        status: 'pending_confirmation' as const,
+        interviewId: crypto.randomUUID(),
+        fields: orderProfileInterviewFields(athlete.missingFields),
+        preferredUnit: athlete.preferredUnit,
+        resumePrompt: splitBuildMode ? message : null,
+      }
+      const assistantText =
+        locale === 'ar'
+          ? 'قبل ما نكمّل، عبّي التفاصيل الناقصة عبر الاختيارات في البطاقة أدناه — نفس أسلوب إنشاء برنامج بالذكاء الاصطناعي. بعد الحفظ أكمّل طلبك.'
+          : 'Before we continue, fill in the missing details with the choice cards below — same style as Create Split with AI. After you save, I’ll pick up your request.'
+
+      const userRow = await insertAiMessage({
+        conversationId,
+        userId: user.id,
+        role: 'user',
+        content: message,
+      })
+      await insertAiMessage({
+        conversationId,
+        userId: user.id,
+        role: 'tool',
+        toolName: 'propose_profile_interview',
+        content: JSON.stringify(interviewPayload),
+      })
+      const assistantRow = await insertAiMessage({
+        conversationId,
+        userId: user.id,
+        role: 'assistant',
+        content: assistantText,
+      })
+      const conversations = await listConversations(user.id)
+      const active = conversations.find((c) => c.id === conversationId)
+      return NextResponse.json({
+        conversationId,
+        title: active?.title ?? null,
+        conversations,
+        userMessage: {
+          id: userRow.id,
+          role: 'user',
+          content: userRow.content,
+          createdAt: userRow.created_at,
+        },
+        assistantMessage: {
+          id: assistantRow.id,
+          role: 'assistant',
+          content: assistantRow.content,
+          createdAt: assistantRow.created_at,
+          usedTools: true,
+          action: extractCoachActionFromTrace([
+            { name: 'propose_profile_interview', result: interviewPayload },
+          ]),
+        },
+        meta: { splitBuildMode, profileInterview: true },
+      })
+    }
+
     const celebrationContext =
       celebrations.length > 0
         ? celebrations
@@ -281,6 +368,7 @@ export async function POST(request: Request) {
             .join('; ')
         : null
     const memoryBlock = [
+      athlete ? formatAthleteContextForPrompt(athlete) : '',
       formatMemoriesForPrompt(memories),
       splitContext
         ? formatSplitContextForPrompt(
@@ -301,7 +389,7 @@ export async function POST(request: Request) {
       userMessage: message,
       celebrationContext,
       memoryBlock,
-      locale: profileLang,
+      locale,
       splitBuildMode,
       revisePendingSplit,
     })

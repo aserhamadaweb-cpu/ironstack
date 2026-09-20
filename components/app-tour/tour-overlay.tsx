@@ -83,25 +83,30 @@ export function TourOverlay({
 
 type TourDeferredBannerProps = {
   busy: boolean
+  /** active-session = real workout; wrong-route = tour waiting for the right page. */
+  reason?: 'active-session' | 'wrong-route'
   onStartLater: () => void
   onStartNow: () => void
 }
 
 export function TourDeferredBanner({
   busy,
+  reason = 'wrong-route',
   onStartLater,
   onStartNow,
 }: TourDeferredBannerProps) {
   const t = useTranslations('tour')
+  const title =
+    reason === 'active-session' ? t('deferredTitle') : t('deferredRouteTitle')
+  const body =
+    reason === 'active-session' ? t('deferredBody') : t('deferredRouteBody')
   return (
     <div
       role="status"
       className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-[85] mx-auto w-[min(100%-1.5rem,28rem)] rounded-2xl border border-gold/30 bg-card/95 p-4 shadow-xl"
     >
-      <p className="text-sm font-semibold text-foreground">{t('deferredTitle')}</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        {t('deferredBody')}
-      </p>
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{body}</p>
       <div className="mt-3 flex gap-2">
         <button
           type="button"

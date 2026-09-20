@@ -82,7 +82,7 @@ export function AchievementsCatalogClient({
 
   return (
     <div className="space-y-8">
-      <div className="is-panel p-5 sm:p-6">
+      <div className="is-panel p-5 sm:p-6" data-tour="achievements-progress">
         <p className="text-sm text-muted-foreground">{t('progressHint')}</p>
         <p className="mt-2 font-heading text-3xl font-bold tabular-nums text-foreground">
           <span className="text-gold">{earnedCount}</span>

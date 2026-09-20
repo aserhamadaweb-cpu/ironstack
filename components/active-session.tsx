@@ -40,7 +40,7 @@ import { discardPendingSession } from '@/lib/offline/discard-session'
 import { useOfflineStatus } from '@/lib/offline/provider'
 import { getActiveSessionAction } from '@/lib/data/session-actions'
 import { offlineLog, offlineWarn } from '@/lib/offline/debug'
-import type { LocalLiftLog } from '@/lib/offline/db'
+import type { LocalLiftLog, LocalSession } from '@/lib/offline/db'
 import {
   buildProgressPayload,
   clearUnfinishedWorkoutReminder,
@@ -77,6 +77,10 @@ type ActiveSessionProps = {
   previousBests: Record<string, PreviousBest>
   /** Display + input unit; storage remains kg. */
   weightUnit?: WeightUnit
+  /** Embedded offline launch: leave/finish without relying on router. */
+  onExit?: () => void
+  /** Embedded offline: resume a different in-progress split. */
+  onSwitchSplit?: (splitSlug: string) => void
 }
 
 type SetEntry = {
@@ -168,6 +172,8 @@ export function ActiveSession({
   isFirstEver,
   previousBests,
   weightUnit = 'kg',
+  onExit,
+  onSwitchSplit,
 }: ActiveSessionProps) {
   const router = useRouter()
   const reduce = useReducedMotion()
@@ -212,35 +218,108 @@ export function ActiveSession({
   dayIndexRef.current = dayIndex
   exerciseIndexRef.current = exerciseIndex
   entriesRef.current = entries
-  const persistProgress = async (nextSessionId?: string | null) => {
-    if (sessionClosedRef.current) return
-    const id = nextSessionId ?? sessionIdRef.current
-    if (!id) return
-    const currentStage = stageRef.current
-    if (currentStage === 'pick' || currentStage === 'summary') return
-    await saveSessionProgress(
-      id,
-      buildProgressPayload({
-        splitName: split.name,
-        dayIndex: dayIndexRef.current,
-        dayId: split.schedule[dayIndexRef.current]?.id ?? '',
-        dayName: split.schedule[dayIndexRef.current]?.focus ?? '',
-        exerciseIndex: exerciseIndexRef.current,
-        totalExercises: split.schedule[dayIndexRef.current]?.exercises.length ?? 0,
-        stage: currentStage,
-        loggedExercises: loggedExercisesRef.current,
-        currentEntries: entriesRef.current,
-        reminderSent: reminderSentRef.current,
-      }),
-    ).catch(() => undefined)
-  }
-
   const enqueueWrite = (work: Promise<unknown>) => {
     writesRef.current = writesRef.current
       .then(() => work)
       .then(() => undefined)
       .catch(() => undefined)
     return writesRef.current
+  }
+
+  const persistProgress = async (
+    nextSessionId?: string | null,
+    snapshot?: {
+      stage?: typeof stage
+      dayIndex?: number
+      exerciseIndex?: number
+    },
+  ) => {
+    if (sessionClosedRef.current) return
+    const id = nextSessionId ?? sessionIdRef.current
+    if (!id) return
+    const currentStage = snapshot?.stage ?? stageRef.current
+    if (currentStage === 'pick' || currentStage === 'summary') return
+    const dayIdx = snapshot?.dayIndex ?? dayIndexRef.current
+    const exIdx = snapshot?.exerciseIndex ?? exerciseIndexRef.current
+    await enqueueWrite(
+      saveSessionProgress(
+        id,
+        buildProgressPayload({
+          splitName: split.name,
+          dayIndex: dayIdx,
+          dayId: split.schedule[dayIdx]?.id ?? '',
+          dayName: split.schedule[dayIdx]?.focus ?? '',
+          exerciseIndex: exIdx,
+          totalExercises: split.schedule[dayIdx]?.exercises.length ?? 0,
+          stage: currentStage,
+          loggedExercises: loggedExercisesRef.current,
+          currentEntries: entriesRef.current,
+          reminderSent: reminderSentRef.current,
+        }),
+      ),
+    )
+  }
+
+  const restoreFromLocal = (active: LocalSession) => {
+    const progress = active.progress
+    const dayIdx =
+      progress?.dayIndex ??
+      split.schedule.findIndex((row) => row.id === active.splitDayId)
+    const safeDay = dayIdx >= 0 ? dayIdx : 0
+    const dayRow = split.schedule[safeDay]
+    if (!dayRow?.exercises?.length) return false
+
+    startedAtRef.current = active.startedAt
+    startRef.current = new Date(active.startedAt).getTime()
+    setElapsed(Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)))
+    setSessionId(active.id)
+    sessionIdRef.current = active.id
+    setDayIndex(safeDay)
+    dayIndexRef.current = safeDay
+    reminderSentRef.current = Boolean(progress?.reminderSent)
+    if (progress?.loggedExercises?.length) {
+      loggedExercisesRef.current = progress.loggedExercises
+      setLoggedExercises(progress.loggedExercises)
+    }
+    const exIdx = Math.min(
+      progress?.exerciseIndex ?? 0,
+      Math.max((dayRow.exercises.length ?? 1) - 1, 0),
+    )
+    setExerciseIndex(exIdx)
+    exerciseIndexRef.current = exIdx
+    const restoredEntries = progress?.currentEntries
+    const nextEntries = restoredEntries?.length
+      ? restoredEntries
+      : makeEntries(dayRow.exercises[exIdx]?.sets ?? 0)
+    setEntries(nextEntries)
+    entriesRef.current = nextEntries
+    const nextStage =
+      progress?.stage === 'summary'
+        ? 'done'
+        : progress?.stage && progress.stage !== 'pick'
+          ? progress.stage
+          : 'lift'
+    setStage(nextStage)
+    stageRef.current = nextStage
+    return true
+  }
+
+  const exitSession = (opts?: { refresh?: boolean }) => {
+    if (onExit) {
+      onExit()
+      return
+    }
+    const href = online ? '/dashboard/workout' : '/dashboard/home'
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      router.push('/dashboard/home')
+      return
+    }
+    if (opts?.refresh === false) {
+      router.push(href)
+      return
+    }
+    router.replace(href)
+    router.refresh()
   }
 
   useEffect(() => {
@@ -308,24 +387,43 @@ export function ActiveSession({
           if (typeof navigator !== 'undefined' && navigator.onLine) {
             const remote = await getActiveSessionAction()
             if (cancelled) return
+            // Another start/hydrate may have written IndexedDB while we awaited.
+            const latest = await getActiveLocalSession(userId)
+            if (cancelled) return
+            if (latest?.splitId === split.slug) {
+              restoreFromLocal(latest)
+              setHydrating(false)
+              return
+            }
             const remoteSession = remote.data
             if (remoteSession?.splitId === split.slug && userId) {
-              await createLocalSession({
+              const alreadyLocal = await getLocalSession(remoteSession.id)
+              if (
+                alreadyLocal?.status === 'completed' ||
+                alreadyLocal?.status === 'cancelled'
+              ) {
+                // Zombie in_progress on server after a partial offline sync —
+                // keep local terminal state and push finish; do not revive UI.
+                offlineLog('session.hydrate.skip-terminal', {
+                  id: alreadyLocal.id,
+                  status: alreadyLocal.status,
+                  syncStatus: alreadyLocal.syncStatus,
+                })
+                if (alreadyLocal.syncStatus !== 'synced') {
+                  queueSessionSync(alreadyLocal)
+                }
+                setHydrating(false)
+                return
+              }
+              const created = await createLocalSession({
                 id: remoteSession.id,
                 userId,
                 splitId: remoteSession.splitId,
                 splitDayId: remoteSession.splitDayId,
                 startedAt: remoteSession.startedAt,
               })
-              startedAtRef.current = remoteSession.startedAt
-              startRef.current = new Date(remoteSession.startedAt).getTime()
-              setSessionId(remoteSession.id)
-              sessionIdRef.current = remoteSession.id
-              const dayIdx = split.schedule.findIndex(
-                (row) => row.id === remoteSession.splitDayId,
-              )
-              setDayIndex(dayIdx >= 0 ? dayIdx : 0)
-              setStage('pick')
+              if (cancelled) return
+              restoreFromLocal(created)
             }
           }
           setHydrating(false)
@@ -336,47 +434,7 @@ export function ActiveSession({
           setHydrating(false)
           return
         }
-        const progress = active.progress
-        const dayIdx =
-          progress?.dayIndex ??
-          split.schedule.findIndex((row) => row.id === active.splitDayId)
-        const safeDay = dayIdx >= 0 ? dayIdx : 0
-        const dayRow = split.schedule[safeDay]
-        if (!dayRow?.exercises?.length) {
-          setHydrating(false)
-          return
-        }
-        startedAtRef.current = active.startedAt
-        startRef.current = new Date(active.startedAt).getTime()
-        setElapsed(
-          Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)),
-        )
-        setSessionId(active.id)
-        sessionIdRef.current = active.id
-        setDayIndex(safeDay)
-        reminderSentRef.current = Boolean(progress?.reminderSent)
-        if (progress?.loggedExercises?.length) {
-          loggedExercisesRef.current = progress.loggedExercises
-          setLoggedExercises(progress.loggedExercises)
-        }
-        const exIdx = Math.min(
-          progress?.exerciseIndex ?? 0,
-          Math.max((dayRow?.exercises.length ?? 1) - 1, 0),
-        )
-        setExerciseIndex(exIdx)
-        const restoredEntries = progress?.currentEntries
-        setEntries(
-          restoredEntries?.length
-            ? restoredEntries
-            : makeEntries(dayRow?.exercises[exIdx]?.sets ?? 0),
-        )
-        const nextStage =
-          progress?.stage === 'summary'
-            ? 'done'
-            : progress?.stage && progress.stage !== 'pick'
-              ? progress.stage
-              : 'lift'
-        setStage(nextStage)
+        restoreFromLocal(active)
       } finally {
         if (!cancelled) setHydrating(false)
       }
@@ -394,28 +452,85 @@ export function ActiveSession({
   }, [hydrating, sessionId, stage, dayIndex, exerciseIndex, entries, loggedExercises])
 
   useEffect(() => {
-    if (!sessionId || stage === 'pick' || stage === 'summary') return
-    const onHide = () => {
-      if (sessionClosedRef.current) return
+    if (hydrating || !sessionId || stage === 'pick' || stage === 'summary') return
+    const onOffline = () => {
       void persistProgress()
+    }
+    window.addEventListener('offline', onOffline)
+    return () => window.removeEventListener('offline', onOffline)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist on connectivity drop only
+  }, [hydrating, sessionId, stage])
+
+  // When connectivity returns, push the local in-progress session without
+  // resetting IDB progress (online ↔ offline continuity).
+  useEffect(() => {
+    if (!online || hydrating || !sessionId || stage === 'pick') return
+    let cancelled = false
+    void (async () => {
+      await writesRef.current.catch(() => undefined)
+      await persistProgress()
+      await writesRef.current.catch(() => undefined)
+      if (cancelled) return
+      const local = await getLocalSession(sessionId)
+      if (cancelled || !local || local.status !== 'in_progress') return
+      queueSessionSync(local)
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-sync on reconnect / session id
+  }, [online, hydrating, sessionId, stage])
+
+  useEffect(() => {
+    if (!sessionId || stage === 'pick' || stage === 'summary') return
+    const flushProgress = () => {
+      if (sessionClosedRef.current) return
+      // Kick IDB write immediately; keep a handle so freeze/pagehide can race
+      // the browser kill less often than a fire-and-forget with no queue push.
+      void enqueueWrite(
+        saveSessionProgress(
+          sessionIdRef.current!,
+          buildProgressPayload({
+            splitName: split.name,
+            dayIndex: dayIndexRef.current,
+            dayId: split.schedule[dayIndexRef.current]?.id ?? '',
+            dayName: split.schedule[dayIndexRef.current]?.focus ?? '',
+            exerciseIndex: exerciseIndexRef.current,
+            totalExercises:
+              split.schedule[dayIndexRef.current]?.exercises.length ?? 0,
+            stage: stageRef.current,
+            loggedExercises: loggedExercisesRef.current,
+            currentEntries: entriesRef.current,
+            reminderSent: reminderSentRef.current,
+          }),
+        ),
+      )
+    }
+    const onHide = () => {
+      flushProgress()
       if (document.visibilityState === 'hidden' && !reminderSentRef.current) {
         notifyUnfinishedWorkout()
         reminderSentRef.current = true
-        void persistProgress()
+        flushProgress()
       }
     }
     const onPageHide = () => {
-      if (sessionClosedRef.current) return
-      void persistProgress()
+      flushProgress()
+    }
+    const onFreeze = () => {
+      flushProgress()
     }
     document.addEventListener('visibilitychange', onHide)
     window.addEventListener('pagehide', onPageHide)
+    document.addEventListener('freeze', onFreeze)
     return () => {
       document.removeEventListener('visibilitychange', onHide)
       window.removeEventListener('pagehide', onPageHide)
+      document.removeEventListener('freeze', onFreeze)
+      if (!sessionClosedRef.current) flushProgress()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- event listeners; omit persistProgress to avoid re-bind loops
-  }, [sessionId, stage, dayIndex, exerciseIndex, entries])
+  }, [sessionId, stage, dayIndex, exerciseIndex, entries, split.name, split.schedule])
 
   const startSession = async (index: number) => {
     setActionError(null)
@@ -443,43 +558,7 @@ export function ActiveSession({
         return
       }
       if (existing && existing.splitId === split.slug) {
-        startedAtRef.current = existing.startedAt
-        startRef.current = new Date(existing.startedAt).getTime()
-        setElapsed(
-          Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)),
-        )
-        setSessionId(existing.id)
-        sessionIdRef.current = existing.id
-        const progress = existing.progress
-        const dayIdx =
-          progress?.dayIndex ??
-          split.schedule.findIndex((row) => row.id === existing.splitDayId)
-        const safeDay = dayIdx >= 0 ? dayIdx : index
-        const resumeDay = split.schedule[safeDay] ?? dayRow
-        setDayIndex(safeDay)
-        reminderSentRef.current = Boolean(progress?.reminderSent)
-        if (progress?.loggedExercises?.length) {
-          loggedExercisesRef.current = progress.loggedExercises
-          setLoggedExercises(progress.loggedExercises)
-        }
-        const exIdx = Math.min(
-          progress?.exerciseIndex ?? 0,
-          Math.max((resumeDay?.exercises.length ?? 1) - 1, 0),
-        )
-        setExerciseIndex(exIdx)
-        const restoredEntries = progress?.currentEntries
-        setEntries(
-          restoredEntries?.length
-            ? restoredEntries
-            : makeEntries(resumeDay?.exercises[exIdx]?.sets ?? 0),
-        )
-        const nextStage =
-          progress?.stage === 'summary'
-            ? 'done'
-            : progress?.stage && progress.stage !== 'pick'
-              ? progress.stage
-              : 'lift'
-        setStage(nextStage)
+        restoreFromLocal(existing)
         return
       }
 
@@ -490,6 +569,10 @@ export function ActiveSession({
         splitDayId: dayRow.id,
         startedAt,
       })
+      if (local.id !== sessionIdLocal) {
+        restoreFromLocal(local)
+        return
+      }
       startedAtRef.current = startedAt
       offlineLog('session.start.local', {
         id: local.id,
@@ -499,16 +582,26 @@ export function ActiveSession({
       })
       queueSessionSync(local)
 
-      setSessionId(sessionIdLocal)
-      sessionIdRef.current = sessionIdLocal
+      const initialEntries = makeEntries(dayRow.exercises[0]?.sets ?? 0)
+      setSessionId(local.id)
+      sessionIdRef.current = local.id
       setDayIndex(index)
+      dayIndexRef.current = index
       setExerciseIndex(0)
-      setEntries(makeEntries(dayRow.exercises[0]?.sets ?? 0))
+      exerciseIndexRef.current = 0
+      setEntries(initialEntries)
+      entriesRef.current = initialEntries
       loggedExercisesRef.current = []
       setLoggedExercises([])
       startRef.current = Date.now()
       setElapsed(0)
       setStage('lift')
+      stageRef.current = 'lift'
+      void persistProgress(local.id, {
+        stage: 'lift',
+        dayIndex: index,
+        exerciseIndex: 0,
+      })
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Could not start the session.',
@@ -942,19 +1035,22 @@ export function ActiveSession({
     return { volumeKg, setsCompleted, setsSkipped, prs, baselines }
   }, [loggedExercises, previousBests])
 
+  const exitHref = online ? '/dashboard/workout' : '/dashboard/home'
+
   const handleSave = () => {
     if (saving) return
     setSaving(true)
     sessionClosedRef.current = true
     setSessionId(null)
     sessionIdRef.current = null
-    router.replace('/dashboard/workout')
-    router.refresh()
+    exitSession()
   }
 
   const leaveWorkout = async () => {
+    await writesRef.current.catch(() => undefined)
     await persistProgress()
-    router.push('/dashboard/workout')
+    await writesRef.current.catch(() => undefined)
+    exitSession({ refresh: false })
   }
 
   const discardWorkout = async () => {
@@ -974,8 +1070,7 @@ export function ActiveSession({
       setConfirmDiscard(false)
       setSessionId(null)
       sessionIdRef.current = null
-      router.replace('/dashboard/workout')
-      router.refresh()
+      exitSession()
     } catch (err) {
       sessionClosedRef.current = false
       setActionError(
@@ -1028,6 +1123,21 @@ export function ActiveSession({
           active={foreignActive}
           onResolved={() => setForeignActive(null)}
           onStay={() => setForeignActive(null)}
+          onResumeOffline={(slug) => {
+            setForeignActive(null)
+            if (slug === split.slug) return
+            if (onSwitchSplit) {
+              onSwitchSplit(slug)
+              return
+            }
+            if (onExit) {
+              onExit()
+              return
+            }
+            if (typeof navigator !== 'undefined' && navigator.onLine) {
+              router.push(`/dashboard/splits/${slug}/session`)
+            }
+          }}
         />
       ) : null}
 
@@ -1139,13 +1249,24 @@ export function ActiveSession({
 
         {stage === 'pick' && (
           <section>
-            <Link
-              href="/dashboard/workout"
-              className="mb-6 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" />
-              BACK TO WORKOUT
-            </Link>
+            {onExit ? (
+              <button
+                type="button"
+                onClick={() => exitSession({ refresh: false })}
+                className="mb-6 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                {online ? 'BACK TO WORKOUT' : 'BACK TO HOME'}
+              </button>
+            ) : (
+              <Link
+                href={exitHref}
+                className="mb-6 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:text-gold"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                {online ? 'BACK TO WORKOUT' : 'BACK TO HOME'}
+              </Link>
+            )}
 
             <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
               ACTIVE SESSION

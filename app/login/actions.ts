@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { userNeedsOnboarding } from '@/lib/onboarding-storage'
 import {
   buildTourSeedForNewAccount,
   homePathWithTourIfNeeded,
@@ -17,8 +16,13 @@ import {
   normalizeUsername,
   validateUsernameFormat,
 } from '@/lib/username'
-import { buildAuthCallbackUrl } from '@/lib/auth-callback-url'
+import {
+  buildAuthCallbackUrl,
+  GOOGLE_WEB_CLIENT_ID,
+  isValidGoogleWebClientId,
+} from '@/lib/auth-callback-url'
 import { abandonAnonymousSessionIfPresent } from '@/lib/auth/abandon-guest-session'
+import { finalizeRedirect } from '@/lib/auth/finalize-redirect'
 
 export type AuthState = {
   error?: string
@@ -112,13 +116,7 @@ export async function signUp(
     return { error: profileError.message }
   }
 
-  const jar = await cookies()
-  jar.set(ONBOARDING_COOKIE, '1', {
-    path: '/',
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: 'lax',
-  })
-  redirect(ONBOARDING_PATH)
+  redirect(finalizeRedirect(ONBOARDING_PATH))
 }
 
 export async function signIn(
@@ -153,25 +151,27 @@ export async function signIn(
     return { error: 'Sign-in succeeded but no session was established. Try again.' }
   }
 
-  const jar = await cookies()
-  if (userNeedsOnboarding(user)) {
-    jar.set(ONBOARDING_COOKIE, '1', {
-      path: '/',
-      maxAge: 60 * 60 * 24 * 365,
-      sameSite: 'lax',
-    })
-    redirect(ONBOARDING_PATH)
-  }
-  jar.set(ONBOARDING_COOKIE, '', { path: '/', maxAge: 0, sameSite: 'lax' })
+  await supabase
+    .from('profiles')
+    .update({ is_guest: false, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+
   const fallback = homePathWithTourIfNeeded(user)
   const destination =
     next.startsWith('/') && !next.startsWith('//') ? next : fallback
-  redirect(destination)
+  redirect(finalizeRedirect(destination))
 }
 
 /** Establishes a guest session in HTTP cookies (survives PWA cold start). */
 export async function signInGuest(): Promise<AuthState> {
   const supabase = await createClient()
+  const {
+    data: { user: existing },
+  } = await supabase.auth.getUser()
+  if (existing && !existing.is_anonymous) {
+    redirect(HOME_PATH)
+  }
+
   const { error } = await supabase.auth.signInAnonymously()
   if (error) {
     return { error: error.message }
@@ -228,14 +228,82 @@ export async function upgradeGuestAccount(
     })
     .eq('id', user.id)
 
-  const jar = await cookies()
-  jar.set(ONBOARDING_COOKIE, '1', {
-    path: '/',
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: 'lax',
-  })
+  await supabase.auth.refreshSession()
 
-  redirect(ONBOARDING_PATH)
+  redirect(finalizeRedirect(ONBOARDING_PATH))
+}
+
+/**
+ * Public Google Web Client ID used by Google Identity Services.
+ * Prefer NEXT_PUBLIC_GOOGLE_CLIENT_ID; otherwise parse it from the OAuth URL
+ * Supabase would use for redirect sign-in.
+ */
+export async function resolveGoogleWebClientId(): Promise<{
+  clientId?: string
+  error?: string
+}> {
+  const fromEnv = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
+  if (isValidGoogleWebClientId(fromEnv)) {
+    return { clientId: fromEnv }
+  }
+
+  // Stable public web client — ignore Vercel Sensitive "y" placeholders.
+  if (isValidGoogleWebClientId(GOOGLE_WEB_CLIENT_ID)) {
+    return { clientId: GOOGLE_WEB_CLIENT_ID }
+  }
+
+  return { error: 'Google Web Client ID is not configured.' }
+}
+
+/**
+ * @deprecated Prefer client `signInWithGoogleClient` — server-action cookie
+ * writes are unreliable and used to surface as generic login errors.
+ */
+export async function signInWithGoogleIdToken(
+  idToken: string,
+  nextPath?: string | null,
+): Promise<AuthState & { redirectTo?: string }> {
+  const token = idToken.trim()
+  if (!token) {
+    return { error: 'Missing Google ID token.' }
+  }
+
+  await abandonAnonymousSessionIfPresent()
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token,
+  })
+  if (error) {
+    return { error: error.message }
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: 'Google sign-in succeeded but no session was established.' }
+  }
+
+  try {
+    await supabase
+      .from('profiles')
+      .update({ is_guest: false, updated_at: new Date().toISOString() })
+      .eq('id', user.id)
+  } catch {
+    /* best-effort */
+  }
+
+  const fallback = homePathWithTourIfNeeded(user)
+  const destination =
+    typeof nextPath === 'string' &&
+    nextPath.startsWith('/') &&
+    !nextPath.startsWith('//')
+      ? nextPath
+      : fallback
+
+  return { redirectTo: finalizeRedirect(destination) }
 }
 
 export async function signOut() {

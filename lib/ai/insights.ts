@@ -395,7 +395,9 @@ export async function getOrRefreshCoachInsight(
     !needsRefresh(cached, finishedAt, locale) &&
     cached
   ) {
-    console.info('[ai_insights] cache hit', cached.id, locale)
+    if (process.env.NODE_ENV === 'development') {
+      console.info('[ai_insights] cache hit', cached.id, locale)
+    }
     return {
       kind: 'insight',
       headline: cached.headline,
@@ -407,7 +409,9 @@ export async function getOrRefreshCoachInsight(
   }
 
   try {
-    console.info('[ai_insights] regenerating via Gemini', locale)
+    if (process.env.NODE_ENV === 'development') {
+      console.info('[ai_insights] regenerating via Gemini', locale)
+    }
     const { latest, context } = await gatherTrainingContext(userId)
     if (!latest || !context) {
       return {

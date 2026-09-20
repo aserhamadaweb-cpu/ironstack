@@ -12,21 +12,27 @@ export type AppTourPhase = 'navigate' | 'train' | 'track' | 'customize'
 export type AppTourStepId =
   | 'homeHero'
   | 'homeShortcuts'
+  | 'homeTrainCta'
   | 'navTabs'
   | 'navMenu'
   | 'workoutSplits'
   | 'splitRecommendations'
+  | 'aiSplitBuilder'
   | 'workoutCreate'
   | 'exercisesSearch'
   | 'exercisesGrid'
   | 'homeWorkouts'
   | 'sessionStart'
+  | 'sessionCoach'
   | 'history'
   | 'coach'
   | 'coachAiActions'
   | 'settingsAppearance'
   | 'settingsTour'
   | 'offlineMode'
+  | 'offlineTraining'
+  | 'challenges'
+  | 'achievements'
   | 'socialLeaderboard'
   | 'socialCircle'
   | 'messages'
@@ -65,6 +71,12 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     target: '[data-tour="home-shortcuts"]',
   },
   {
+    id: 'homeTrainCta',
+    phase: 'train',
+    href: '/dashboard/home',
+    target: '[data-tour="home-train-cta"]',
+  },
+  {
     id: 'navTabs',
     phase: 'navigate',
     href: '/dashboard/home',
@@ -74,7 +86,9 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     id: 'navMenu',
     phase: 'navigate',
     href: '/dashboard/home',
-    target: '[data-tour="nav-menu-icon"], [data-tour="nav-menu"]',
+    target:
+      '[data-tour="nav-sidebar"], [data-tour="nav-menu-icon"], [data-tour="nav-menu"]',
+    openSidebar: true,
   },
   {
     id: 'workoutSplits',
@@ -93,7 +107,15 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     id: 'splitRecommendations',
     phase: 'train',
     href: '/dashboard/splits/new',
-    target: '[data-tour="create-split-recommended"]',
+    target:
+      '[data-tour="create-split-recommended"], [data-tour="guest-blocked"]',
+  },
+  {
+    id: 'aiSplitBuilder',
+    phase: 'train',
+    href: '/dashboard/splits/ai-builder',
+    target:
+      '[data-tour="ai-split-builder"], [data-tour="guest-blocked"]',
   },
   {
     id: 'exercisesSearch',
@@ -121,6 +143,13 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
       '[data-tour="workout-start-cta"], [data-tour="workout-featured-split"], [data-tour="workout-splits"]',
   },
   {
+    id: 'sessionCoach',
+    phase: 'train',
+    href: '/dashboard/workout',
+    target:
+      '[data-tour="workout-start-cta"], [data-tour="workout-featured-split"], [data-tour="workout-splits"]',
+  },
+  {
     id: 'history',
     phase: 'track',
     href: '/dashboard/history',
@@ -136,13 +165,15 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     id: 'coachAiActions',
     phase: 'track',
     href: '/dashboard/ai-coach/chat',
-    target: '[data-tour="coach-chat-composer"]',
+    target:
+      '[data-tour="coach-chat-composer"], [data-tour="guest-blocked"]',
   },
   {
     id: 'settingsAppearance',
     phase: 'customize',
     href: '/dashboard/settings',
-    target: '[data-tour="settings-appearance"]',
+    target:
+      '[data-tour="settings-appearance"], [data-tour="page-settings"]',
   },
   {
     id: 'settingsTour',
@@ -155,6 +186,26 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     phase: 'customize',
     href: '/dashboard/settings',
     target: '[data-tour="settings-offline"]',
+  },
+  {
+    id: 'offlineTraining',
+    phase: 'train',
+    href: '/dashboard/workout',
+    target:
+      '[data-tour="workout-offline-toggle"], [data-tour="workout-splits"], [data-tour="workout-featured-split"]',
+  },
+  {
+    id: 'challenges',
+    phase: 'customize',
+    href: '/dashboard/challenges',
+    target:
+      '[data-tour="challenges-create"], [data-tour="guest-blocked"]',
+  },
+  {
+    id: 'achievements',
+    phase: 'customize',
+    href: '/dashboard/achievements',
+    target: '[data-tour="achievements-progress"]',
   },
   {
     id: 'socialLeaderboard',
@@ -173,7 +224,8 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     id: 'messages',
     phase: 'customize',
     href: '/dashboard/messages',
-    target: '[data-tour="page-messages"]',
+    target:
+      '[data-tour="page-messages"], [data-tour="guest-blocked"]',
   },
   {
     id: 'done',
@@ -183,29 +235,25 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
   },
 ]
 
-/** Active first-time tour sequence (10 steps). */
+/**
+ * Active first-time tour — get to a real session fast, plus AI + offline (8 steps).
+ * Broader feature steps stay in APP_TOUR_STEPS_ALL as dormant for Settings later.
+ */
 export const APP_TOUR_ACTIVE_IDS: AppTourStepId[] = [
   'homeHero',
-  'navTabs',
-  'navMenu',
-  'workoutSplits',
+  'homeTrainCta',
   'workoutCreate',
-  'sessionStart',
-  'history',
   'coach',
-  'settingsTour',
+  'offlineMode',
+  'sessionStart',
+  'navTabs',
   'done',
 ]
 
 /** Per-step overrides applied only in the active tour. */
 const APP_TOUR_ACTIVE_OVERRIDES: Partial<
   Record<AppTourStepId, Partial<AppTourStepDef>>
-> = {
-  workoutCreate: {
-    href: '/dashboard/splits/new',
-    target: '[data-tour="create-split-choice"]',
-  },
-}
+> = {}
 
 function tourStepById(id: AppTourStepId): AppTourStepDef {
   const base = APP_TOUR_STEPS_ALL.find((step) => step.id === id)
@@ -244,7 +292,7 @@ export function isAppTourStatus(value: unknown): value is AppTourStatus {
 export type AppTourState = {
   status: AppTourStatus | null
   step: number
-  /** Auto-start only for pending/active/deferred — never for null/skipped/completed. */
+  /** Auto-start only for first-time `pending` — never deferred/active/skipped/completed/null. */
   shouldAutoOffer: boolean
 }
 

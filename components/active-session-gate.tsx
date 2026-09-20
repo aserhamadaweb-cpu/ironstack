@@ -11,7 +11,10 @@ import {
   refreshWorkoutCache,
 } from '@/lib/offline/cache'
 import { OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
-import { resolveSplitForSession } from '@/lib/offline/split-store'
+import {
+  ensureSplitCachedForSession,
+  resolveSplitForSession,
+} from '@/lib/offline/split-store'
 import type { SplitDetail } from '@/lib/split-data'
 import type { WeightUnit } from '@/lib/units'
 
@@ -30,6 +33,8 @@ type ActiveSessionGateProps = {
   weightUnit: WeightUnit
   initialSplit?: SplitDetail | null
   initialBests?: Record<string, PreviousBest>
+  onExit?: () => void
+  onSwitchSplit?: (splitSlug: string) => void
 }
 
 function wait(ms: number) {
@@ -47,6 +52,8 @@ export function ActiveSessionGate({
   weightUnit,
   initialSplit = null,
   initialBests = {},
+  onExit,
+  onSwitchSplit,
 }: ActiveSessionGateProps) {
   const t = useTranslations('offline')
   const [split, setSplit] = useState<SplitDetail | null>(initialSplit)
@@ -84,8 +91,15 @@ export function ActiveSessionGate({
 
     void (async () => {
       if (initialSplit) {
+        void ensureSplitCachedForSession(initialSplit).catch(() => undefined)
         if (typeof navigator === 'undefined' || navigator.onLine) {
           void refreshWorkoutCache().catch(() => false)
+          void import('@/lib/offline/prefetch-exercise-media')
+            .then(({ prefetchMediaForSplits }) =>
+              prefetchMediaForSplits([{ detail: initialSplit }]),
+            )
+            .catch(() => undefined)
+            .catch(() => 0)
         }
         return
       }
@@ -113,6 +127,11 @@ export function ActiveSessionGate({
     }
   }, [initialSplit, loadSplit])
 
+  useEffect(() => {
+    if (!split) return
+    void ensureSplitCachedForSession(split).catch(() => undefined)
+  }, [split])
+
   if (loading) {
     return <PageLoading label={t('stillSyncingSplit')} />
   }
@@ -124,8 +143,17 @@ export function ActiveSessionGate({
           icon={Layers}
           title={t('splitMissingTitle')}
           body={t('splitMissingBody')}
-          actionLabel={t('openWorkout')}
-          actionHref="/dashboard/workout"
+          actionLabel={t('floorBackHome')}
+          onAction={
+            onExit ??
+            (() => {
+              if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                window.location.assign('/offline')
+                return
+              }
+              window.location.assign('/dashboard/home')
+            })
+          }
         />
       </main>
     )
@@ -140,6 +168,8 @@ export function ActiveSessionGate({
       isFirstEver={isFirstEver}
       previousBests={bests}
       weightUnit={weightUnit}
+      onExit={onExit}
+      onSwitchSplit={onSwitchSplit}
     />
   )
 }

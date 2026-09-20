@@ -32,7 +32,7 @@ export const AGENT_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'get_account_settings',
     description:
-      'Current units, language, theme, notification toggles, privacy settings, body stats, and profile text. Call this before proposing any settings or profile change so you do not propose a no-op.',
+      'Current units, language, theme, notifications, privacy, body stats (including current weight), fitness profile (goals, level, equipment, schedule), primary program, and profile text. Call before proposing any settings or profile change so you do not propose a no-op.',
     parameters: { type: Type.OBJECT, properties: {} },
   },
   {
@@ -119,13 +119,61 @@ export const AGENT_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'propose_body_stats_update',
     description:
-      'Preview updating height, sex, or birth date. Omitted fields keep their current value. Does NOT apply until they confirm.',
+      'Preview updating height, sex, or birth date. Omitted fields keep their current value. Does NOT apply until they confirm. Prefer propose_fitness_profile_update when saving age range, goals, schedule, or equipment instead of birth date.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         height_cm: { type: Type.NUMBER },
         gender: { type: Type.STRING, description: 'male or female.' },
         birth_date: { type: Type.STRING, description: 'ISO date, YYYY-MM-DD.' },
+      },
+    },
+  },
+  {
+    name: 'propose_fitness_profile_update',
+    description:
+      'Preview saving missing fitness-profile fields (weight, height, sex, age_range, primary_goal, fitness_level, days_per_week, workout_duration, training_location, equipment, avoidances, limitations). Use when the athlete answers profile questions in chat or asks you to save training prefs. Does NOT apply until they confirm. Point them to /dashboard/fitness-profile if they prefer the form.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        weight: { type: Type.NUMBER },
+        unit: { type: Type.STRING, description: 'kg or lb. Defaults to kg.' },
+        height_cm: { type: Type.NUMBER },
+        gender: {
+          type: Type.STRING,
+          description: 'male, female, or prefer_not.',
+        },
+        age_range: {
+          type: Type.STRING,
+          description:
+            'under_18, 18_24, 25_34, 35_44, 45_54, 55_plus, or prefer_not.',
+        },
+        primary_goal: {
+          type: Type.STRING,
+          description:
+            'build_muscle, lose_fat, get_stronger, endurance, stay_active, athletic, or other.',
+        },
+        fitness_level: {
+          type: Type.STRING,
+          description: 'beginner, intermediate, or advanced.',
+        },
+        days_per_week: { type: Type.NUMBER },
+        workout_duration: {
+          type: Type.STRING,
+          description: 'under_30, 30_45, 45_60, or over_60.',
+        },
+        training_location: {
+          type: Type.STRING,
+          description: 'home, gym, or both.',
+        },
+        equipment: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description:
+            'bodyweight, dumbbells, bands, kettlebells, bench, pullup_bar, barbell, machines, other.',
+        },
+        avoidances: { type: Type.STRING },
+        limitations: { type: Type.STRING },
       },
     },
   },
@@ -314,6 +362,7 @@ const DIRECT_TOOL_ACTIONS: Record<string, string> = {
   propose_body_weight_log: 'log_body_weight',
   propose_delete_body_weight_log: 'delete_body_weight_log',
   propose_body_stats_update: 'update_body_stats',
+  propose_fitness_profile_update: 'update_fitness_profile',
   propose_notification_setting: 'set_notification_preferences',
   propose_privacy_setting: 'set_privacy_settings',
   propose_profile_update: 'update_profile_details',

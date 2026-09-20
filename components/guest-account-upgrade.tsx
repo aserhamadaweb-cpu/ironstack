@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { clearProfileOnboardingCache } from '@/components/choose-username-gate'
 import { clearIronstackAuthCache } from '@/components/use-is-guest'
 import { upgradeGuestAccount } from '@/app/login/actions'
+import { CTA_PRIMARY } from '@/lib/accent'
 
 /**
  * Guest → permanent email/password upgrade.
@@ -112,7 +113,7 @@ export function GuestAccountUpgrade() {
         <button
           type="submit"
           disabled={pending}
-          className="btn-pill disabled:opacity-50"
+          className={`${CTA_PRIMARY} disabled:opacity-50`}
         >
           {pending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />

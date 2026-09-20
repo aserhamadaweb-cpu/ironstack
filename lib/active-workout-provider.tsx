@@ -15,6 +15,7 @@ import {
   viewFromLocalSession,
   type ActiveWorkoutView,
 } from '@/lib/active-workout'
+import { resolveSessionUserId } from '@/lib/offline/cache'
 import {
   getActiveLocalSession,
   getLocalSession,
@@ -38,10 +39,19 @@ function ActiveWorkoutProviderInner({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const gen = ++refreshGen.current
     try {
-      const local = await getActiveLocalSession()
+      const userId = await resolveSessionUserId().catch(() => null)
+      const local = await getActiveLocalSession(userId)
       if (gen !== refreshGen.current) return
       if (local) {
         setActive(viewFromLocalSession(local))
+        setReady(true)
+        return
+      }
+      // Offline: never fall back to a server in_progress row. Zombie shells
+      // from partial sync would look like a live workout (and trip the tour
+      // "finish your workout first" prompt) when nothing is actually active.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setActive(null)
         setReady(true)
         return
       }
@@ -52,6 +62,16 @@ function ActiveWorkoutProviderInner({ children }: { children: ReactNode }) {
           const localForRemote = await getLocalSession(remote.data.id)
           if (gen !== refreshGen.current) return
           if (localForRemote && localForRemote.status !== 'in_progress') {
+            // Local already finished/cancelled — do not advertise the zombie
+            // in_progress server row. Kick sync so finish can land.
+            if (
+              localForRemote.status === 'completed' &&
+              localForRemote.syncStatus !== 'synced'
+            ) {
+              void import('@/lib/offline/sync').then(({ queueSessionSync }) => {
+                queueSessionSync(localForRemote)
+              })
+            }
             setActive(null)
             setReady(true)
             return
@@ -95,13 +115,21 @@ function ActiveWorkoutProviderInner({ children }: { children: ReactNode }) {
     const onChange = () => {
       void refresh()
     }
+    const onOnline = () => {
+      // Prefer local in-progress immediately; remote is only a fallback inside refresh.
+      void refresh()
+    }
     window.addEventListener(OFFLINE_CHANGED_EVENT, onChange)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onChange)
     window.addEventListener('focus', scheduleRefresh)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') scheduleRefresh()
     })
     return () => {
       window.removeEventListener(OFFLINE_CHANGED_EVENT, onChange)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onChange)
       window.removeEventListener('focus', scheduleRefresh)
       if (focusTimer.current) window.clearTimeout(focusTimer.current)
     }
@@ -127,5 +155,10 @@ export function useActiveWorkout() {
   const ctx = useContext(ActiveWorkoutContext)
   if (ctx) return ctx
 
-  throw new Error('useActiveWorkout must be used within ActiveWorkoutProvider')
+  // Safe fallback for shells that mount banner before provider (should be rare).
+  return {
+    active: null,
+    ready: false,
+    refresh: async () => undefined,
+  }
 }

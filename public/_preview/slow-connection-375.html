@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=375, initial-scale=1" />
+    <title>Slow connection UI — 375px</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0c0c0e;
+        --card: rgba(22, 22, 26, 0.95);
+        --gold: #e8b54a;
+        --muted: #9a9aa3;
+        --danger: #f07178;
+        --border: rgba(255, 255, 255, 0.1);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(232, 181, 74, 0.14), transparent 55%), var(--bg);
+        color: #f4f4f5;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        justify-content: center;
+        padding: 24px 0 48px;
+      }
+      .phone { width: 375px; padding: 16px; position: relative; min-height: 640px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+      .label {
+        font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+        color: var(--muted); text-transform: uppercase; margin: 28px 0 10px;
+      }
+      .fake-page {
+        border: 1px solid var(--border); border-radius: 16px;
+        padding: 20px; background: #16161a; min-height: 200px;
+      }
+      .banner {
+        position: absolute; left: 16px; right: 16px; top: 72px;
+        border-radius: 16px; border: 1px solid rgba(232, 181, 74, 0.3);
+        background: var(--card); padding: 12px 14px;
+        box-shadow: 0 12px 40px -16px rgba(0,0,0,0.65);
+        backdrop-filter: blur(8px);
+      }
+      .banner.fail { border-color: rgba(240, 113, 120, 0.35); }
+      .row { display: flex; gap: 12px; align-items: flex-start; }
+      .icon {
+        width: 36px; height: 36px; border-radius: 12px; display: flex;
+        align-items: center; justify-content: center; flex-shrink: 0;
+        border: 1px solid rgba(232, 181, 74, 0.35); background: rgba(232, 181, 74, 0.1);
+        color: var(--gold); font-size: 14px;
+      }
+      .icon.fail {
+        border-color: rgba(240, 113, 120, 0.35); background: rgba(240, 113, 120, 0.1); color: var(--danger);
+      }
+      .title { font-size: 14px; font-weight: 650; margin: 0 0 2px; }
+      .body { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.4; }
+      .bar { margin-top: 12px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
+      .bar > span { display: block; height: 100%; background: var(--gold); border-radius: 999px; }
+      .btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+      .btn {
+        min-height: 40px; border-radius: 999px; border: 0; padding: 0 16px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      }
+      .btn.primary { background: var(--gold); color: #000; }
+      .btn.secondary {
+        background: transparent; color: var(--muted);
+        border: 1px solid var(--border);
+      }
+      .spin {
+        width: 14px; height: 14px; border: 2px solid rgba(232,181,74,0.25);
+        border-top-color: var(--gold); border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .center-card {
+        margin-top: 24px; border: 1px solid var(--border); border-radius: 16px;
+        padding: 28px 20px; text-align: center; background: #16161a;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="phone">
+      <h1>Slow / flaky connection</h1>
+      <p class="sub">375px — honest loading (not silent bounce)</p>
+
+      <p class="label">1 · Loading (still trying)</p>
+      <div class="fake-page" style="position:relative;min-height:240px">
+        <p style="color:var(--muted);font-size:13px;margin:0">Previous page still visible underneath…</p>
+        <div class="banner" style="position:relative;left:0;right:0;top:16px;margin-top:16px">
+          <div class="row">
+            <span class="icon"><span class="spin"></span></span>
+            <div>
+              <p class="title">Loading…</p>
+              <p class="body">Opening this page. Stay on this screen — we're still trying.</p>
+            </div>
+          </div>
+          <div class="bar"><span style="width:40%"></span></div>
+        </div>
+      </div>
+
+      <p class="label">2 · Slow (connection-attributed)</p>
+      <div class="banner" style="position:relative;left:0;right:0;top:0">
+        <div class="row">
+          <span class="icon">📶</span>
+          <div>
+            <p class="title">Connection is slow — retrying…</p>
+            <p class="body">Your connection is weak, not an app error. We're still loading this page.</p>
+          </div>
+        </div>
+        <div class="bar"><span style="width:80%"></span></div>
+      </div>
+
+      <p class="label">3 · Failed — retry (no silent revert)</p>
+      <div class="banner fail" style="position:relative;left:0;right:0;top:0">
+        <div class="row">
+          <span class="icon fail">!</span>
+          <div>
+            <p class="title">Couldn't load this page</p>
+            <p class="body">Check your connection and try again. This is a network problem, not a broken screen.</p>
+            <div class="btns">
+              <button class="btn primary" type="button">Retry</button>
+              <button class="btn secondary" type="button">Stay here</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="label">4 · /offline shell while still “online” (flaky)</p>
+      <div class="center-card">
+        <div class="icon" style="margin:0 auto 12px">📶</div>
+        <p class="title">Couldn't load this page</p>
+        <p class="body" style="margin-top:6px">Check your connection and try again. This is a network problem, not a broken screen.</p>
+        <div class="btns" style="justify-content:center">
+          <button class="btn primary" type="button">Retry</button>
+          <button class="btn secondary" type="button">Go to Home</button>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

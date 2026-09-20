@@ -28,14 +28,25 @@ export async function reconcileOutboxWithServer(): Promise<{
       .select('id, status')
       .eq('id', session.id)
       .maybeSingle()
-    if (error || !data?.id || data.status !== 'completed') continue
-
-    await markSessionSync(session.id, 'synced')
-    cleared.sessions += 1
+    if (error || !data?.id) continue
+    // Only reconcile when the server has the finished workout. An in_progress
+    // row must stay pending so flush can still call finishSessionAction.
+    if (session.status === 'completed' && data.status === 'completed') {
+      await markSessionSync(session.id, 'synced')
+      cleared.sessions += 1
+      continue
+    }
+    if (session.status === 'cancelled' && data.status === 'cancelled') {
+      await markSessionSync(session.id, 'synced')
+      cleared.sessions += 1
+    }
   }
 
   const mutations = await listUnsyncedSplitMutations()
   for (const mutation of mutations) {
+    // Existence of the split row only proves a prior create landed — never that
+    // a pending update payload was applied. Leave updates for flushSplitMutations.
+    if (mutation.kind === 'update') continue
     const { data, error } = await supabase
       .from('splits')
       .select('id')

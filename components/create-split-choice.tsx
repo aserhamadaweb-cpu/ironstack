@@ -23,27 +23,24 @@ export async function CreateSplitChoice({
       icon: Layers,
       title: t('manualTitle'),
       body: t('manualBody'),
-      accent: 'silver' as const,
     },
     {
       href: AI_SPLIT_BUILDER_PATH,
       icon: Wand2,
       title: t('aiTitle'),
       body: t('aiBody'),
-      accent: 'gold' as const,
     },
     {
       href: RECOMMENDED_SPLITS_PATH,
       icon: Sparkles,
       title: t('recommendedTitle'),
       body: t('recommendedBody'),
-      accent: 'gold' as const,
     },
   ]
 
   return (
     <div className="grid gap-4 lg:grid-cols-3" data-tour="create-split-choice">
-      {options.map(({ href, icon: Icon, title, body, accent }) => (
+      {options.map(({ href, icon: Icon, title, body }) => (
         <Link
           key={href}
           href={href}
@@ -52,19 +49,9 @@ export async function CreateSplitChoice({
               ? 'create-split-recommended'
               : undefined
           }
-          className={`group flex min-h-[11rem] flex-col rounded-2xl border p-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:p-6 ${
-            accent === 'gold'
-              ? 'border-gold/30 bg-gold/5 hover:border-gold/50 hover:bg-gold/10'
-              : 'border-border bg-card hover:border-gold/30 hover:bg-card/80'
-          }`}
+          className="group flex min-h-[11rem] flex-col rounded-2xl border border-silver/25 bg-card p-5 shadow-sm transition hover:border-gold/45 hover:bg-gold/5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:p-6"
         >
-          <span
-            className={`flex size-11 shrink-0 items-center justify-center rounded-xl border ${
-              accent === 'gold'
-                ? 'border-gold/30 bg-gold/10 text-gold'
-                : 'border-silver/20 bg-background text-foreground'
-            }`}
-          >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-gold/30 bg-gold/10 text-gold">
             <Icon className="size-5" aria-hidden="true" />
           </span>
           <span className="font-heading mt-4 text-lg font-bold text-foreground group-hover:text-gold">
@@ -73,7 +60,7 @@ export async function CreateSplitChoice({
           <span className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
             {body}
           </span>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold tracking-[0.12em] text-gold">
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold tracking-[0.12em] text-gold">
             {t('continue')}
             <ChevronRight className="size-3.5 rtl-flip" aria-hidden="true" />
           </span>

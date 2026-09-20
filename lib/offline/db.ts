@@ -81,11 +81,20 @@ export type LocalSession = {
   updatedAt: string
 }
 
+/** Set only after split snapshot + required exercise media are fully on-device. */
+export type CachedSplitOfflinePin = {
+  ready: boolean
+  /** Relative media paths that must remain in Cache Storage. */
+  requiredMedia: string[]
+  readyAt: string
+}
+
 export type CachedSplit = {
   id: string
   detail: SplitDetail
   row: SplitDetailRow
   updatedAt: string
+  offlinePin?: CachedSplitOfflinePin
 }
 
 export type SplitMutation = {
@@ -180,6 +189,10 @@ export function getOfflineDb() {
           db.createObjectStore('splitMutations', { keyPath: 'id' })
         }
       },
+    }).catch((err) => {
+      // Allow a later retry after a transient open failure (private mode flicker, etc.).
+      dbPromise = null
+      throw err
     })
   }
   return dbPromise

@@ -190,6 +190,12 @@ html[data-theme='light'] {
     padding-right: env(safe-area-inset-right);
   }
 
+  /* Installed PWA: no extra top chrome — content uses safe-area only. */
+  html.ironstack-pwa,
+  body.ironstack-pwa {
+    -webkit-touch-callout: none;
+  }
+
   /* Room for the persistent app tab bar (set by DashboardNav). */
   body.has-app-tabbar {
     padding-bottom: var(--app-tabbar-clearance);
@@ -547,6 +553,49 @@ body.has-guest-banner {
 .btn-pill-primary:active:not(:disabled) {
   filter: brightness(0.92);
   transform: scale(0.98);
+}
+
+.btn-pill-gold {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  background: var(--gold);
+  color: #17171a;
+  box-shadow: 0 0 28px -8px color-mix(in srgb, var(--gold) 55%, transparent);
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    opacity 0.15s ease,
+    filter 0.18s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-pill-gold:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+}
+
+.btn-pill-gold:active:not(:disabled) {
+  filter: brightness(0.92);
+  transform: scale(0.98);
+}
+
+.gold-radial-wash {
+  background: radial-gradient(
+    ellipse 70% 40% at 50% -5%,
+    color-mix(in srgb, var(--gold) 14%, transparent),
+    transparent 60%
+  );
 }
 
 .btn-pill-secondary {

@@ -4,6 +4,8 @@
   "phaseStep": "{phase} phase",
   "progressLabel": "Tour progress",
   "loadingStep": "Opening this section…",
+  "targetMissed": "Couldn't highlight this spot — the section may still be loading or isn't visible on your account.",
+  "targetMissedAction": "Continue anyway or skip the tour.",
   "next": "Next",
   "back": "Back",
   "skip": "Skip Tour",
@@ -12,7 +14,9 @@
   "askCoach": "Ask AI Coach",
   "deferredTitle": "Finish your workout first",
   "deferredBody": "You have an active session. We won't interrupt it. Start the tour later from Settings, or begin now only if you're ready to leave this screen.",
-  "startLater": "Start tour later",
+  "deferredRouteTitle": "Tour paused",
+  "deferredRouteBody": "The tour needs a different screen. Start it when you're ready, or restart later from Settings.",
+  "startLater": "Not now",
   "startNow": "Start tour now",
   "expectedTitle": "You should now see",
   "tipTitle": "Tip",
@@ -30,13 +34,21 @@
   },
   "intro": {
     "learnTitle": "WHAT YOU'LL LEARN",
+    "introPart1Title": "Welcome — part 1",
+    "introPart2Title": "Welcome — part 2",
     "learnItems": [
-      "Navigate with tabs and the ☰ menu",
-      "Build splits, browse exercises, and start sessions",
-      "Track history, use AI Coach, and customize settings",
-      "Connect via leaderboard, training circle, and Messages"
+      "Home navigation, shortcuts, and the full app menu",
+      "Recommended, AI-built, and home programs — plus the exercise library",
+      "Coach actions, offline training, social features, and Settings"
     ],
-    "duration": "We highlight each area on the real page — use Next to continue. This tour never starts a workout or changes your data."
+    "learnItemsPart1": [
+      "Home, tabs, menu, recommended and AI-built splits",
+      "Exercise library, mid-workout coach, and coach actions"
+    ],
+    "learnItemsPart2": [
+      "Home workouts, offline training, challenges, achievements, leaderboard, messages, and Settings"
+    ],
+    "duration": "We highlight each standout feature on the real page — use Next to continue. This tour never starts a workout or changes your data."
   },
   "steps": {
     "homeHero": {
@@ -59,6 +71,16 @@
       ],
       "expected": "A grid of tiles linking to Workout, Explore, History, and more."
     },
+    "homeTrainCta": {
+      "title": "Start training here",
+      "lead": "This is your fastest path — create a split if you need one, then start a session.",
+      "substeps": [
+        "No split yet? Create one in a couple of taps.",
+        "Already have a plan? Start Session opens it immediately.",
+        "You can always reach the same actions from the Train tab."
+      ],
+      "expected": "The gold Create split / Start session panel on Home."
+    },
     "navTabs": {
       "title": "Bottom tab bar",
       "lead": "On mobile, these tabs are your daily navigation.",
@@ -72,6 +94,7 @@
     "navMenu": {
       "title": "Full app menu",
       "lead": "Tap ☰ (top-left) to open every section — Exercises, Home Workouts, History, AI Coach, Settings, and Community.",
+      "leadCoachMark": "The ☰ menu lists every section — Exercises, History, Coach, Settings, and more.",
       "substeps": [
         "The menu slides in from the left on all screen sizes.",
         "Gold highlight shows your current page.",
@@ -81,33 +104,44 @@
     },
     "workoutSplits": {
       "title": "Your splits",
-      "lead": "Splits are training plans. This section lists plans you own or saved.",
+      "lead": "Your saved training plans live in My Splits — tap this link on Train to open the full list.",
+      "leadCoachMark": "My Splits holds every program you've saved — tap here on Train to browse and manage them.",
       "substeps": [
         "Each card shows days per week and focus area.",
         "Tap a card to open the split and pick a training day.",
         "Use My Splits to manage every saved program."
       ],
-      "expected": "Split cards or an empty state with Create Split."
+      "expected": "Manage your splits link on the Train tab."
+    },
+    "splitRecommendations": {
+      "title": "Recommended for you",
+      "lead": "Programs scored from your goals, schedule, and equipment — preview days, then save one to My Splits.",
+      "substeps": [
+        "Open Create Split to see this recommended option.",
+        "Suggestions are scored from your profile — goals, schedule, and gear.",
+        "Preview days and exercises, then save one to My Splits."
+      ],
+      "expected": "The Recommended splits card on the Create Split choice screen."
+    },
+    "aiSplitBuilder": {
+      "title": "Build a split with AI",
+      "lead": "Describe the program you want in plain language — IronStack drafts a custom split you can preview and save.",
+      "substeps": [
+        "Type what you want — days, focus, equipment, or goals.",
+        "Preview the draft before anything is saved.",
+        "Save it to My Splits when it looks right."
+      ],
+      "expected": "The AI split builder prompt on this page."
     },
     "workoutCreate": {
       "title": "Create a split",
-      "lead": "Start a new plan from Train — this opens the choice screen with three paths.",
+      "lead": "Pick how you want to build a program — all three paths start here.",
       "substeps": [
         "Create yourself: manual builder with days and exercises.",
         "Create with AI: describe your ideal program in plain language.",
-        "Recommended splits: profile-scored suggestions (next step)."
+        "Recommended splits: profile-scored suggestions ready to save."
       ],
       "tip": "You need an internet connection to create or save splits."
-    },
-    "splitRecommendations": {
-      "title": "Recommended splits",
-      "lead": "Profile-based suggestions are one of three Create Split options — tap here to browse scored programs.",
-      "substeps": [
-        "Programs are scored from your goals, schedule, and equipment.",
-        "Tap a card to preview days and exercises before saving.",
-        "Saved splits appear under My Splits on the Train tab."
-      ],
-      "expected": "The Recommended splits card on the Create Split choice screen."
     },
     "exercisesSearch": {
       "title": "Search & filters",
@@ -130,14 +164,14 @@
       "expected": "Scrollable list of exercise cards below the filters."
     },
     "homeWorkouts": {
-      "title": "Home workouts",
-      "lead": "Programs for bodyweight, bands, and dumbbells — separate from gym splits.",
+      "title": "Train with no gym",
+      "lead": "Bodyweight, bands, and dumbbells — home programs separate from gym splits, same logging once you start.",
       "substeps": [
         "Browse home-friendly programs on this page.",
-        "Use Workout for barbell/machine gym plans.",
+        "Gym barbell and machine plans live under Train.",
         "Logging works the same once you start a home session."
       ],
-      "note": "Pick the right entry point: gym splits under Workout, home programs here."
+      "note": "Pick the right entry point: gym splits under Train, home programs here."
     },
     "sessionStart": {
       "title": "Starting a session",
@@ -150,6 +184,16 @@
       ],
       "warning": "If you already have an active session, the tour may defer so it won't interrupt you.",
       "troubleshoot": "Accidentally started? Finish or Discard from the session menu, then restart the tour from Settings."
+    },
+    "sessionCoach": {
+      "title": "Coach mid-workout",
+      "lead": "Start a session from here. During the workout, a coach button appears so you can ask about form or programming with that session's real context.",
+      "substeps": [
+        "Open a split and start a workout when you're ready.",
+        "Look for the coach button while the session is live.",
+        "Ask about technique, swaps, or programming — it knows what you're lifting."
+      ],
+      "expected": "Start workout on Train — the in-session coach button appears once a session is active."
     },
     "history": {
       "title": "Workout history",
@@ -175,6 +219,16 @@
         "What should I do if my bench press stalls?"
       ]
     },
+    "coachAiActions": {
+      "title": "AI that takes action",
+      "lead": "Ask Coach to build a split, tweak your program, or plan your training — you confirm before anything saves.",
+      "substeps": [
+        "Type at the bottom — Coach can propose splits and session tweaks.",
+        "Review action cards before accepting any change.",
+        "Nothing writes to your account until you tap confirm."
+      ],
+      "expected": "Chat composer fixed to the bottom of the screen."
+    },
     "settingsAppearance": {
       "title": "Appearance & theme",
       "lead": "Personalize how IronStack looks and feels.",
@@ -186,13 +240,53 @@
       "expected": "Theme picker with three options in the highlighted panel."
     },
     "settingsTour": {
-      "title": "Restart this tour",
-      "lead": "Come back anytime — Restart App Tour replays this walkthrough from step one.",
+      "title": "Settings hub",
+      "lead": "Theme, language, offline mode, fitness profile, and Restart App Tour all live here.",
       "substeps": [
         "Useful after updates or if you skipped the first time.",
         "Won't start if you have an active workout — finish or defer first."
       ],
       "expected": "Restart App Tour button in the highlighted section."
+    },
+    "offlineMode": {
+      "title": "Train offline",
+      "lead": "IronStack keeps cached splits and session logging on this device — finish workouts without signal and they sync when you're back online. AI Coach, Messages, Leaderboard, and creating splits need a connection.",
+      "substeps": [
+        "Works offline: browse cached splits, start and finish sessions, log every set.",
+        "Needs a connection: AI Coach, Messages, Leaderboard, notifications, and create or edit splits.",
+        "The nav bar shows Offline or a sync queue when relevant."
+      ],
+      "expected": "Offline & sync reference panel with two capability columns."
+    },
+    "offlineTraining": {
+      "title": "Train with no signal",
+      "lead": "Save a split for offline. Log the whole session without connection — it syncs when you're back online.",
+      "substeps": [
+        "Tap Save for Offline on a split you want at the gym.",
+        "Start and finish sessions even without signal.",
+        "When you're back online, your sets sync automatically."
+      ],
+      "expected": "Save for Offline on a Train split card — or the Train splits area if you haven't saved a program yet."
+    },
+    "challenges": {
+      "title": "Challenge a friend",
+      "lead": "Pick a friend, a lift, and a target — send the challenge from here. Active and pending battles show on this page.",
+      "substeps": [
+        "Tap New challenge to pick a friend and lift.",
+        "Set a target weight and reps.",
+        "Track pending and active challenges on this page."
+      ],
+      "expected": "The New challenge panel at the top of Challenges."
+    },
+    "achievements": {
+      "title": "Earn achievements",
+      "lead": "Unlock medals as you train — track progress here and showcase favorites on your profile.",
+      "substeps": [
+        "Progress shows how many you've unlocked.",
+        "Browse categories to see what's still available.",
+        "Showcase earned medals on your profile."
+      ],
+      "expected": "Your achievement progress panel at the top of this page."
     },
     "socialLeaderboard": {
       "title": "Leaderboard",
@@ -228,14 +322,15 @@
     },
     "done": {
       "title": "You're ready to train",
-      "lead": "You've toured every major area. Pick your first move below.",
+      "lead": "Create a split, ask the AI Coach when you need help, and train offline when signal drops.",
       "checklist": [
-        "Navigate with tabs and ☰ menu",
-        "Start workouts from your splits",
-        "Browse exercises and home programs",
-        "Log sessions and review history",
-        "Ask AI Coach — confirm before saving plans",
-        "Customize settings and connect socially"
+        "Home welcome panel",
+        "Create split or start session from Home",
+        "Create a custom split on Train",
+        "AI Coach for plans and training questions",
+        "Offline & sync — train without signal",
+        "Start Session on your featured plan",
+        "Bottom tabs for daily navigation"
       ]
     }
   }

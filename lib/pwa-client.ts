@@ -35,7 +35,8 @@ export function isStandaloneDisplay(): boolean {
   const nav = window.navigator as NavigatorWithPwa
   if (nav.standalone === true) return true
 
-  for (const mode of ['standalone', 'fullscreen', 'minimal-ui'] as const) {
+  // Do not treat minimal-ui as standalone — it still shows the browser URL bar.
+  for (const mode of ['standalone', 'fullscreen'] as const) {
     try {
       if (window.matchMedia(`(display-mode: ${mode})`).matches) return true
     } catch {

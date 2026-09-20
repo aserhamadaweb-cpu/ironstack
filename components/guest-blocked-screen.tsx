@@ -21,7 +21,10 @@ export function GuestBlockedScreen({
   const tBlocked = useTranslations('guest.blocked')
 
   return (
-    <main className="relative flex min-h-[60svh] items-center justify-center px-4 py-12 text-foreground">
+    <main
+      className="relative flex min-h-[60svh] items-center justify-center px-4 py-12 text-foreground"
+      data-tour="guest-blocked"
+    >
       <div className="w-full max-w-sm text-center">
         <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10">
           <Dumbbell className="size-5 text-gold" aria-hidden="true" />

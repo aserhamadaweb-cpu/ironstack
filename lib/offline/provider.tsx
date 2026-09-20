@@ -19,6 +19,7 @@ import {
   revalidateAuthSession,
   setCachedUserId,
 } from '@/lib/offline/cache'
+import { refreshPinnedSplits } from '@/lib/offline/offline-splits'
 import { ensureExerciseLibraryCached } from '@/lib/exercise-library.client'
 import {
   hasRecentNavigationIntent,
@@ -122,17 +123,6 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         if (!cacheStale) return
       }
 
-      if (!isPoll) {
-        try {
-          await reconcileOutboxWithServer()
-          await purgeStaleOfflineItems()
-          setOrphanNotice(await getOrphanPurgeNotice())
-          await refreshCounts()
-        } catch {
-          /* IndexedDB purge is best-effort */
-        }
-      }
-
       const cacheStale = Date.now() - lastCacheAt.current > CACHE_TTL_MS
       const shouldCache = isReconnect || isManual || (isPoll && cacheStale)
       const shouldFlush = pending > 0 || isReconnect || isManual
@@ -145,8 +135,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       try {
         const userId = await revalidateAuthSession()
 
+        // Flush completed outbox *before* orphan purge / reconcile so a
+        // mid-workout in_progress server row cannot strand a finished local
+        // session as "synced" without finishSessionAction.
         if (shouldFlush) {
-          if (flushInFlight.current && isPoll) {
+          if (flushInFlight.current) {
+            // Another flush is running — do not clear locks / start a parallel flush.
             await refreshCounts()
           } else {
             flushInFlight.current = true
@@ -165,6 +159,17 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        if (!isPoll) {
+          try {
+            await reconcileOutboxWithServer()
+            await purgeStaleOfflineItems()
+            setOrphanNotice(await getOrphanPurgeNotice())
+            await refreshCounts()
+          } catch {
+            /* IndexedDB purge is best-effort */
+          }
+        }
+
         if (shouldCache) {
           let uid = userId
           if (!uid) {
@@ -175,16 +180,26 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
           if (uid) {
             await setCachedUserId(uid)
             await refreshWorkoutCache(uid)
+            await refreshPinnedSplits().catch(() => 0)
             lastCacheAt.current = Date.now()
           }
         }
 
         if (shouldRsc) {
           wasOffline.current = false
-          if (hasRecentNavigationIntent()) {
-            safeRouterRefresh(router, { delayMs: 1_500 })
-          } else {
-            router.refresh()
+          const path =
+            typeof window !== 'undefined' ? window.location.pathname : pathname
+          // Remounting an active session page via RSC refresh can wipe UI state
+          // before IndexedDB progress is re-hydrated. Keep the live workout.
+          const onSessionRoute =
+            /\/dashboard\/splits\/[^/]+\/session\/?$/.test(path)
+          const onOfflineShell = path === '/offline' || path.startsWith('/offline/')
+          if (!onSessionRoute && !onOfflineShell) {
+            if (hasRecentNavigationIntent()) {
+              safeRouterRefresh(router, { delayMs: 1_500 })
+            } else {
+              router.refresh()
+            }
           }
         }
       } catch (err) {
@@ -203,6 +218,9 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     setOnline(navigator.onLine)
     void resolveSessionUserId()
     void refreshCounts()
+    void import('@/lib/clear-client-user-state').then(({ requestPersistentStorage }) =>
+      requestPersistentStorage(),
+    )
 
     const scheduleSync = (reason: 'poll' | 'reconnect') => {
       if (!isDocumentVisible() && reason === 'poll') return

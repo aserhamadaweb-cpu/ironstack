@@ -173,3 +173,33 @@ export async function generateCustomSplitFromPromptAction(
     error: null,
   }
 }
+
+/**
+ * After onboarding: build the top profile-matched program and save it as the
+ * athlete's primary split so they can start a session immediately.
+ */
+export async function createFirstPersonalizedSplitAction(
+  override?: Partial<OnboardingData>,
+): Promise<
+  | { ok: true; splitId: string; name: string }
+  | { ok: false; error: string }
+> {
+  const guest = await rejectIfGuest()
+  if (guest) return { ok: false, error: guest }
+
+  const generated = await resolveSplitRecommendationsForAction(override)
+  if (generated.error || !generated.data?.length) {
+    return {
+      ok: false,
+      error: generated.error ?? 'Could not build a personalized program.',
+    }
+  }
+
+  const top = generated.data[0]
+  const saved = await applySplitRecommendationAction(top)
+  if (saved.error || !saved.data?.splitId) {
+    return { ok: false, error: saved.error ?? 'Could not save your program.' }
+  }
+
+  return { ok: true, splitId: saved.data.splitId, name: top.name }
+}

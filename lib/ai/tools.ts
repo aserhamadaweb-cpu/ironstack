@@ -261,12 +261,50 @@ const BASE_COACH_TOOL_DECLARATIONS: FunctionDeclaration[] = [
       required: ['action'],
     },
   },
+  {
+    name: 'propose_profile_interview',
+    description:
+      'Show a guided choice-button interview (same UX as Create Split with AI) so the athlete fills MISSING fitness-profile fields by tapping options instead of typing free-text answers. Call this whenever ATHLETE PROFILE lists MISSING fields and you need them for a split or personalized advice. Do NOT ask those questions as plain chat text. Does NOT save until they finish the card.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        resume_prompt: {
+          type: Type.STRING,
+          description:
+            'Optional: the athlete request to continue after they finish (e.g. their split ask).',
+        },
+      },
+    },
+  },
 ]
 
 export const COACH_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   ...BASE_COACH_TOOL_DECLARATIONS,
   ...AGENT_TOOL_DECLARATIONS,
 ]
+
+/** Tools the model may call while building/revising a split — keeps the turn short. */
+const SPLIT_BUILD_TOOL_NAMES = new Set([
+  'propose_split',
+  'propose_profile_interview',
+  'search_exercises',
+])
+
+/**
+ * Full tool surface normally; a tight allow-list for split-build / revise so the
+ * model cannot burn the round budget on PR/history lookups (those are pre-loaded).
+ */
+export function coachToolDeclarationsForMode(options?: {
+  splitBuildMode?: boolean
+  revisePendingSplit?: boolean
+}): FunctionDeclaration[] {
+  if (!options?.splitBuildMode && !options?.revisePendingSplit) {
+    return COACH_TOOL_DECLARATIONS
+  }
+  return COACH_TOOL_DECLARATIONS.filter((tool) =>
+    SPLIT_BUILD_TOOL_NAMES.has(tool.name ?? ''),
+  )
+}
 
 type ToolArgs = Record<string, unknown>
 
@@ -334,6 +372,8 @@ export async function executeCoachTool(
         return await proposeUpdateSplitTool(userId, args)
       case 'propose_session_action':
         return await proposeSessionTool(userId, args)
+      case 'propose_profile_interview':
+        return await proposeProfileInterviewTool(userId, args)
       case 'save_user_note':
         return await saveUserNote(
           userId,
@@ -723,5 +763,40 @@ async function proposeSessionTool(userId: string, args: ToolArgs) {
           ? 'This opens the live workout screen and starts a session for this program.'
           : undefined,
     },
+  }
+}
+
+async function proposeProfileInterviewTool(
+  userId: string,
+  args: ToolArgs,
+) {
+  const { loadAthleteContext } = await import('@/lib/ai/athlete-context')
+  const {
+    orderProfileInterviewFields,
+  } = await import('@/lib/ai/profile-interview')
+
+  const athlete = await loadAthleteContext(userId)
+  if (!athlete) {
+    return { error: 'no_data', message: 'Could not load your profile.' }
+  }
+  if (athlete.missingFields.length === 0) {
+    return {
+      error: 'nothing_missing',
+      message:
+        'Fitness profile already has the core fields. No interview needed — continue with their request.',
+    }
+  }
+
+  const resume =
+    typeof args.resume_prompt === 'string' ? args.resume_prompt.trim() : ''
+
+  return {
+    status: 'pending_confirmation',
+    interviewId: crypto.randomUUID(),
+    fields: orderProfileInterviewFields(athlete.missingFields),
+    preferredUnit: athlete.preferredUnit,
+    resumePrompt: resume || null,
+    message:
+      'Show the interview card. Do not ask these fields as free-text chat questions.',
   }
 }

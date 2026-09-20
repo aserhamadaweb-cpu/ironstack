@@ -7,13 +7,20 @@ import {
   getCompletedSessions,
   getLeaderboard,
   getProfile,
+  getSplitsForUser,
 } from '@/lib/data/queries'
+import { getPrimarySplitSummary } from '@/lib/data/split-recommendations-server'
 import { refreshSuggestions } from '@/lib/ai/suggestions'
 import { ltrEmbed } from '@/lib/bidi'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { fetchStreakStatus } from '@/lib/data/streak'
 import { isSameLocalDay } from '@/lib/session-store'
-import { getAuthIdentity } from '@/lib/supabase/server'
+import { createClient, getAuthIdentity } from '@/lib/supabase/server'
+import { onboardingDataFromUser } from '@/lib/data/onboarding-read'
+import {
+  completenessFromOnboarding,
+  getMissingProfileFields,
+} from '@/lib/profile-completeness'
 import { formatLiftLabel } from '@/lib/units'
 
 export const metadata = {
@@ -47,6 +54,11 @@ export default async function HomePage() {
     error: null,
   }
   let streakStatus = { streakDays: 0, hoursLeft: null as number | null }
+  let splitsResult: Awaited<ReturnType<typeof getSplitsForUser>> = {
+    data: [],
+    error: null,
+  }
+  let primarySplit = { id: null as string | null, name: null as string | null }
 
   try {
     const profileProbe = await getProfile(userId)
@@ -65,12 +77,16 @@ export default async function HomePage() {
       getAcceptedFriends(userId),
       getLeaderboard({ limit: 20 }),
       fetchStreakStatus(userId),
+      getSplitsForUser(userId),
+      getPrimarySplitSummary(userId),
     ])
     profileResult = fetched[0]
     sessionsResult = fetched[1]
     friendsResult = fetched[2]
     globalResult = fetched[3]
     streakStatus = fetched[4]
+    splitsResult = fetched[5]
+    primarySplit = fetched[6]
   } catch {
     /* Offline / unreachable Supabase — render Home with cached client data. */
   }
@@ -193,6 +209,51 @@ export default async function HomePage() {
   const friendsRows =
     friendIds.length === 0 ? [] : (friendsBoardResult.data ?? []).map(mapRow)
 
+  const customSplits = (splitsResult.data ?? []).filter(
+    (s) => s.user_id === userId && !s.is_system,
+  )
+  const customSplitCount = customSplits.length
+  const featuredSplitId =
+    (primarySplit.id &&
+    customSplits.some((s) => s.id === primarySplit.id)
+      ? primarySplit.id
+      : null) ??
+    customSplits[0]?.id ??
+    null
+  const featuredSplitName =
+    (featuredSplitId &&
+      (customSplits.find((s) => s.id === featuredSplitId)?.name ??
+        primarySplit.name)) ||
+    null
+  const completedSessionCount = sessions.length
+
+  let profileMissingCount = 0
+  let profileMissingLabels: string[] = []
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user && profile) {
+      const onboarding = onboardingDataFromUser(user, profile)
+      const missing = getMissingProfileFields(
+        completenessFromOnboarding(onboarding, {
+          weightKg:
+            profile.current_weight_kg != null
+              ? Number(profile.current_weight_kg)
+              : onboarding.weightKg,
+          heightCm: profile.height_cm ?? onboarding.heightCm,
+          gender: profile.gender ?? onboarding.gender,
+          birthDate: profile.birth_date,
+        }),
+      )
+      profileMissingCount = missing.length
+      profileMissingLabels = missing
+    }
+  } catch {
+    /* Offline / unreachable — skip completeness nudge. */
+  }
+
   return (
     <HomeDashboard
       displayName={displayName}
@@ -214,6 +275,12 @@ export default async function HomePage() {
       }}
       avatarUrl={profile?.avatar_url}
       liveDegraded={liveDegraded}
+      customSplitCount={customSplitCount}
+      completedSessionCount={completedSessionCount}
+      featuredSplitId={featuredSplitId}
+      featuredSplitName={featuredSplitName}
+      profileMissingCount={profileMissingCount}
+      profileMissingLabels={profileMissingLabels}
     />
   )
 }

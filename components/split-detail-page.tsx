@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -8,6 +8,7 @@ import {
   BookmarkPlus,
   CalendarDays,
   Check,
+  Download,
   Dumbbell,
   ListOrdered,
   Loader2,
@@ -27,6 +28,14 @@ import { splitExerciseDetailRef, type SplitExerciseDetailRef } from '@/lib/exerc
 import { saveRecommendedSplit, saveSharedSplit, setSplitShared } from '@/lib/data/save-split'
 import { SplitShareSheet } from '@/components/split-share-sheet'
 import { patchCachedSplitShared, refreshWorkoutCache } from '@/lib/offline/cache'
+import {
+  getOfflineSplitIds,
+  inspectOfflineSplit,
+  removeSplitFromOffline,
+  saveSplitForOffline,
+} from '@/lib/offline/offline-splits'
+import { offlineSaveErrorMessage } from '@/lib/offline/save-error-message'
+import { subscribeOfflineCacheChanged } from '@/lib/offline/cached-user-splits'
 import { useOfflineStatus } from '@/lib/offline/provider'
 import { countExercises, type SplitDetail } from '@/lib/split-data'
 
@@ -51,6 +60,7 @@ export function SplitDetailPage({
   const tCatalog = useTranslations('exerciseCatalog')
   const tOffline = useTranslations('offline')
   const tShare = useTranslations('splitShare')
+  const tWorkout = useTranslations('workout')
   const { online, hydrated } = useOfflineStatus()
   const offline = hydrated && !online
   const reduce = useReducedMotion()
@@ -63,11 +73,45 @@ export function SplitDetailPage({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isShared, setIsShared] = useState(Boolean(split.isShared))
   const [shareError, setShareError] = useState<string | null>(null)
+  const [offlineSaved, setOfflineSaved] = useState(false)
+  const [offlineIncomplete, setOfflineIncomplete] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  const [offlineProgress, setOfflineProgress] = useState<number | null>(null)
+  const [offlineError, setOfflineError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [sharePending, startShareTransition] = useTransition()
   const [shareSheetOpen, setShareSheetOpen] = useState(false)
   const [selectedExercise, setSelectedExercise] = useState<SplitExerciseDetailRef | null>(null)
   const totalExercises = countExercises(split)
+
+  useEffect(() => {
+    if (!isOwner) return
+    let cancelled = false
+    const loadPins = () => {
+      void Promise.all([
+        getOfflineSplitIds(),
+        inspectOfflineSplit(split.slug),
+      ])
+        .then(([ids, status]) => {
+          if (cancelled) return
+          const pinned = ids.includes(split.slug)
+          setOfflineSaved(pinned && status.ready)
+          setOfflineIncomplete(pinned && !status.ready)
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOfflineSaved(false)
+            setOfflineIncomplete(false)
+          }
+        })
+    }
+    loadPins()
+    const unsubscribe = subscribeOfflineCacheChanged(loadPins)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [isOwner, split.slug])
 
   const list: Variants = {
     hidden: {},
@@ -136,6 +180,51 @@ export function SplitDetailPage({
     })
   }
 
+  const handleToggleOffline = () => {
+    if (!isOwner || offlineBusy) return
+    requireAccount('saveSplit', () => {
+      if (offline) {
+        setOfflineError(tOffline('splitRequiresConnection'))
+        return
+      }
+      setOfflineError(null)
+      const shouldSave = !offlineSaved || offlineIncomplete
+      setOfflineBusy(true)
+      setOfflineProgress(shouldSave ? 0 : null)
+      void (async () => {
+        try {
+          if (shouldSave) {
+            const result = await saveSplitForOffline(split.slug, {
+              onProgress: (p) => setOfflineProgress(p.percent),
+            })
+            if (!result.ok) {
+              setOfflineError(offlineSaveErrorMessage(tOffline, result))
+              return
+            }
+            setOfflineSaved(true)
+            setOfflineIncomplete(false)
+          } else {
+            const result = await removeSplitFromOffline(split.slug)
+            setOfflineSaved(false)
+            setOfflineIncomplete(false)
+            if (result.retainedForSession) {
+              setOfflineError(tOffline('offlineUnsaveKeptForSession'))
+            } else if (result.retainedForMutation) {
+              setOfflineError(tOffline('offlineUnsaveKeptForMutation'))
+            }
+          }
+        } catch (err) {
+          setOfflineError(
+            err instanceof Error ? err.message : tOffline('offlineSaveFailed'),
+          )
+        } finally {
+          setOfflineBusy(false)
+          setOfflineProgress(null)
+        }
+      })()
+    })
+  }
+
   return (
     <div className="relative min-h-svh overflow-x-clip">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
@@ -177,6 +266,17 @@ export function SplitDetailPage({
                 SHARED
               </span>
             )}
+            {isOwner && offlineIncomplete ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[9px] font-bold tracking-[0.15em] text-destructive">
+                <Download className="size-3" aria-hidden="true" />
+                {tWorkout('offlineIncompleteBadge')}
+              </span>
+            ) : isOwner && offlineSaved ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[9px] font-bold tracking-[0.15em] text-gold">
+                <Download className="size-3" aria-hidden="true" />
+                {tWorkout('offlineSavedBadge')}
+              </span>
+            ) : null}
           </div>
 
           <h1 className="font-heading mt-4 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
@@ -222,6 +322,40 @@ export function SplitDetailPage({
             </button>
             {isOwner ? (
               <>
+                <button
+                  type="button"
+                  onClick={handleToggleOffline}
+                  disabled={offlineBusy || offline}
+                  title={offline ? tOffline('splitRequiresConnection') : undefined}
+                  aria-busy={offlineBusy}
+                  className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-5 text-xs font-bold tracking-[0.14em] transition disabled:opacity-60 ${
+                    offlineIncomplete
+                      ? 'border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/55'
+                      : offlineSaved
+                        ? 'border-gold/40 bg-gold/10 text-gold hover:border-gold/55'
+                        : 'border-silver/25 text-muted-foreground hover:border-gold/40 hover:text-gold'
+                  }`}
+                >
+                  {offlineBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="size-3.5" aria-hidden="true" />
+                  )}
+                  {offlineBusy
+                    ? offlineProgress != null
+                      ? tWorkout('offlineDownloading', { percent: offlineProgress })
+                      : tWorkout('offlineDownloadingSimple')
+                    : offlineIncomplete
+                      ? tWorkout('offlineRetryToggle')
+                      : offlineSaved
+                        ? tWorkout('offlineSavedToggle')
+                        : tWorkout('saveForOffline')}
+                </button>
+                {offlineError ? (
+                  <p role="alert" className="w-full text-sm text-destructive">
+                    {offlineError}
+                  </p>
+                ) : null}
                 {offline ? (
                   <span
                     className="inline-flex min-h-11 max-w-full flex-wrap items-center gap-2 rounded-full border border-dashed border-silver/20 bg-card/40 px-5 py-2 text-xs font-bold tracking-[0.14em] text-muted-foreground/70"

@@ -464,7 +464,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
             <Link
               href="/dashboard/ai-coach"
               aria-label="Open AI Coach"
-              className="group relative flex size-14 items-center justify-center rounded-full border border-gold/50 bg-gradient-to-br from-gold to-amber-600 shadow-[0_8px_30px_-6px_rgba(198,40,40,0.55)] transition-transform duration-200 hover:scale-110 active:scale-95"
+              className="group relative flex size-14 items-center justify-center rounded-full border border-gold/50 bg-gradient-to-br from-gold to-heat shadow-[0_8px_30px_-6px_color-mix(in_srgb,var(--gold)_55%,transparent)] transition-transform duration-200 hover:scale-110 active:scale-95"
             >
               {!reduce && (
                 <motion.span

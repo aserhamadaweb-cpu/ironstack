@@ -6,7 +6,9 @@ import { getLocale, getMessages } from 'next-intl/server'
 import { NavTransitionOverlay } from '@/components/nav-transition-overlay'
 import { PwaWindowChrome } from '@/components/pwa-window-chrome'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ActionFeedbackProvider } from '@/components/action-feedback'
 import { localeDir, type AppLocale } from '@/lib/i18n'
+import { PWA_STANDALONE_BOOT_SCRIPT } from '@/lib/pwa-standalone-boot'
 import { getServerAppearanceMode, getServerThemePreference } from '@/lib/theme-server'
 import './globals.css'
 
@@ -39,6 +41,9 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'IronStack',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
   icons: {
     icon: [
@@ -88,6 +93,11 @@ export default async function RootLayout({
       data-theme="dark"
       data-locale={appLocale}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: PWA_STANDALONE_BOOT_SCRIPT }}
+        />
+      </head>
       <body
         className={`antialiased ${
           appLocale === 'ar' ? 'font-arabic' : 'font-sans'
@@ -98,9 +108,11 @@ export default async function RootLayout({
             initialTheme={serverTheme}
             initialAppearance={serverAppearance}
           >
-            <PwaWindowChrome />
-            <NavTransitionOverlay />
-            {children}
+            <ActionFeedbackProvider>
+              <PwaWindowChrome />
+              <NavTransitionOverlay />
+              {children}
+            </ActionFeedbackProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}

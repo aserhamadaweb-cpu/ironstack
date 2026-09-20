@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Activity, BrainCircuit, ChevronRight, Compass, Dumbbell, History, Medal, Settings, Swords, Trophy } from 'lucide-react'
+import { Activity, BrainCircuit, ChevronRight, Compass, Dumbbell, History, Layers, Medal, Plus, Settings, Swords, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { AppShortcutGrid, type AppShortcut } from '@/components/app-shortcuts'
 import { BrandSocialLinks, DiscordIcon } from '@/components/brand-social-links'
@@ -20,6 +20,7 @@ import { TrainingCircleFeed } from '@/components/training-circle-feed'
 import { UserAvatar } from '@/components/user-avatar'
 import { useIsGuest } from '@/components/use-is-guest'
 import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
+import { ProfileCompletenessBanner } from '@/components/profile-completeness-banner'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import {
@@ -28,7 +29,9 @@ import {
 } from '@/lib/offline/cache'
 import { OfflineFloorHome } from '@/components/offline-floor-home'
 import { useOfflineStatus } from '@/lib/offline/provider'
+import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import { profileHref } from '@/lib/profile-path'
+import { createSplitChoiceHref } from '@/lib/split-create-paths'
 import type { WeightUnit } from '@/lib/units'
 
 function isPlaceholderGuestEmail(email: string) {
@@ -70,6 +73,12 @@ type HomeDashboardProps = {
   }
   avatarUrl?: string | null
   liveDegraded?: boolean
+  customSplitCount?: number
+  completedSessionCount?: number
+  featuredSplitId?: string | null
+  featuredSplitName?: string | null
+  profileMissingCount?: number
+  profileMissingLabels?: string[]
 }
 
 export function HomeDashboard({
@@ -88,6 +97,12 @@ export function HomeDashboard({
   leaderboard,
   avatarUrl,
   liveDegraded = false,
+  customSplitCount = 0,
+  completedSessionCount = 0,
+  featuredSplitId = null,
+  featuredSplitName = null,
+  profileMissingCount = 0,
+  profileMissingLabels = [],
 }: HomeDashboardProps) {
   const t = useTranslations('home')
   const tCommon = useTranslations('common')
@@ -96,16 +111,12 @@ export function HomeDashboard({
   const { isGuest: isGuestClient } = useIsGuest()
   const isGuest = isGuestProp || isGuestClient
   const { online, hydrated } = useOfflineStatus()
+  const embeddedSession = useEmbeddedSessionActive()
   const [discordNotice, setDiscordNotice] = useState<string | null>(null)
   const [cached, setCached] = useState<Awaited<
     ReturnType<typeof getHomeSnapshot>
   >>(null)
   const router = useRouter()
-
-  useEffect(() => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return
-    router.prefetch('/dashboard/workout')
-  }, [router])
 
   useEffect(() => {
     void getHomeSnapshot()
@@ -167,7 +178,35 @@ export function HomeDashboard({
   const resolvedLast = cached?.lastSessionCaption || lastSessionCaption
   const firstName = resolvedName.trim().split(/\s+/)[0] || resolvedName
 
-  if (hydrated && !online) {
+  const needsFirstSplit = customSplitCount <= 0
+  const canStartSession = Boolean(featuredSplitId)
+  const trainPrimaryHref = needsFirstSplit
+    ? createSplitChoiceHref()
+    : canStartSession
+      ? `/dashboard/splits/${featuredSplitId}/session`
+      : '/dashboard/workout'
+  const trainPrimaryLabel = needsFirstSplit
+    ? t('ctaCreateSplit')
+    : canStartSession
+      ? t('ctaStartSession')
+      : tCommon('openWorkout')
+  const trainSecondaryHref = needsFirstSplit
+    ? '/dashboard/workout'
+    : createSplitChoiceHref()
+  const trainSecondaryLabel = needsFirstSplit
+    ? t('ctaOpenTrain')
+    : t('ctaCreateSplit')
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    router.prefetch('/dashboard/workout')
+    router.prefetch(createSplitChoiceHref())
+    if (featuredSplitId) {
+      router.prefetch(`/dashboard/splits/${featuredSplitId}/session`)
+    }
+  }, [router, featuredSplitId])
+
+  if (hydrated && (!online || embeddedSession)) {
     return (
       <OfflineFloorHome
         displayName={resolvedName}
@@ -193,7 +232,7 @@ export function HomeDashboard({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/75 via-background/55 to-background" />
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,rgba(232,181,74,0.12),transparent_60%)]" />
+        <div className="absolute inset-0 gold-radial-wash" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_36%_28%_at_92%_20%,rgba(198,40,40,0.08),transparent_55%)]" />
         <div className="absolute top-[40%] -start-32 h-80 w-80 rounded-full bg-silver/[0.04] blur-3xl" />
       </div>
@@ -211,6 +250,10 @@ export function HomeDashboard({
         className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12"
       >
         <ActiveWorkoutBanner />
+        <ProfileCompletenessBanner
+          missingCount={profileMissingCount}
+          missingLabels={profileMissingLabels}
+        />
         <section
           className="is-panel relative mb-8 overflow-hidden p-5 sm:mb-10 sm:p-8 md:p-10"
           data-tour="home-hero"
@@ -276,6 +319,55 @@ export function HomeDashboard({
           </div>
         </section>
 
+        <section
+          className="is-panel mb-8 overflow-hidden p-5 sm:mb-10 sm:p-7"
+          data-tour="home-train-cta"
+        >
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="section-kicker">{t('trainCtaKicker')}</p>
+              <h2 className="font-heading mt-1 text-2xl font-bold text-headline">
+                {needsFirstSplit
+                  ? t('trainCtaCreateTitle')
+                  : completedSessionCount <= 0
+                    ? t('trainCtaFirstSessionTitle')
+                    : t('trainCtaContinueTitle')}
+              </h2>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                {needsFirstSplit
+                  ? t('trainCtaCreateBody')
+                  : featuredSplitName
+                    ? t('trainCtaStartBody', { name: featuredSplitName })
+                    : t('trainCtaContinueBody')}
+              </p>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[14rem]">
+              <Link
+                href={trainPrimaryHref}
+                className={`cta-pulse inline-flex min-h-12 items-center justify-center gap-2 px-6 ${CTA_PRIMARY}`}
+              >
+                {needsFirstSplit ? (
+                  <Plus className="size-4" aria-hidden="true" />
+                ) : (
+                  <Dumbbell className="size-4" aria-hidden="true" />
+                )}
+                {trainPrimaryLabel}
+              </Link>
+              <Link
+                href={trainSecondaryHref}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-silver/25 px-5 text-xs font-semibold tracking-[0.12em] text-muted-foreground transition hover:border-gold/35 hover:text-foreground"
+              >
+                {needsFirstSplit ? (
+                  <Dumbbell className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Layers className="size-3.5" aria-hidden="true" />
+                )}
+                {trainSecondaryLabel}
+              </Link>
+            </div>
+          </div>
+        </section>
+
         <section className="mb-8 sm:mb-10" data-tour="home-shortcuts">
           <p className="section-kicker mb-3">{t('jumpTo')}</p>
           <AppShortcutGrid
@@ -286,6 +378,11 @@ export function HomeDashboard({
                   label: tNav('tabWorkout'),
                   icon: Dumbbell,
                   tourIcon: 'home-shortcut-workout-icon',
+                },
+                {
+                  href: createSplitChoiceHref(),
+                  label: t('jumpCreateSplit'),
+                  icon: Plus,
                 },
                 {
                   href: '/dashboard/explore',
@@ -442,17 +539,17 @@ export function HomeDashboard({
             <div>
               <p className="section-kicker">{t('readyKicker')}</p>
               <h2 className="font-heading mt-1 text-2xl font-bold text-headline md:text-3xl">
-                {t('readyTitle')}
+                {needsFirstSplit ? t('trainCtaCreateTitle') : t('readyTitle')}
               </h2>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                {t('readyBody')}
+                {needsFirstSplit ? t('trainCtaCreateBody') : t('readyBody')}
               </p>
             </div>
             <Link
-              href="/dashboard/workout"
+              href={trainPrimaryHref}
               className={`cta-pulse shrink-0 px-8 ${CTA_PRIMARY}`}
             >
-              {tCommon('openWorkout')}
+              {trainPrimaryLabel}
             </Link>
           </div>
         </section>

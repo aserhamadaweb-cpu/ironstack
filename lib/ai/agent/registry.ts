@@ -11,6 +11,7 @@
  */
 
 import { BODY_AGENT_ACTIONS } from '@/lib/ai/agent/actions-body'
+import { FITNESS_PROFILE_AGENT_ACTIONS } from '@/lib/ai/agent/actions-fitness-profile'
 import { PREFERENCE_AGENT_ACTIONS } from '@/lib/ai/agent/actions-preferences'
 import { PROFILE_AGENT_ACTIONS } from '@/lib/ai/agent/actions-profile'
 import { SOCIAL_AGENT_ACTIONS } from '@/lib/ai/agent/actions-social'
@@ -24,6 +25,7 @@ import type { AnyAgentAction } from '@/lib/ai/agent/types'
 const ALL_ACTIONS: AnyAgentAction[] = [
   ...SPLIT_AGENT_ACTIONS,
   ...BODY_AGENT_ACTIONS,
+  ...FITNESS_PROFILE_AGENT_ACTIONS,
   ...PREFERENCE_AGENT_ACTIONS,
   ...PROFILE_AGENT_ACTIONS,
   ...SOCIAL_AGENT_ACTIONS,

@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Play } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { formatClock } from '@/lib/session-store'
 import type { ActiveWorkoutView } from '@/lib/active-workout'
 import { useActiveWorkout } from '@/lib/use-active-workout'
+import { useOfflineStatus } from '@/lib/offline/provider'
+import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 
 function useElapsed(startedAt: string) {
   const [elapsed, setElapsed] = useState(() =>
@@ -24,15 +27,32 @@ function useElapsed(startedAt: string) {
   return elapsed
 }
 
-export function ActiveWorkoutBanner() {
-  const { active } = useActiveWorkout()
-  if (!active) return null
-  return <ActiveWorkoutCard workout={active} />
+type ActiveWorkoutBannerProps = {
+  /** Offline: resume without navigating to a server session route. */
+  onResumeOffline?: (splitSlug: string) => void
 }
 
-export function ActiveWorkoutCard({ workout }: { workout: ActiveWorkoutView }) {
+export function ActiveWorkoutBanner({ onResumeOffline }: ActiveWorkoutBannerProps) {
+  const { active } = useActiveWorkout()
+  const embedded = useEmbeddedSessionActive()
+  if (!active || embedded) return null
+  return (
+    <ActiveWorkoutCard workout={active} onResumeOffline={onResumeOffline} />
+  )
+}
+
+export function ActiveWorkoutCard({
+  workout,
+  onResumeOffline,
+}: {
+  workout: ActiveWorkoutView
+  onResumeOffline?: (splitSlug: string) => void
+}) {
   const t = useTranslations('activeWorkout')
+  const router = useRouter()
+  const { online, hydrated } = useOfflineStatus()
   const elapsed = useElapsed(workout.startedAt)
+  const offline = !hydrated || !online
   const progressLabel =
     workout.totalExercises > 0
       ? t('exerciseProgress', {
@@ -42,6 +62,21 @@ export function ActiveWorkoutCard({ workout }: { workout: ActiveWorkoutView }) {
       : workout.setsLogged > 0
         ? t('setsLogged', { count: workout.setsLogged })
         : t('inProgress')
+
+  const resumeClass = `inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-bold tracking-[0.14em] ${CTA_PRIMARY}`
+
+  const resumeOfflineSafe = () => {
+    if (onResumeOffline) {
+      onResumeOffline(workout.splitId)
+      return
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      router.push(workout.href)
+      return
+    }
+    // Offline without an embedded launcher — gym floor hosts Start/Resume.
+    router.push('/dashboard/home')
+  }
 
   return (
     <section
@@ -63,13 +98,17 @@ export function ActiveWorkoutCard({ workout }: { workout: ActiveWorkoutView }) {
             {t('elapsed', { time: formatClock(elapsed) })} · {progressLabel}
           </p>
         </div>
-        <Link
-          href={workout.href}
-          className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-bold tracking-[0.14em] ${CTA_PRIMARY}`}
-        >
-          <Play className="size-4 fill-current" aria-hidden="true" />
-          {t('resume')}
-        </Link>
+        {offline ? (
+          <button type="button" onClick={resumeOfflineSafe} className={resumeClass}>
+            <Play className="size-4 fill-current" aria-hidden="true" />
+            {t('resume')}
+          </button>
+        ) : (
+          <Link href={workout.href} className={resumeClass}>
+            <Play className="size-4 fill-current" aria-hidden="true" />
+            {t('resume')}
+          </Link>
+        )}
       </div>
     </section>
   )

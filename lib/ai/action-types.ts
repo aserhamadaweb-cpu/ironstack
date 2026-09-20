@@ -1,6 +1,7 @@
 /** Structured coach actions. Gemini may propose these; only confirm endpoints persist. */
 
 import type { AgentPreview } from '@/lib/ai/agent/types'
+import type { ProfileMissingField } from '@/lib/profile-completeness'
 
 export type { AgentPreview }
 
@@ -78,6 +79,16 @@ export type AgentActionCard = {
   undone?: boolean
 }
 
+export type ProfileInterviewAction = {
+  type: 'profile_interview'
+  interviewId: string
+  fields: ProfileMissingField[]
+  preferredUnit: 'kg' | 'lb'
+  /** Original user ask to replay after the interview saves (e.g. build a split). */
+  resumePrompt?: string | null
+  status: 'pending' | 'saved' | 'cancelled'
+}
+
 export type CoachUiAction =
   | {
       type: 'split_preview'
@@ -91,6 +102,20 @@ export type CoachUiAction =
       status: 'pending' | 'done' | 'cancelled'
     }
   | AgentActionCard
+  | ProfileInterviewAction
+
+export function isProfileInterviewAction(
+  value: unknown,
+): value is ProfileInterviewAction {
+  if (!value || typeof value !== 'object') return false
+  const row = value as ProfileInterviewAction
+  return (
+    row.type === 'profile_interview' &&
+    typeof row.interviewId === 'string' &&
+    Array.isArray(row.fields) &&
+    row.fields.length > 0
+  )
+}
 
 export function isAgentPreview(value: unknown): value is AgentPreview {
   if (!value || typeof value !== 'object') return false

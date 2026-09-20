@@ -5,6 +5,7 @@ import {
   isSplitProposal,
   type CoachUiAction,
 } from '@/lib/ai/action-types'
+import { isProfileInterviewPayload } from '@/lib/ai/profile-interview'
 import { undoableActionNames } from '@/lib/ai/agent/undoable'
 
 export type AiConversation = {
@@ -71,6 +72,20 @@ export function extractCoachActionFromTrace(
 function actionFromPayload(name: string, result: unknown): CoachUiAction | undefined {
   if (!result || typeof result !== 'object') return undefined
 
+  if (
+    (name === 'propose_profile_interview' || !name) &&
+    isProfileInterviewPayload(result)
+  ) {
+    return {
+      type: 'profile_interview',
+      interviewId: result.interviewId,
+      fields: result.fields,
+      preferredUnit: result.preferredUnit === 'lb' ? 'lb' : 'kg',
+      resumePrompt: result.resumePrompt ?? null,
+      status: 'pending',
+    }
+  }
+
   const queued = result as {
     status?: string
     pendingActionId?: unknown
@@ -122,6 +137,8 @@ export function mapMessagesWithUsedTools(
   const applied = new Map<string, { splitId: string; href?: string }>()
   const discarded = new Set<string>()
   const cancelled = new Set<string>()
+  const interviewsSaved = new Set<string>()
+  const interviewsCancelled = new Set<string>()
   for (const row of messages) {
     const parsed = parseToolPayload(row)
     if (!parsed || typeof parsed.result !== 'object' || !parsed.result) continue
@@ -132,6 +149,7 @@ export function mapMessagesWithUsedTools(
       applied?: boolean
       discarded?: boolean
       cancelled?: boolean
+      interviewId?: string
     }
     if (
       result.applied &&
@@ -140,6 +158,20 @@ export function mapMessagesWithUsedTools(
       (parsed.name === 'confirm_create_split' || parsed.name === 'confirm_update_split')
     ) {
       applied.set(result.proposalId, { splitId: result.splitId, href: result.href })
+    }
+    if (
+      result.applied &&
+      result.interviewId &&
+      parsed.name === 'confirm_profile_interview'
+    ) {
+      interviewsSaved.add(result.interviewId)
+    }
+    if (
+      result.cancelled &&
+      result.interviewId &&
+      parsed.name === 'cancel_profile_interview'
+    ) {
+      interviewsCancelled.add(result.interviewId)
     }
     if (result.discarded && result.proposalId) {
       discarded.add(result.proposalId)
@@ -186,6 +218,13 @@ export function mapMessagesWithUsedTools(
         }
         if (action?.type === 'session_preview' && discarded.has(action.proposal.id)) {
           action = { ...action, status: 'done' }
+        }
+        if (action?.type === 'profile_interview') {
+          if (interviewsSaved.has(action.interviewId)) {
+            action = { ...action, status: 'saved' }
+          } else if (interviewsCancelled.has(action.interviewId)) {
+            action = { ...action, status: 'cancelled' }
+          }
         }
       }
       return {
