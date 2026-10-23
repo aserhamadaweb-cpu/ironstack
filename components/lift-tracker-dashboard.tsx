@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { History } from 'lucide-react'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { BackToTrainLink } from '@/components/back-to-train-link'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { LogLiftForm, type LogLiftPayload } from '@/components/log-lift-form'
 import {
   MOCK_PRS,
@@ -70,7 +70,7 @@ export function LiftTrackerDashboard() {
 
   return (
     <div className="min-h-svh">
-      <DashboardNav />
+
 
       <main className="mx-auto max-w-7xl px-6 py-8 md:py-10">
         <BackToTrainLink className="mb-6" />
@@ -112,13 +112,20 @@ export function LiftTrackerDashboard() {
                   key={record.id}
                   className="flex items-center justify-between px-6 py-4"
                 >
-                  <div>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ExerciseThumb
+                      muscle="Core"
+                      name={record.liftName}
+                      className="size-10"
+                    />
+                    <div>
                     <p className="font-medium text-foreground">
                       {record.liftName}
                     </p>
                     <p className="text-[10px] font-mono text-muted-foreground">
                       {formatLiftDate(record.loggedAt)}
                     </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="font-heading text-base font-semibold tabular-nums text-foreground">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import type { ExerciseDetailDto } from '@/lib/exercises/actions'
 import {
   INSTRUCTION_LANGUAGE_LABELS,
@@ -73,7 +74,14 @@ export function ExerciseDetailView({
           </button>
         ) : null}
 
-        <header className="space-y-2">
+        <header className="flex items-center gap-4">
+          <ExerciseThumb
+            muscle={titleCase(exercise.target) || 'Core'}
+            image={exercise.image}
+            name={exercise.name}
+            className="size-16"
+          />
+          <div className="min-w-0 space-y-2">
           <p className="section-kicker">{t('kicker')}</p>
           <h1 className="font-heading text-3xl font-bold text-foreground">
             {exercise.name}
@@ -85,6 +93,7 @@ export function ExerciseDetailView({
               titleCase(exercise.equipment),
             ].join(' · ')}
           </p>
+          </div>
         </header>
 
         <section className="overflow-hidden rounded-2xl border border-silver/15 bg-card">

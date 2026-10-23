@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { Plus, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { FindPeopleSheet } from '@/components/find-people-sheet'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
 import { useIsGuest } from '@/components/use-is-guest'
 import {
@@ -146,7 +147,13 @@ export function PersonalPrBoard() {
             className="rounded-xl border border-silver/10 bg-background/40 px-4 py-3"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-3">
+                <ExerciseThumb
+                  muscle="Core"
+                  name={record.liftName}
+                  className="size-11"
+                />
+                <div className="min-w-0">
                 <p className="font-heading text-base font-semibold text-foreground">
                   {record.liftName}
                 </p>
@@ -154,6 +161,7 @@ export function PersonalPrBoard() {
                   {formatLiftDate(record.loggedAt)}
                   {record.notes ? ` · ${record.notes}` : ''}
                 </p>
+                </div>
               </div>
               <div className="text-right">
                 <p className="font-heading text-lg font-bold tabular-nums text-gold">

@@ -9,7 +9,9 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
-import type { SplitRecommendation } from '@/lib/split-recommendations'
+import { ExerciseThumb } from '@/components/exercise-thumb'
+import { isCuratedTemplateId } from '@/lib/split-recommendations/curated-ids'
+import type { SplitRecommendation } from '@/lib/split-recommendations/types'
 
 type SplitRecommendationCardProps = {
   rec: SplitRecommendation
@@ -32,7 +34,12 @@ export function SplitRecommendationCard({
 }: SplitRecommendationCardProps) {
   const t = useTranslations('splitRecommendations')
   const isCustom = rec.templateId === 'custom_ai'
-  const matchLabel = isCustom ? t('customMatch') : t('matchScore', { score: rec.score })
+  const showMatch = !isCustom && !isCuratedTemplateId(rec.templateId)
+  const matchLabel = isCustom
+    ? t('customMatch')
+    : showMatch
+      ? t('matchScore', { score: rec.score })
+      : null
 
   return (
     <article
@@ -58,12 +65,14 @@ export function SplitRecommendationCard({
             <span className="rec-copy max-w-full break-words rounded-full border border-silver/25 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
               {rec.typeLabel}
             </span>
-            <LtrIsolate
-              when={isLatinFragment(matchLabel)}
-              className="rec-copy max-w-full break-words text-[10px] font-semibold text-gold"
-            >
-              {matchLabel}
-            </LtrIsolate>
+            {matchLabel ? (
+              <LtrIsolate
+                when={isLatinFragment(matchLabel)}
+                className="rec-copy max-w-full break-words text-[10px] font-semibold text-gold"
+              >
+                {matchLabel}
+              </LtrIsolate>
+            ) : null}
           </div>
           <p
             className={`rec-copy mt-2 break-words text-sm text-muted-foreground ${compact && !expanded ? 'line-clamp-2' : ''}`}
@@ -117,14 +126,20 @@ export function SplitRecommendationCard({
                 {day.exercises.slice(0, 6).map((ex) => (
                   <li
                     key={`${day.name}-${ex.name}`}
-                    className="grid min-w-0 max-w-full grid-cols-1 gap-0.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-2"
+                    className="flex min-w-0 max-w-full items-center gap-2"
                   >
-                    <span className="rec-copy min-w-0 text-foreground" dir="auto">
+                    <ExerciseThumb
+                      muscle={ex.muscles[0] ?? 'Core'}
+                      image={ex.image}
+                      name={ex.name}
+                      className="size-9"
+                    />
+                    <span className="rec-copy min-w-0 flex-1 text-foreground" dir="auto">
                       {ex.name}
                     </span>
                     <LtrIsolate
                       when={isLatinFragment(`${ex.sets}× ${ex.reps}`)}
-                      className="shrink-0 tabular-nums sm:text-end"
+                      className="shrink-0 tabular-nums"
                     >
                       {ex.sets}× {ex.reps}
                     </LtrIsolate>

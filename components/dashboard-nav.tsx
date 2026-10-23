@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Settings,
   Swords,
+  TrendingUp,
   Trophy,
   User,
   X,
@@ -78,7 +79,7 @@ type DashboardNavProps = {
   isGuest?: boolean
 }
 
-type TabId = 'home' | 'workout' | 'profile'
+type TabId = 'home' | 'workout' | 'progress' | 'profile'
 
 type NavId =
   | TabId
@@ -88,6 +89,7 @@ type NavId =
   | 'exercises'
   | 'homeWorkouts'
   | 'history'
+  | 'progress'
   | 'prs'
   | 'achievements'
   | 'coach'
@@ -107,6 +109,7 @@ const TOUR_NAV_ATTR: Partial<Record<NavId, string>> = {
   exercises: 'nav-exercises',
   homeWorkouts: 'nav-home-workouts',
   history: 'nav-history',
+  progress: 'nav-progress',
   coach: 'nav-coach',
   settings: 'nav-settings',
   messages: 'nav-messages',
@@ -117,7 +120,7 @@ type TabLink = {
   href: string
   id: TabId
   icon: typeof Home
-  labelKey: 'tabHome' | 'tabWorkout' | 'tabProfile'
+  labelKey: 'tabHome' | 'tabWorkout' | 'tabProgress' | 'tabProfile'
 }
 
 const tabs: TabLink[] = [
@@ -127,6 +130,12 @@ const tabs: TabLink[] = [
     id: 'workout',
     icon: ClipboardList,
     labelKey: 'tabWorkout',
+  },
+  {
+    href: '/dashboard/progress',
+    id: 'progress',
+    icon: TrendingUp,
+    labelKey: 'tabProgress',
   },
   {
     href: '/dashboard/profile',
@@ -146,6 +155,7 @@ const sidebarLinks: NavLink[] = [
   { href: '/dashboard/splits', id: 'splits', icon: Layers },
   { href: '/dashboard/exercises', id: 'exercises', icon: Dumbbell },
   { href: '/dashboard/history', id: 'history', icon: History },
+  { href: '/dashboard/progress', id: 'progress', icon: TrendingUp },
   { href: '/dashboard/records', id: 'prs', icon: Trophy },
   { href: '/dashboard/achievements', id: 'achievements', icon: Medal },
   { href: '/dashboard/challenges', id: 'challenges', icon: Swords },
@@ -157,7 +167,9 @@ const sidebarLinks: NavLink[] = [
 const TAB_PREFETCH_ROUTES = [
   '/dashboard/home',
   '/dashboard/workout',
+  '/dashboard/progress',
   '/dashboard/profile',
+  '/dashboard/splits',
 ]
 
 function isTabActive(pathname: string, id: TabId, href: string) {
@@ -172,6 +184,9 @@ function isTabActive(pathname: string, id: TabId, href: string) {
       pathname.startsWith('/dashboard/history') ||
       pathname.startsWith('/dashboard/sessions')
     )
+  }
+  if (id === 'progress') {
+    return pathname.startsWith('/dashboard/progress')
   }
   if (id === 'home') {
     return pathname === '/dashboard/home' || pathname.startsWith('/dashboard/home/')
@@ -215,6 +230,7 @@ function isSidebarActive(pathname: string, id: NavId, href: string) {
   if (id === 'explore') return pathname.startsWith('/dashboard/explore')
   if (id === 'board') return pathname.startsWith('/dashboard/leaderboard')
   if (id === 'history') return pathname.startsWith('/dashboard/history')
+  if (id === 'progress') return pathname.startsWith('/dashboard/progress')
   if (id === 'prs') return pathname.startsWith('/dashboard/records')
   if (id === 'achievements') return pathname.startsWith('/dashboard/achievements')
   if (id === 'challenges') return pathname.startsWith('/dashboard/challenges')
@@ -404,7 +420,6 @@ export function DashboardNav({
     : tabs
 
   const visibleSidebarLinks = sidebarLinks.filter((link) => {
-    if (isGuest && link.id === 'coach') return false
     if (floorMode) {
       return link.id === 'home'
     }
@@ -644,7 +659,7 @@ export function DashboardNav({
                   href={href}
                   data-tour={tourAttr}
                   className={className}
-                  prefetch={false}
+                  prefetch
                   onClick={(e) => {
                     onNavClick(href, e)
                   }}

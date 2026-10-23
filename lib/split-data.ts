@@ -19,6 +19,8 @@ export type Exercise = {
   muscle: MuscleGroup
   /** lift_types.category — e.g. compound, accessory, cardio. */
   category?: string
+  /** Catalog equipment is body weight — session logs reps only. */
+  bodyweight?: boolean
   /** Real photo URL from lift_types.image_url when available. */
   image?: string
   /** Looping catalog GIF so the athlete can follow the movement. */

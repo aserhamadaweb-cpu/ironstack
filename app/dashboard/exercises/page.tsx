@@ -2,11 +2,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseBrowseClient } from '@/components/exercise-browse-client'
 import { expectedSourceCount } from '@/lib/exercises/catalog'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/data/queries'
 
@@ -29,13 +26,7 @@ export default async function ExerciseBrowsePage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <main
         data-tour="page-exercises"
         className="mx-auto flex min-h-[70vh] max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8"

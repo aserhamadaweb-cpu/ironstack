@@ -5,8 +5,9 @@ import {
   loadExerciseCatalog,
   loadIdentityMapFile,
 } from '@/lib/exercises/catalog'
-import { SPLIT_LIBRARY_ALIASES } from '@/lib/exercises/identity'
+import { SPLIT_LIBRARY_ALIASES, resolveSplitAliasId } from '@/lib/exercises/identity'
 import { normalizeKey } from '@/lib/exercises/normalizers'
+import { isNoEquipment } from '@/lib/exercises/home-workouts'
 import { gifUrlFromImageUrl } from '@/lib/exercises/paths'
 
 /** Reads the Gym visual 1,324-exercise catalog (server-side only). */
@@ -85,7 +86,7 @@ export function resolveLibraryExercise(
   const byLegacy = bySlug.get(trimmed)
   if (byLegacy) return byLegacy
 
-  const aliasId = SPLIT_LIBRARY_ALIASES[trimmed]
+  const aliasId = resolveSplitAliasId(trimmed) ?? SPLIT_LIBRARY_ALIASES[trimmed]
   if (aliasId) {
     const fromOld = byOldId.get(aliasId)
     if (fromOld) return fromOld
@@ -155,6 +156,7 @@ export function enrichSplitFromLibrary(split: SplitDetail): SplitDetail {
             gifUrlFromImageUrl(library?.image ?? exercise.image) ??
             undefined,
           muscle,
+          bodyweight: isNoEquipment(library?.equipment),
           liftTypeId: exercise.liftTypeId ?? library?.id,
           catalogExerciseId: library?.id,
         }

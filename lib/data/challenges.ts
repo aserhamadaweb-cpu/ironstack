@@ -13,6 +13,7 @@ import { rejectIfGuest } from '@/lib/data/guest-guard'
 import { logServerError } from '@/lib/log'
 import { displayToKg, type WeightUnit } from '@/lib/units'
 import { fetchPublicProfilesByIds } from '@/lib/data/public-profiles'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
 
 type ProfileLite = Pick<
   PublicProfile,
@@ -21,7 +22,7 @@ type ProfileLite = Pick<
 
 type LiftLite = Pick<
   LiftType,
-  'id' | 'name' | 'slug' | 'muscle_group' | 'category'
+  'id' | 'name' | 'slug' | 'muscle_group' | 'category' | 'image_url'
 >
 
 function oneRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -77,7 +78,18 @@ async function hydrateChallenges(
     created_at: row.created_at,
     completed_at: row.completed_at,
     responded_at: row.responded_at,
-    lift_types: oneRelation(row.lift_types),
+    lift_types: (() => {
+      const lift = oneRelation(row.lift_types)
+      if (!lift) return null
+      return {
+        id: lift.id,
+        name: lift.name,
+        slug: lift.slug,
+        muscle_group: lift.muscle_group,
+        image_url:
+          lift.image_url || resolveLibraryExercise(lift.name)?.image || null,
+      }
+    })(),
     creator: profiles.get(row.creator_id) ?? null,
     opponent: profiles.get(row.opponent_id) ?? null,
     winner: row.winner_id ? (profiles.get(row.winner_id) ?? null) : null,
@@ -88,14 +100,17 @@ export async function listLiftTypesForChallenges(): Promise<LiftLite[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('lift_types')
-    .select('id, name, slug, muscle_group, category')
+    .select('id, name, slug, muscle_group, category, image_url')
     .order('name', { ascending: true })
 
   if (error) {
     logServerError('[challenges] lift_types', error.message)
     return []
   }
-  return (data ?? []) as LiftLite[]
+  return ((data ?? []) as LiftLite[]).map((lift) => ({
+    ...lift,
+    image_url: lift.image_url || resolveLibraryExercise(lift.name)?.image || null,
+  }))
 }
 
 export async function listMyChallenges(
@@ -106,7 +121,7 @@ export async function listMyChallenges(
   const { data, error } = await supabase
     .from('challenges')
     .select(
-      'id, creator_id, opponent_id, lift_type_id, target_weight, target_reps, status, winner_id, created_at, completed_at, responded_at, lift_types(id, name, slug, muscle_group)',
+      'id, creator_id, opponent_id, lift_type_id, target_weight, target_reps, status, winner_id, created_at, completed_at, responded_at, lift_types(id, name, slug, muscle_group, image_url)',
     )
     .or(`creator_id.eq.${userId},opponent_id.eq.${userId}`)
     .order('created_at', { ascending: false })

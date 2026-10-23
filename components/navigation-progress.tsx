@@ -1,133 +1,253 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Loader2, Wifi, WifiOff } from 'lucide-react'
 import { CTA_PRIMARY, CTA_SECONDARY } from '@/lib/accent'
 import {
+  OFFLINE_SETTLE_MS,
+  clearNavigationInFlight,
+  isRouteLoading,
+  isTourNavigationActive,
   markNavigationIntent,
+  notifyNavigationSettled,
   subscribeNavigationIntent,
+  subscribeRouteLoading,
+  type NavigationOutcome,
+  type NavigationSource,
 } from '@/lib/navigation-intent'
-import { useOfflineStatus } from '@/lib/offline/provider'
 
 /** Show a light "loading" cue after this — avoids flicker on fast nav. */
 const SHOW_MS = 280
 /** Honest "connection is slow" copy while still waiting. */
 const SLOW_MS = 4_000
-/** Stop waiting forever; offer retry. Soft nav failures often never change pathname. */
+/** Stop waiting forever; offer retry. Soft nav failures often never change the URL. */
 const FAIL_MS = 18_000
 
 type Phase = 'idle' | 'pending' | 'slow' | 'failed'
 
-function normalizePath(path: string) {
-  const bare = path.split('#')[0]?.split('?')[0] ?? path
-  if (bare.length > 1 && bare.endsWith('/')) return bare.slice(0, -1)
-  return bare || '/'
+type PendingNavigation = {
+  key: string
+  href: string
+  /** Committed URL when the navigation started — any change means it landed. */
+  from: string
+  source: NavigationSource
 }
 
-function pathsMatch(current: string, target: string) {
-  const a = normalizePath(current)
-  const b = normalizePath(target)
-  return a === b || a.startsWith(`${b}/`)
+function normalizePathname(pathname: string) {
+  if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1)
+  return pathname || '/'
+}
+
+/** Same-origin path + search, or null for external / unparsable targets. */
+function toKey(href: string): string | null {
+  try {
+    const url = new URL(href, window.location.href)
+    if (url.origin !== window.location.origin) return null
+    return normalizePathname(url.pathname) + url.search
+  } catch {
+    return null
+  }
+}
+
+/** Offline only once it has persisted — flaky links blip offline for a moment. */
+function useSettledOffline() {
+  const [offline, setOffline] = useState(false)
+  useEffect(() => {
+    let timer: number | undefined
+    const sync = () => {
+      window.clearTimeout(timer)
+      if (navigator.onLine) {
+        setOffline(false)
+        return
+      }
+      timer = window.setTimeout(() => setOffline(!navigator.onLine), OFFLINE_SETTLE_MS)
+    }
+    sync()
+    window.addEventListener('online', sync)
+    window.addEventListener('offline', sync)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('online', sync)
+      window.removeEventListener('offline', sync)
+    }
+  }, [])
+  return offline
 }
 
 /**
- * Global soft-navigation progress for flaky/slow connections.
- * Distinct from fully-offline floor pages: only when navigator reports online
- * (or unknown) and a client navigation is taking too long or never completes.
+ * Global navigation progress for slow / flaky connections. Every client
+ * navigation reaches it via `onRouterTransitionStart` (instrumentation-client),
+ * and full page loads via anchor clicks or Retry. A navigation only clears once
+ * the URL has committed and no route loading boundary is still on screen;
+ * otherwise it escalates to slow copy and then Retry — never a silent revert.
  */
 export function NavigationProgress() {
+  return (
+    <Suspense fallback={null}>
+      <NavigationProgressInner />
+    </Suspense>
+  )
+}
+
+function NavigationProgressInner() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const search = searchParams?.toString() ?? ''
+  const committed = normalizePathname(pathname ?? '/') + (search ? `?${search}` : '')
   const t = useTranslations('connection')
-  const { online, hydrated } = useOfflineStatus()
-  const fullyOffline = hydrated && !online
+  const offline = useSettledOffline()
 
   const [phase, setPhase] = useState<Phase>('idle')
-  const [target, setTarget] = useState<string | null>(null)
-  const targetRef = useRef<string | null>(null)
+  const [pending, setPending] = useState<PendingNavigation | null>(null)
+  const pendingRef = useRef<PendingNavigation | null>(null)
+  const committedRef = useRef(committed)
   const timersRef = useRef<{ show?: number; slow?: number; fail?: number }>({})
 
   const clearTimers = useCallback(() => {
     const timers = timersRef.current
-    if (timers.show) window.clearTimeout(timers.show)
-    if (timers.slow) window.clearTimeout(timers.slow)
-    if (timers.fail) window.clearTimeout(timers.fail)
+    window.clearTimeout(timers.show)
+    window.clearTimeout(timers.slow)
+    window.clearTimeout(timers.fail)
     timersRef.current = {}
   }, [])
 
-  const reset = useCallback(() => {
-    clearTimers()
-    targetRef.current = null
-    setTarget(null)
-    setPhase('idle')
-  }, [clearTimers])
-
-  const begin = useCallback(
-    (href: string) => {
-      if (fullyOffline) return
-      const next = normalizePath(href)
-      if (!next.startsWith('/')) return
-      if (pathsMatch(pathname, next)) return
-
+  const startTimers = useCallback(
+    (nav: PendingNavigation, showImmediately: boolean) => {
       clearTimers()
-      targetRef.current = next
-      setTarget(next)
-      setPhase('idle')
-
-      timersRef.current.show = window.setTimeout(() => {
-        if (targetRef.current === next) setPhase('pending')
-      }, SHOW_MS)
+      const still = () => pendingRef.current === nav
+      if (showImmediately) setPhase('pending')
+      else {
+        timersRef.current.show = window.setTimeout(() => {
+          if (still()) setPhase('pending')
+        }, SHOW_MS)
+      }
       timersRef.current.slow = window.setTimeout(() => {
-        if (targetRef.current === next) setPhase('slow')
+        if (still()) setPhase('slow')
       }, SLOW_MS)
       timersRef.current.fail = window.setTimeout(() => {
-        if (targetRef.current === next) setPhase('failed')
+        if (still()) setPhase('failed')
       }, FAIL_MS)
     },
-    [clearTimers, fullyOffline, pathname],
+    [clearTimers],
+  )
+
+  const settle = useCallback(
+    (outcome: NavigationOutcome) => {
+      const nav = pendingRef.current
+      clearTimers()
+      pendingRef.current = null
+      setPending(null)
+      setPhase('idle')
+      if (nav) notifyNavigationSettled(outcome, nav.key)
+    },
+    [clearTimers],
+  )
+
+  const checkDone = useCallback(() => {
+    const nav = pendingRef.current
+    if (!nav || nav.source === 'document') return
+    if (committedRef.current === nav.from) return
+    if (isRouteLoading()) return
+    settle('done')
+  }, [settle])
+
+  const begin = useCallback(
+    (href: string, source: NavigationSource) => {
+      if (source === 'route') return
+      // Back/forward must not open the slow-nav card or compete with a push.
+      if (source === 'traverse') return
+      // Tour owns between-step feedback — don't stack a second loading card.
+      if (isTourNavigationActive()) return
+      const key = toKey(href)
+      if (!key) return
+      const from = committedRef.current
+      if (key === from && source !== 'document') {
+        clearNavigationInFlight()
+        return
+      }
+      if (pendingRef.current?.key === key) return
+
+      const nav: PendingNavigation = { key, href, from, source }
+      pendingRef.current = nav
+      setPending(nav)
+      setPhase('idle')
+      startTimers(nav, false)
+    },
+    [startTimers],
   )
 
   useEffect(() => {
-    return subscribeNavigationIntent((path) => begin(path))
-  }, [begin])
+    committedRef.current = committed
+    checkDone()
+  }, [committed, checkDone])
+
+  useEffect(() => subscribeNavigationIntent(begin), [begin])
+
+  useEffect(
+    () =>
+      subscribeRouteLoading((count) => {
+        if (count === 0) checkDone()
+      }),
+    [checkDone],
+  )
 
   useEffect(() => {
-    const pending = targetRef.current
-    if (!pending) return
-    if (pathsMatch(pathname, pending)) reset()
-  }, [pathname, reset])
+    // Plain anchors the router does not handle become full page loads. React
+    // listens on `document` first, so a Link's preventDefault is already set.
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const anchor = target.closest('a[href]')
+      if (!(anchor instanceof HTMLAnchorElement)) return
+      if ((anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) {
+        return
+      }
+      const key = toKey(anchor.href)
+      if (!key) return
+      if (key === committedRef.current && anchor.hash) return
+      markNavigationIntent(anchor.href, 'document')
+    }
+    // Restored from bfcache: the old document's pending navigation is moot.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && pendingRef.current) settle('abandoned')
+    }
+    document.addEventListener('click', onClick)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      document.removeEventListener('click', onClick)
+      window.removeEventListener('pageshow', onPageShow)
+    }
+  }, [settle])
 
-  useEffect(() => {
-    if (fullyOffline) reset()
-  }, [fullyOffline, reset])
+  useEffect(() => clearTimers, [clearTimers])
 
   const retry = useCallback(() => {
-    const href = targetRef.current
-    if (!href) return
-    markNavigationIntent(href)
-    setPhase('pending')
-    clearTimers()
-    timersRef.current.slow = window.setTimeout(() => {
-      if (targetRef.current === href) setPhase('slow')
-    }, SLOW_MS)
-    timersRef.current.fail = window.setTimeout(() => {
-      if (targetRef.current === href) setPhase('failed')
-    }, FAIL_MS)
+    const nav = pendingRef.current
+    if (!nav) return
+    const next: PendingNavigation = { ...nav, source: 'document' }
+    pendingRef.current = next
+    setPending(next)
+    startTimers(next, true)
+    markNavigationIntent(nav.href, 'document')
     // Hard navigation is more reliable than soft RSC when the connection is flaky.
-    window.location.assign(href)
-  }, [clearTimers])
+    window.location.assign(nav.href)
+  }, [startTimers])
 
   const stay = useCallback(() => {
-    reset()
-  }, [reset])
+    settle('abandoned')
+  }, [settle])
 
-  if (fullyOffline || phase === 'idle' || !target) return null
+  if (offline || phase === 'idle' || !pending) return null
 
   const busy = phase === 'pending' || phase === 'slow'
 
   return (
     <div
+      data-nav-progress={phase}
       className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex justify-center px-3 pt-[max(0.75rem,env(safe-area-inset-top))]"
       role="status"
       aria-live="polite"

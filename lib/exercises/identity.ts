@@ -2,58 +2,125 @@ import type { IdentityMapFile, IdentityMatch } from '@/lib/exercises/types'
 import { normalizeKey, slugFromValue } from '@/lib/exercises/normalizers'
 
 /**
- * Curated map from ready-made / seeded split exercise names to free-exercise-db
- * entry ids — used to keep existing lift_types UUIDs when the catalog source changes.
+ * Curated map from ready-made / seeded / legacy free-exercise display names
+ * to Gym visual catalog source ids (4-digit). Keeps name-based resolution on
+ * the GIF catalog when splits still store old lift_types labels.
  */
 export const SPLIT_LIBRARY_ALIASES: Record<string, string> = {
-  'Barbell Bench Press': 'Barbell_Bench_Press_-_Medium_Grip',
-  'Seated Dumbbell Shoulder Press': 'Dumbbell_Shoulder_Press',
-  'Incline Dumbbell Press': 'Incline_Dumbbell_Press',
-  'Cable Lateral Raise': 'Cable_Seated_Lateral_Raise',
-  'Overhead Rope Triceps Extension': 'Cable_Rope_Overhead_Triceps_Extension',
-  'Triceps Pushdown': 'Triceps_Pushdown',
-  Deadlift: 'Barbell_Deadlift',
-  'Pull-Up': 'Pullups',
-  'Chest-Supported Row': 'Lying_T-Bar_Row',
-  'Face Pull': 'Face_Pull',
-  'Barbell Curl': 'Barbell_Curl',
-  'Incline Dumbbell Curl': 'Incline_Dumbbell_Curl',
-  'Back Squat': 'Barbell_Squat',
-  'Romanian Deadlift': 'Romanian_Deadlift',
-  'Leg Press': 'Leg_Press',
-  'Seated Leg Curl': 'Seated_Leg_Curl',
-  'Standing Calf Raise': 'Standing_Calf_Raises',
-  'Hanging Leg Raise': 'Hanging_Leg_Raise',
-  'Barbell Row': 'Bent_Over_Barbell_Row',
-  'Standing Overhead Press': 'Standing_Military_Press',
-  'Lat Pulldown': 'Wide-Grip_Lat_Pulldown',
-  'Dumbbell Lateral Raise': 'Side_Lateral_Raise',
-  'Skull Crusher': 'EZ-Bar_Skullcrusher',
-  'Hammer Curl': 'Hammer_Curls',
-  'Bulgarian Split Squat': 'Split_Squats',
-  'Leg Extension': 'Leg_Extensions',
-  'Seated Calf Raise': 'Seated_Calf_Raise',
-  Plank: 'Plank',
-  'Arnold Press': 'Arnold_Dumbbell_Press',
-  'Cable Fly': 'Flat_Bench_Cable_Flyes',
-  'Straight-Arm Pulldown': 'Straight-Arm_Pulldown',
-  'Cable Curl': 'Standing_Biceps_Cable_Curl',
-  'Rope Pushdown': 'Triceps_Pushdown_-_Rope_Attachment',
-  'Front Squat': 'Front_Barbell_Squat',
-  'Barbell Hip Thrust': 'Barbell_Hip_Thrust',
-  'Walking Lunge': 'Barbell_Walking_Lunge',
-  'Lying Leg Curl': 'Lying_Leg_Curls',
-  'Cable Crunch': 'Cable_Crunch',
-  'Seated Cable Row': 'Seated_Cable_Rows',
-  'Dumbbell Curl': 'Seated_Dumbbell_Curl',
-  'Chest Dip': 'Dips_-_Chest_Version',
-  'Push-Up (Burnout)': 'Pushups',
-  'Rear-Delt Fly': 'Cable_Rear_Delt_Fly',
-  'Cable Front Raise': 'Front_Cable_Raise',
-  'Barbell Shrug': 'Barbell_Shrug',
-  'Close-Grip Bench Press': 'Close-Grip_Barbell_Bench_Press',
-  'Overhead Rope Extension': 'Cable_Rope_Overhead_Triceps_Extension',
-  'Cable Hammer Curl': 'Cable_Hammer_Curls_-_Rope_Attachment',
+  // Ready-made / UI-friendly names
+  'Barbell Bench Press': '0025',
+  'Seated Dumbbell Shoulder Press': '0405',
+  'Incline Dumbbell Press': '0314',
+  'Cable Lateral Raise': '0178',
+  'Overhead Rope Triceps Extension': '0194',
+  'Triceps Pushdown': '0200',
+  Deadlift: '0032',
+  'Pull-Up': '0652',
+  Pullups: '0652',
+  'Chest-Supported Row': '0327',
+  'Face Pull': '0203',
+  'Barbell Curl': '0031',
+  'Incline Dumbbell Curl': '0318',
+  'Back Squat': '0043',
+  'Romanian Deadlift': '0085',
+  'Leg Press': '0739',
+  'Seated Leg Curl': '0599',
+  'Standing Calf Raise': '1372',
+  'Standing Calf Raises': '1372',
+  'Hanging Leg Raise': '0472',
+  'Barbell Row': '0027',
+  'Standing Overhead Press': '1456',
+  'Overhead Press': '1456',
+  'Lat Pulldown': '2616',
+  'Wide-Grip Lat Pulldown': '2616',
+  'Dumbbell Lateral Raise': '0334',
+  'Side Lateral Raise': '0334',
+  'Skull Crusher': '0060',
+  'Hammer Curl': '0313',
+  'Hammer Curls': '0313',
+  'Bulgarian Split Squat': '2368',
+  'Split Squats': '2368',
+  'Leg Extension': '0585',
+  'Leg Extensions': '0585',
+  'Seated Calf Raise': '0088',
+  Plank: '0464',
+  'Arnold Press': '2137',
+  'Arnold Dumbbell Press': '2137',
+  'Cable Fly': '0188',
+  'Flat Bench Cable Flyes': '0188',
+  'Straight-Arm Pulldown': '0238',
+  'Cable Curl': '0868',
+  'Standing Biceps Cable Curl': '0868',
+  'Rope Pushdown': '0200',
+  'Triceps Pushdown - Rope Attachment': '0200',
+  'Front Squat': '0042',
+  'Front Barbell Squat': '0042',
+  'Barbell Hip Thrust': '1409',
+  'Walking Lunge': '1460',
+  'Barbell Walking Lunge': '1460',
+  'Dumbbell Lunges': '0336',
+  'Lying Leg Curl': '0586',
+  'Lying Leg Curls': '0586',
+  'Cable Crunch': '0226',
+  'Seated Cable Row': '0180',
+  'Seated Cable Rows': '0180',
+  'Dumbbell Curl': '0294',
+  'Seated Dumbbell Curl': '0294',
+  'Chest Dip': '0251',
+  'Dips - Chest Version': '0251',
+  'Dips - Triceps Version': '0251',
+  Dip: '0251',
+  'Push-Up (Burnout)': '0662',
+  Pushups: '0662',
+  'Rear-Delt Fly': '0602',
+  'Reverse Flyes': '0602',
+  'Cable Rear Delt Fly': '0602',
+  'Cable Front Raise': '0162',
+  'Front Cable Raise': '0162',
+  'Barbell Shrug': '0095',
+  'Close-Grip Bench Press': '0030',
+  'Close-Grip Barbell Bench Press': '0030',
+  'Overhead Rope Extension': '0194',
+  'Cable Rope Overhead Triceps Extension': '0194',
+  'Cable Hammer Curl': '0165',
+  'Cable Hammer Curls - Rope Attachment': '0165',
+  // Legacy free-exercise-db labels still present on some lift_types rows
+  'Barbell Squat': '0043',
+  Squat: '0043',
+  'Barbell Bench Press - Medium Grip': '0025',
+  'Bench Press': '0025',
+  'Bent Over Barbell Row': '0027',
+  'Barbell Deadlift': '0032',
+  'Standing Military Press': '1456',
+  'Dumbbell Shoulder Press': '0405',
+  'Seated Dumbbell Press': '0405',
+  'Cable Seated Lateral Raise': '0178',
+  'Alternate Hammer Curl': '0313',
+  'Alternate Incline Dumbbell Curl': '0318',
+  'Dumbbell Flyes': '0308',
+  'Dumbbell Shrug': '0406',
+  'Palms-Up Barbell Wrist Curl Over A Bench': '1412',
+  'Adductor/Groin': '1775',
+  Adductor: '1775',
+  'Thigh Adductor': '1775',
+  'Air Bike': '0003',
+  'EZ-Bar Skullcrusher': '0060',
+  'Lying T-Bar Row': '0327',
+}
+
+const ALIAS_BY_KEY: Map<string, string> = (() => {
+  const map = new Map<string, string>()
+  for (const [name, id] of Object.entries(SPLIT_LIBRARY_ALIASES)) {
+    map.set(normalizeKey(name), id)
+  }
+  return map
+})()
+
+/** Resolve a display / legacy name to a Gym visual catalog id, if known. */
+export function resolveSplitAliasId(name: string): string | null {
+  const key = normalizeKey(name)
+  if (!key) return null
+  return ALIAS_BY_KEY.get(key) ?? null
 }
 
 export type OldCatalogRow = {
@@ -79,53 +146,33 @@ export function buildIdentityMap(
   sourceExercises: Array<{ id: string; name: string }>,
   oldCatalog: OldCatalogRow[],
 ): IdentityMapFile {
-  const oldById = new Map(oldCatalog.map((row) => [row.id, row]))
   const oldByName = new Map<string, OldCatalogRow>()
   const oldBySlugName = new Map<string, OldCatalogRow>()
 
   for (const row of oldCatalog) {
     const nameKey = normalizeKey(row.name)
     if (!oldByName.has(nameKey)) oldByName.set(nameKey, row)
-    const idAsName = normalizeKey(row.id.replace(/_/g, ' '))
-    if (!oldBySlugName.has(idAsName)) oldBySlugName.set(idAsName, row)
+    const slugKey = normalizeKey(row.id.replace(/_/g, ' '))
+    if (!oldBySlugName.has(slugKey)) oldBySlugName.set(slugKey, row)
   }
 
-  const aliasByName = new Map<string, string>()
-  for (const [alias, oldId] of Object.entries(SPLIT_LIBRARY_ALIASES)) {
-    aliasByName.set(normalizeKey(alias), oldId)
-  }
-
-  const usedOldIds = new Set<string>()
   const bySourceId: Record<string, IdentityMatch> = {}
+  const usedOldIds = new Set<string>()
 
-  for (const exercise of sourceExercises) {
-    const nameKey = normalizeKey(exercise.name)
+  for (const source of sourceExercises) {
+    const nameKey = normalizeKey(source.name)
     let match: IdentityMatch | null = null
 
-    const aliasOldId = aliasByName.get(nameKey)
-    if (aliasOldId && oldById.has(aliasOldId) && !usedOldIds.has(aliasOldId)) {
-      const old = oldById.get(aliasOldId)!
+    const byName = oldByName.get(nameKey)
+    if (byName) {
       match = {
-        oldCatalogId: old.id,
-        legacySlug: slugFromValue(old.id),
-        matchType: 'alias',
+        oldCatalogId: byName.id,
+        legacySlug: slugFromValue(byName.id),
+        matchType: 'name',
       }
-    }
-
-    if (!match) {
-      const byName = oldByName.get(nameKey)
-      if (byName && !usedOldIds.has(byName.id)) {
-        match = {
-          oldCatalogId: byName.id,
-          legacySlug: slugFromValue(byName.id),
-          matchType: 'name',
-        }
-      }
-    }
-
-    if (!match) {
+    } else {
       const bySlugName = oldBySlugName.get(nameKey)
-      if (bySlugName && !usedOldIds.has(bySlugName.id)) {
+      if (bySlugName) {
         match = {
           oldCatalogId: bySlugName.id,
           legacySlug: slugFromValue(bySlugName.id),
@@ -135,8 +182,8 @@ export function buildIdentityMap(
     }
 
     if (match) {
+      bySourceId[source.id] = match
       usedOldIds.add(match.oldCatalogId)
-      bySourceId[exercise.id] = match
     }
   }
 
@@ -161,19 +208,14 @@ export function buildIdentityMap(
   }
 }
 
-/**
- * Slug used to look up existing lift_types rows.
- * Never use a 4-digit source id as the slug — those would create new UUIDs.
- */
 export function liftSlugForLibraryExercise(
-  libraryId: string,
+  sourceId: string,
   name: string,
   legacySlug?: string | null,
 ): string {
   if (legacySlug?.trim()) return legacySlug.trim()
-  const id = libraryId.trim()
-  if (/^\d{4}$/.test(id)) {
-    return slugFromValue(name) || `gv_${id}`
+  if (/^\d{1,4}$/.test(sourceId.trim())) {
+    return `gv_${sourceId.trim().padStart(4, '0')}`
   }
-  return slugFromValue(id || name)
+  return slugFromValue(name) || slugFromValue(sourceId)
 }

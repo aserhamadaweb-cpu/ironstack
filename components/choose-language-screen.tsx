@@ -47,7 +47,7 @@ export function ChooseLanguageScreen({
   return (
     <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background px-4 py-12 text-foreground">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-radial from-gold/15 via-transparent to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[20rem] bg-radial from-gold/12 via-transparent to-transparent"
         aria-hidden="true"
       />
 
@@ -66,22 +66,18 @@ export function ChooseLanguageScreen({
       </header>
 
       <div className="relative z-10 w-full max-w-md">
-        <div className="fade-up mb-8 flex flex-col items-center gap-3 text-center">
-          <p className="text-xs font-semibold tracking-[0.35em] text-gold">
+        <div className="fade-up mb-6 flex flex-col items-center gap-2 text-center">
+          <p className="text-[11px] font-semibold tracking-[0.22em] text-gold">
             {t('kicker')}
           </p>
-          <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">
             {t('title')}
           </h1>
-          <p className="font-heading text-2xl font-bold tracking-tight text-muted-foreground sm:text-3xl">
-            {t('titleSecondary')}
-          </p>
-          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-            {t('subtitle')}
-          </p>
+          <p className="text-lg text-muted-foreground">{t('titleSecondary')}</p>
+          <p className="max-w-sm text-sm text-muted-foreground">{t('subtitle')}</p>
         </div>
 
-        <div className="fade-up rounded-2xl border border-gold/25 bg-card/60 p-5 shadow-2xl shadow-black/40 backdrop-blur-md sm:p-8">
+        <div className="fade-up">
           <div
             className="grid grid-cols-1 gap-3 sm:grid-cols-2"
             role="group"
@@ -97,16 +93,16 @@ export function ChooseLanguageScreen({
                   disabled={isPending}
                   aria-pressed={selected}
                   onClick={() => choose(value)}
-                  className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border px-5 py-6 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-70 sm:min-h-32 ${
+                  className={`flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-2xl border px-5 py-5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-70 ${
                     selected
                       ? 'border-gold/45 bg-gold/10 text-gold'
-                      : 'border-border/80 bg-background/60 text-foreground hover:border-gold/35 hover:bg-gold/5 active:scale-[0.99]'
+                      : 'border-border bg-card text-foreground hover:border-gold/35 hover:bg-gold/5 active:scale-[0.99]'
                   }`}
                 >
                   {busy ? (
                     <Loader2 className="size-6 animate-spin" aria-hidden="true" />
                   ) : (
-                    <span className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">
+                    <span className="font-heading text-xl font-bold tracking-tight">
                       {label}
                     </span>
                   )}

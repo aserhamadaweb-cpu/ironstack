@@ -13,7 +13,6 @@ import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ExerciseThumb } from '@/components/exercise-thumb'
 import {
-  EXERCISE_MUSCLE_FILTERS,
   EXERCISE_SORT_OPTIONS,
   collectCategories,
   collectEquipment,
@@ -26,9 +25,11 @@ import {
 import { isNoEquipment } from '@/lib/exercises/home-workouts'
 
 const SEARCH_DEBOUNCE_MS = 180
-const LIST_ROW_HEIGHT = 72
-const LIST_ROW_HEIGHT_WITH_ADD = 96
-const LIST_OVERSCAN = 8
+const LIST_ROW_HEIGHT = 92
+const LIST_ROW_HEIGHT_WITH_ADD = 108
+const LIST_OVERSCAN = 6
+const FILTER_SELECT =
+  'h-12 w-full min-w-0 rounded-xl border border-border bg-background px-3 text-base text-foreground outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 sm:text-sm'
 
 type ExercisePickerProps = {
   items: ExerciseCatalogItem[]
@@ -77,7 +78,6 @@ export function ExercisePicker({
 }: ExercisePickerProps) {
   const t = useTranslations('exercisePicker')
   const [search, setSearch] = useState('')
-  const [muscles, setMuscles] = useState<string[]>([])
   const [category, setCategory] = useState<string | null>(null)
   const [equipment, setEquipment] = useState<string | null>(null)
   const [target, setTarget] = useState<string | null>(null)
@@ -92,22 +92,14 @@ export function ExercisePicker({
     () =>
       filterAndSortExercises(items, {
         search: debouncedSearch,
-        muscles,
+        muscles: [],
         category,
         equipment,
         target,
         sort,
       }),
-    [items, debouncedSearch, muscles, category, equipment, target, sort],
+    [items, debouncedSearch, category, equipment, target, sort],
   )
-
-  const toggleMuscle = (muscle: string) => {
-    setMuscles((current) =>
-      current.includes(muscle)
-        ? current.filter((m) => m !== muscle)
-        : [...current, muscle],
-    )
-  }
 
   const handleRowActivate = (item: ExerciseCatalogItem) => {
     if (onOpenDetails) {
@@ -132,113 +124,66 @@ export function ExercisePicker({
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('searchPlaceholder')}
           aria-label={t('searchLabel')}
-          className="h-11 w-full rounded-xl border border-border bg-card/90 pe-4 ps-10 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20"
+          className="h-12 w-full rounded-2xl border border-border bg-card pe-4 ps-11 text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20"
         />
       </div>
 
-      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="shrink-0 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">
-            {t('category')}
-          </span>
-          <select
-            value={category ?? ''}
-            onChange={(e) => setCategory(e.target.value || null)}
-            className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background/70 px-3 text-sm text-foreground outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
-          >
-            <option value="">{t('allCategories')}</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {formatCategoryLabel(cat)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="shrink-0 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">
-            {t('sort')}
-          </span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as ExerciseSort)}
-            className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background/70 px-3 text-sm text-foreground outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
-          >
-            {EXERCISE_SORT_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {t(opt.labelKey)}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {(equipmentOptions.length > 0 || targetOptions.length > 0) && (
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-          {equipmentOptions.length > 0 && (
-            <label className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">
-                {t('equipment')}
-              </span>
-              <select
-                value={equipment ?? ''}
-                onChange={(e) => setEquipment(e.target.value || null)}
-                className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background/70 px-3 text-sm text-foreground outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
-              >
-                <option value="">{t('allEquipment')}</option>
-                {equipmentOptions.map((eq) => (
-                  <option key={eq} value={eq}>
-                    {formatCategoryLabel(eq)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {targetOptions.length > 0 && (
-            <label className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">
-                {t('target')}
-              </span>
-              <select
-                value={target ?? ''}
-                onChange={(e) => setTarget(e.target.value || null)}
-                className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-background/70 px-3 text-sm text-foreground outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
-              >
-                <option value="">{t('allTargets')}</option>
-                {targetOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {formatCategoryLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      )}
-
-      <div className="-mx-1 flex shrink-0 gap-1.5 overflow-x-auto px-1 pb-1">
-        {EXERCISE_MUSCLE_FILTERS.map((muscle) => {
-          const active = muscles.includes(muscle)
-          return (
-            <button
-              key={muscle}
-              type="button"
-              onClick={() => toggleMuscle(muscle)}
-              aria-pressed={active}
-              className={`min-h-9 shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.12em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
-                active
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-silver/15 bg-card/60 text-muted-foreground hover:border-gold/30 hover:text-foreground'
-              }`}
-            >
-              {muscle}
-            </button>
-          )
-        })}
+      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+        <select
+          aria-label={t('category')}
+          value={category ?? ''}
+          onChange={(e) => setCategory(e.target.value || null)}
+          className={FILTER_SELECT}
+        >
+          <option value="">{t('allCategories')}</option>
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {formatCategoryLabel(cat)}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t('sort')}
+          value={sort}
+          onChange={(e) => setSort(e.target.value as ExerciseSort)}
+          className={FILTER_SELECT}
+        >
+          {EXERCISE_SORT_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {t(opt.labelKey)}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t('equipment')}
+          value={equipment ?? ''}
+          onChange={(e) => setEquipment(e.target.value || null)}
+          className={FILTER_SELECT}
+        >
+          <option value="">{t('allEquipment')}</option>
+          {equipmentOptions.map((eq) => (
+            <option key={eq} value={eq}>
+              {formatCategoryLabel(eq)}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t('target')}
+          value={target ?? ''}
+          onChange={(e) => setTarget(e.target.value || null)}
+          className={FILTER_SELECT}
+        >
+          <option value="">{t('allTargets')}</option>
+          {targetOptions.map((option) => (
+            <option key={option} value={option}>
+              {formatCategoryLabel(option)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col" data-tour="exercises-grid">
-      <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+      <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
         {t('resultCount', { count: filtered.length })}
       </p>
 
@@ -364,7 +309,13 @@ function DefaultGridCard({
         className="flex flex-1 flex-col text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
         aria-label={t('viewDetailsNamed', { name: item.name })}
       >
-        <span className="line-clamp-2 text-sm font-semibold text-foreground">
+        <ExerciseThumb
+          muscle={item.muscleGroup ?? 'Core'}
+          image={item.imageUrl}
+          name={item.name}
+          className="mb-3 aspect-square w-full rounded-xl"
+        />
+        <span className="line-clamp-2 text-base font-semibold leading-snug text-foreground">
           {item.name}
         </span>
         <span className="mt-2 text-[10px] tracking-[0.1em] text-muted-foreground">
@@ -450,7 +401,7 @@ function VirtualExerciseList({
     <div
       ref={scrollerRef}
       onScroll={onScroll}
-      className={`min-h-[16rem] overflow-y-auto rounded-xl border border-silver/10 bg-card/30 ${className}`}
+      className={`min-h-0 flex-1 overflow-y-auto rounded-2xl border border-silver/10 bg-card/30 ${className}`}
       role="listbox"
       aria-label={t('searchLabel')}
     >
@@ -482,48 +433,40 @@ function VirtualExerciseList({
                 </button>
               ) : (
                 <div
-                  className={`flex h-full w-full items-center gap-2 border-b border-silver/10 px-2 sm:gap-3 sm:px-3 ${
+                  className={`flex h-full w-full items-center gap-3 border-b border-silver/10 px-3 ${
                     selected || recentlyAdded ? 'bg-gold/10 text-foreground' : ''
                   }`}
                 >
                   <button
                     type="button"
                     onClick={() => onActivate(item)}
-                    className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-1 text-start transition hover:bg-foreground/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+                    className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl py-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
                     aria-label={t('viewDetailsNamed', { name: item.name })}
                   >
                     <ExerciseThumb
                       muscle={item.muscleGroup ?? 'Core'}
                       image={item.imageUrl}
                       name={item.name}
-                      className="size-11"
+                      className="size-16 rounded-2xl"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-foreground">
+                      <span className="line-clamp-2 text-base font-semibold leading-snug text-foreground">
                         {item.name}
                       </span>
-                      <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                         <EquipmentBadge
                           equipment={item.equipment}
                           homeMode={homeMode}
                         />
                         {item.muscleGroup ? (
-                          <span className="truncate text-[11px] text-muted-foreground">
+                          <span className="truncate text-xs text-muted-foreground">
                             {item.muscleGroup}
-                            {item.category
-                              ? ` · ${formatCategoryLabel(item.category)}`
-                              : ''}
                           </span>
                         ) : null}
                       </span>
-                      {onAdd ? (
-                        <span className="mt-0.5 block text-[10px] font-semibold tracking-[0.1em] text-gold/80">
-                          {t('tapForDetails')}
-                        </span>
-                      ) : null}
                     </span>
                     {selected && !onAdd && (
-                      <span className="shrink-0 text-[10px] font-bold tracking-[0.14em] text-gold">
+                      <span className="shrink-0 text-xs font-bold tracking-[0.12em] text-gold">
                         {t('selected')}
                       </span>
                     )}
@@ -536,13 +479,13 @@ function VirtualExerciseList({
                         event.stopPropagation()
                         onAdd(item)
                       }}
-                      className={`inline-flex h-11 shrink-0 items-center justify-center rounded-full px-3 text-[11px] font-bold tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:px-4 ${
+                      className={`inline-flex h-12 min-w-[5.5rem] shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold tracking-[0.04em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                         recentlyAdded
                           ? 'border border-gold/50 bg-gold/15 text-gold'
                           : 'bg-primary text-primary-foreground hover:bg-primary/90'
                       }`}
                     >
-                      {recentlyAdded ? t('added') : t('addToSplit')}
+                      {recentlyAdded ? t('added') : t('add')}
                     </button>
                   ) : null}
                 </div>

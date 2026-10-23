@@ -2,21 +2,23 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Loader2, Sparkles } from 'lucide-react'
-import type { SplitRecommendation } from '@/lib/split-recommendations'
+import type { SplitRecommendation } from '@/lib/split-recommendations/types'
 import {
   applySplitRecommendationAction,
   generateSplitRecommendationsAction,
   skipSplitRecommendationAction,
 } from '@/lib/data/split-recommendation-actions'
 import { SplitRecommendationCard } from '@/components/split-recommendation-card'
+import { ReadySplitRow } from '@/components/ready-split-views'
 import {
   ActionFeedbackBanner,
   useActionFeedback,
 } from '@/components/action-feedback'
 
-const STANDALONE_REC_LIMIT = 2
+const STANDALONE_REC_LIMIT = 5
 
 function limitRecommendations(
   recs: SplitRecommendation[],
@@ -44,6 +46,7 @@ export function SplitRecommendationsPanel({
   onSkipped,
 }: SplitRecommendationsPanelProps) {
   const t = useTranslations('splitRecommendations')
+  const router = useRouter()
   const { notifySuccess, notifyError } = useActionFeedback()
   const [pending, startTransition] = useTransition()
   const [loading, setLoading] = useState(!initialRecommendations?.length)
@@ -94,7 +97,7 @@ export function SplitRecommendationsPanel({
     }
   }, [mode, initialRecommendations, initialError, fingerprint, t])
 
-  function handleSaved(_splitId?: string, programName?: string) {
+  function handleSaved(splitId?: string, programName?: string) {
     setSavedNotice(true)
     setSavedProgramName(programName ?? null)
     setError(null)
@@ -103,6 +106,10 @@ export function SplitRecommendationsPanel({
         ? t('savedBannerBodyNamed', { name: programName })
         : t('savedToSplits'),
     )
+    if (mode === 'standalone' && splitId) {
+      router.push('/dashboard/workout')
+      router.refresh()
+    }
   }
 
   function handleSelect(rec: SplitRecommendation) {
@@ -162,6 +169,21 @@ export function SplitRecommendationsPanel({
         </div>
       ) : recommendations.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('empty')}</p>
+      ) : mode === 'standalone' ? (
+        <div
+          className="space-y-3"
+          data-tour="split-recommendations-panel"
+          data-recommendation-fingerprint={fingerprint ?? undefined}
+        >
+          {recommendations.map((rec) => (
+            <ReadySplitRow
+              key={rec.id}
+              rec={rec}
+              busy={busy}
+              onSave={handleSelect}
+            />
+          ))}
+        </div>
       ) : (
         <div
           className="space-y-3"

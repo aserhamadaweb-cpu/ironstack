@@ -116,9 +116,6 @@ export async function applySplitRecommendationAction(
   | { data: { splitId: string }; error: null }
   | { data: null; error: string }
 > {
-  const guest = await rejectIfGuest()
-  if (guest) return { data: null, error: guest }
-
   const { userId } = await getAuthIdentity()
   if (!userId) return { data: null, error: 'Not signed in.' }
 

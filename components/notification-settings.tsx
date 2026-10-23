@@ -85,11 +85,13 @@ export function NotificationSettings({
       try {
         const reg = await navigator.serviceWorker.ready
         const sub = await reg.pushManager.getSubscription()
+        const endpoint = sub?.endpoint
         if (sub) {
           await sub.unsubscribe()
         }
-        // Clear all rows for this user (all devices that shared this account).
-        await removePushSubscriptionAction()
+        if (endpoint) {
+          await removePushSubscriptionAction(endpoint)
+        }
         setStatus('off')
         setMessage('Browser notifications turned off.')
       } catch (err) {
@@ -129,8 +131,8 @@ export function NotificationSettings({
               Browser push
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Follows, messages, friends, PRs, and shared-split saves can notify
-              this device.
+              Friends, messages, PRs, and training reminders can notify this
+              device.
             </p>
 
             {status === 'checking' && (

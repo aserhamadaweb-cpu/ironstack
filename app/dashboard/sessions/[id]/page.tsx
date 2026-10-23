@@ -7,7 +7,7 @@ import {
   getSessionById,
   getSessionLiftLogs,
 } from '@/lib/data/queries'
-import { isCardioCategory } from '@/lib/units'
+import { isBodyweightLogNote, isCardioCategory } from '@/lib/units'
 import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
 
@@ -87,7 +87,7 @@ export default async function SessionDetailPage({ params }: Params) {
     }
     completedFromLogs += 1
     const duration = Number(log.duration_seconds) || 0
-    if (duration > 0) continue
+    if (duration > 0 || isBodyweightLogNote(log.notes)) continue
     volumeFromLogs += (Number(log.weight) || 0) * (Number(log.reps) || 0)
   }
 
@@ -108,30 +108,46 @@ export default async function SessionDetailPage({ params }: Params) {
     string,
     {
       name: string
+      image: string | null
+      muscle: string | null
       isCardio: boolean
+      repsOnly: boolean
       sets: Array<{
         setNumber: number
         weight: number
         reps: number
         durationSeconds?: number | null
         skipped: boolean
+        repsOnly?: boolean
       }>
     }
   >()
 
   for (const log of logs) {
     const name = log.lift_types?.name ?? 'Lift'
+    const image = log.lift_types?.image_url ?? null
+    const muscle = log.lift_types?.muscle_group ?? null
     const isCardio =
       isCardioCategory(log.lift_types?.category) ||
       (Number(log.duration_seconds) || 0) > 0
     const key = log.lift_type_id
-    const current = byLift.get(key) ?? { name, isCardio, sets: [] }
+    const repsOnly = isBodyweightLogNote(log.notes)
+    const current = byLift.get(key) ?? {
+      name,
+      image,
+      muscle,
+      isCardio,
+      repsOnly,
+      sets: [],
+    }
+    if (repsOnly) current.repsOnly = true
     current.sets.push({
       setNumber: log.set_number ?? current.sets.length + 1,
       weight: Number(log.weight) || 0,
       reps: Number(log.reps) || 0,
       durationSeconds: log.duration_seconds,
       skipped: Boolean(log.is_skipped),
+      repsOnly,
     })
     byLift.set(key, current)
   }

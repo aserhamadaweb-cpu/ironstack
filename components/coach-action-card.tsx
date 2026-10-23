@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { safeDashboardHref, type CoachUiAction, type SplitProposal } from '@/lib/ai/action-types'
 import { CoachAgentActionCard } from '@/components/coach-agent-action-card'
 import { CoachProfileInterviewCard } from '@/components/coach-profile-interview-card'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { discardPendingSession } from '@/lib/offline/discard-session'
 
 function mapActionError(
@@ -185,12 +186,20 @@ export function CoachActionCard({
                 {day.exercises.map((exercise) => (
                   <li
                     key={`${dayIndex}-${exercise.exerciseId}`}
-                    className="text-xs text-foreground"
+                    className="flex items-center gap-2 text-xs text-foreground"
                   >
-                    <span className="font-semibold">{exercise.name}</span>
-                    <span className="text-muted-foreground">
-                      {' '}
-                      · {exercise.sets} × {exercise.reps} · {exercise.equipment}
+                    <ExerciseThumb
+                      muscle={exercise.muscle || 'Core'}
+                      image={exercise.image}
+                      name={exercise.name}
+                      className="size-9"
+                    />
+                    <span className="min-w-0">
+                      <span className="font-semibold">{exercise.name}</span>
+                      <span className="text-muted-foreground">
+                        {' '}
+                        · {exercise.sets} × {exercise.reps} · {exercise.equipment}
+                      </span>
                     </span>
                   </li>
                 ))}

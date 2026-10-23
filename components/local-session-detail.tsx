@@ -46,7 +46,7 @@ export function LocalSessionDetailFallback({
         return
       }
       const lifts = await getCachedLiftTypes().catch(() => [])
-      const nameById = new Map(lifts.map((row) => [row.id, row.name]))
+      const liftById = new Map(lifts.map((row) => [row.id, row]))
       const byLift = new Map<string, SessionDetailLift>()
       let volume = 0
       let completed = 0
@@ -55,22 +55,30 @@ export function LocalSessionDetailFallback({
         if (log.isSkipped) skipped += 1
         else {
           completed += 1
-          if (!(log.durationSeconds ?? 0)) {
+          if (!(log.durationSeconds ?? 0) && !log.bodyweight) {
             volume += (Number(log.weight) || 0) * (Number(log.reps) || 0)
           }
         }
-        const name = nameById.get(log.liftTypeId) ?? 'Lift'
+        const lift = liftById.get(log.liftTypeId)
+        const name = lift?.name ?? 'Lift'
         const isCardio =
-          isCardioCategory(
-            lifts.find((row) => row.id === log.liftTypeId)?.category,
-          ) || (log.durationSeconds ?? 0) > 0
-        const current = byLift.get(log.liftTypeId) ?? { name, isCardio, sets: [] }
+          isCardioCategory(lift?.category) || (log.durationSeconds ?? 0) > 0
+        const current = byLift.get(log.liftTypeId) ?? {
+          name,
+          image: lift?.image_url ?? null,
+          muscle: lift?.muscle_group ?? null,
+          isCardio,
+          repsOnly: Boolean(log.bodyweight),
+          sets: [],
+        }
+        if (log.bodyweight) current.repsOnly = true
         current.sets.push({
           setNumber: log.setNumber,
           weight: log.weight,
           reps: log.reps,
           durationSeconds: log.durationSeconds,
           skipped: log.isSkipped,
+          repsOnly: Boolean(log.bodyweight),
         })
         byLift.set(log.liftTypeId, current)
       }

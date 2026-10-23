@@ -9,6 +9,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { useActionFeedback } from '@/components/action-feedback'
 import { useGuestGate } from '@/components/guest-gate-provider'
+import { useMessageBadge } from '@/components/use-message-badge'
 import { useSuggestionBadge } from '@/components/use-suggestion-badge'
 import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import { useOfflineStatus } from '@/lib/offline/provider'
@@ -16,6 +17,15 @@ import { useOfflineStatus } from '@/lib/offline/provider'
 /** Hide during an in-progress workout so logging stays full-screen. */
 function shouldHideFloating(pathname: string) {
   return /\/splits\/[^/]+\/session(?:\/|$)/.test(pathname)
+}
+
+function ChatAlert({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="pointer-events-none absolute -top-2 left-1/2 z-10 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded-full border border-background bg-heat px-1 text-[10px] font-bold tabular-nums text-white">
+      {count > 9 ? '9+' : count}
+    </span>
+  )
 }
 
 type FloatingActionsProps = {
@@ -32,6 +42,8 @@ export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
   const { notifyError } = useActionFeedback()
   const tOffline = useTranslations('offline')
   const { count: suggestionCount } = useSuggestionBadge()
+  const onMessages = pathname.startsWith('/dashboard/messages')
+  const messageCount = useMessageBadge(onMessages)
   const [mounted, setMounted] = useState(false)
   const embeddedSession = useEmbeddedSessionActive()
 
@@ -42,7 +54,7 @@ export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
   if (!mounted || shouldHideFloating(pathname) || embeddedSession) return null
 
   const hideCoach = pathname.startsWith('/dashboard/ai-coach')
-  const hideMessages = pathname.startsWith('/dashboard/messages')
+  const hideMessages = onMessages
   const offline = hydrated && !online
 
   const openCoach = () => {
@@ -70,17 +82,23 @@ export function FloatingActions({ onGuestMessages }: FloatingActionsProps) {
             type="button"
             aria-label="Messages"
             onClick={onGuestMessages ?? (() => openUpgrade('messages'))}
-            className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
+            className="pointer-events-auto relative inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
           >
+            <ChatAlert count={messageCount} />
             <MessageSquare className="size-5" aria-hidden="true" />
           </button>
         ) : (
           <Link
             href="/dashboard/messages"
             prefetch={false}
-            aria-label="Messages"
-            className="pointer-events-auto inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
+            aria-label={
+              messageCount > 0
+                ? `Messages — ${messageCount} new`
+                : 'Messages'
+            }
+            className="pointer-events-auto relative inline-flex size-12 items-center justify-center rounded-full border border-gold/35 bg-card text-gold shadow-[0_8px_26px_-8px_rgba(0,0,0,0.7)] transition-transform duration-200 active:scale-95"
           >
+            <ChatAlert count={messageCount} />
             <MessageSquare className="size-5" aria-hidden="true" />
           </Link>
         ))}

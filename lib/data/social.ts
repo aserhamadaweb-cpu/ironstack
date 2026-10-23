@@ -12,6 +12,7 @@ import { listEarnedAchievementsForProfile } from '@/lib/data/achievements'
 import { buildActivityHeatmap, type HeatmapCell } from '@/lib/heatmap'
 import { isProfileUserIdParam, orderedDmPair } from '@/lib/profile-path'
 import { fetchStreakStatus } from '@/lib/data/streak'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
 import {
   fetchPublicProfileByUsernameOrId,
   fetchPublicProfilesByIds,
@@ -325,7 +326,7 @@ async function loadPublicProfileBundle(
     supabase
       .from('personal_records')
       .select(
-        'id, user_id, lift_type_id, weight, reps, is_current_pr, logged_at, lift_types(id, name, slug, muscle_group)',
+        'id, user_id, lift_type_id, weight, reps, is_current_pr, logged_at, lift_types(id, name, slug, muscle_group, image_url)',
       )
       .eq('user_id', profile.id)
       .eq('is_current_pr', true)
@@ -385,11 +386,19 @@ async function loadPublicProfileBundle(
     const lift = Array.isArray(row.lift_types)
       ? row.lift_types[0]
       : row.lift_types
+    const name = (lift as { name?: string } | null)?.name ?? 'Lift'
+    const catalog = resolveLibraryExercise(name)
     return {
       id: row.id,
-      liftName: (lift as { name?: string } | null)?.name ?? 'Lift',
+      liftName: name,
       muscleGroup:
-        (lift as { muscle_group?: string } | null)?.muscle_group ?? 'Other',
+        (lift as { muscle_group?: string } | null)?.muscle_group ??
+        catalog?.muscles[0] ??
+        'Other',
+      image:
+        (lift as { image_url?: string | null } | null)?.image_url ||
+        catalog?.image ||
+        null,
       weight: Number(row.weight) || 0,
       reps: Number(row.reps) || 0,
       loggedAt: row.logged_at,

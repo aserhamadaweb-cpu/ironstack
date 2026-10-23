@@ -90,6 +90,26 @@ export async function detectLikelyInstalledPwa(): Promise<boolean> {
   return false
 }
 
+const IN_APP_BROWSER_UA =
+  /WhatsApp|Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|Telegram|TikTok|Snapchat|Twitter|LinkedInApp|Pinterest/i
+
+/** True inside WhatsApp, Instagram, and other apps that show links in their own browser. */
+export function isInAppBrowser(userAgent: string, referrer = ''): boolean {
+  if (IN_APP_BROWSER_UA.test(userAgent)) return true
+  return referrer.startsWith('android-app://')
+}
+
+/**
+ * Android VIEW intent for this https URL, with no package pinned.
+ * The installed IronStack WebAPK can claim it; otherwise the fallback opens in the browser.
+ */
+export function androidAppIntentUrl(pageUrl: string): string {
+  const url = new URL(pageUrl)
+  const target = `${url.host}${url.pathname}${url.search}`
+  const fallback = encodeURIComponent(url.toString())
+  return `intent://${target}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${fallback};end`
+}
+
 /** Same-origin path + query + hash for “open in installed app”. */
 export function currentAppDeepLink(): string {
   if (typeof window === 'undefined') return '/'

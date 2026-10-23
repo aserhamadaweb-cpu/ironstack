@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, getAuthIdentity } from '@/lib/supabase/server'
-import { rejectIfGuest } from '@/lib/data/guest-guard'
 import type { PersonalRecord, Session } from '@/lib/database.types'
 import { isAlreadyExistsError } from '@/lib/offline/duplicate-error'
 import { logServerError } from '@/lib/log'
@@ -22,9 +21,6 @@ export async function startSessionAction(input: {
   sessionId?: string
   startedAt?: string
 }): Promise<ActionResult<Session>> {
-  const guest = await rejectIfGuest()
-  if (guest) return fail(guest)
-
   const supabase = await createClient()
   const {
     data: { user },
@@ -105,9 +101,6 @@ export async function logSetAction(input: {
   /** Cardio — stored as seconds on lift_logs.duration_seconds. */
   durationSeconds?: number
 }): Promise<ActionResult<{ id: string }>> {
-  const guest = await rejectIfGuest()
-  if (guest) return fail(guest)
-
   const supabase = await createClient()
   const {
     data: { user },
@@ -184,9 +177,6 @@ export async function finishSessionAction(input: {
     celebrations?: Array<{ id: string; title: string; body: string | null }>
   }
 > {
-  const guest = await rejectIfGuest()
-  if (guest) return fail(guest)
-
   const supabase = await createClient()
   const { userId } = await getAuthIdentity()
   if (!userId) return fail('You must be signed in to finish a session.')
@@ -438,9 +428,6 @@ export async function getActiveSessionAction(): Promise<
 export async function discardSessionAction(
   sessionId: string,
 ): Promise<ActionResult<{ id: string }>> {
-  const guest = await rejectIfGuest()
-  if (guest) return fail(guest)
-
   const supabase = await createClient()
   const { userId } = await getAuthIdentity()
   if (!userId) return fail('You must be signed in to discard a session.')

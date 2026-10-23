@@ -1,9 +1,6 @@
 import { redirect } from 'next/navigation'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { ExplorePageClient } from '@/components/explore-page'
 import { getLeaderboard, getProfile } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 
 export const metadata = {
@@ -25,13 +22,7 @@ export default async function ExplorePage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <main>
         <ExplorePageClient
           previewRows={boardResult.data ?? []}

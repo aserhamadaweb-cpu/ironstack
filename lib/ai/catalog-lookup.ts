@@ -7,6 +7,7 @@ import {
 import { exerciseToLibraryExercise } from '@/lib/exercises/adapters'
 import { getExerciseById, loadExerciseCatalog } from '@/lib/exercises/catalog'
 import { isHomeEquipment } from '@/lib/exercises/home-workouts'
+import { resolveSplitAliasId } from '@/lib/exercises/identity'
 import { normalizeKey } from '@/lib/exercises/normalizers'
 import type { LibraryExercise } from '@/lib/exercise-library'
 
@@ -122,7 +123,10 @@ export function aliasSearchQuery(raw: string): string {
 
 export function resolveExerciseIdAlias(raw: string): string | null {
   const key = normalizeKey(raw)
-  return EXERCISE_ID_ALIASES[key] ?? null
+  const fromCoach = EXERCISE_ID_ALIASES[key]
+  if (fromCoach) return fromCoach
+  // Shared split / legacy free-exercise labels → GIF catalog ids
+  return resolveSplitAliasId(raw)
 }
 
 function isShortQuery(key: string): boolean {

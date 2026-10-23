@@ -6,10 +6,12 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { hardNavigate } from '@/lib/navigation-intent'
 import {
   Dumbbell,
   Eye,
@@ -147,11 +149,27 @@ function LoginAuthForm() {
     return null
   })
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [termsNeedsAttention, setTermsNeedsAttention] = useState(false)
   const [guestLoading, setGuestLoading] = useState(false)
   const [username, setUsername] = useState('')
   const [usernameStatus, setUsernameStatus] = useState<string | null>(null)
+  const termsRef = useRef<HTMLLabelElement>(null)
 
   const isBusy = loading || oauthLoading !== null || guestLoading
+
+  function requireTermsAgreement() {
+    if (mode !== 'signup' || agreedToTerms) {
+      setTermsNeedsAttention(false)
+      return true
+    }
+    setTermsNeedsAttention(true)
+    showError(t('mustAgree'))
+    window.requestAnimationFrame(() => {
+      termsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      termsRef.current?.querySelector('input')?.focus()
+    })
+    return false
+  }
 
   function siteOrigin() {
     if (typeof window !== 'undefined' && window.location?.origin) {
@@ -241,10 +259,7 @@ function LoginAuthForm() {
   async function handleOAuth(provider: OAuthProvider) {
     setError(null)
 
-    if (mode === 'signup' && !agreedToTerms) {
-      showError(t('mustAgree'))
-      return
-    }
+    if (!requireTermsAgreement()) return
 
     setOauthLoading(provider)
 
@@ -277,7 +292,7 @@ function LoginAuthForm() {
         }
         if ('redirectTo' in result && result.redirectTo) {
           triggerIronStackNavTransition()
-          window.location.assign(result.redirectTo)
+          hardNavigate(result.redirectTo)
         }
         return
       }
@@ -323,35 +338,50 @@ function LoginAuthForm() {
     event.preventDefault()
     if (loading) return
     setError(null)
+    setTermsNeedsAttention(false)
 
     const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      showError(t('emailRequired'))
+      return
+    }
     if (!isValidEmail(trimmedEmail)) {
       showError(copy.invalidEmail)
+      return
+    }
+
+    let normalizedUsername = mode === 'signup' ? normalizeUsername(username) : ''
+    if (mode === 'signup') {
+      if (!normalizedUsername) {
+        normalizedUsername = normalizeUsername(trimmedEmail.split('@')[0] ?? '')
+      }
+      if (normalizedUsername.length < 3) {
+        normalizedUsername = `athlete${Date.now().toString(36).slice(-6)}`
+      }
+      const usernameError = validateUsernameFormat(normalizedUsername)
+      if (usernameError && usernameError !== 'Username is required.') {
+        showError(t('usernameFormat'))
+        setUsernameStatus(t('usernameFormat'))
+        return
+      }
+    }
+    if (!password) {
+      showError(t('passwordRequired'))
       return
     }
     if (password.length < 6) {
       showError(copy.weakPassword)
       return
     }
+    if (mode === 'signup' && !confirmPassword) {
+      showError(t('confirmPasswordRequired'))
+      return
+    }
     if (mode === 'signup' && password !== confirmPassword) {
       showError(copy.passwordMismatch)
       return
     }
-    if (mode === 'signup' && !agreedToTerms) {
-      showError(t('mustAgree'))
-      return
-    }
-
-    const normalizedUsername =
-      mode === 'signup' ? normalizeUsername(username) : ''
-    if (mode === 'signup') {
-      const usernameError = validateUsernameFormat(normalizedUsername)
-      if (usernameError) {
-        setError(usernameError)
-        notifyError(usernameError)
-        return
-      }
-    }
+    if (!requireTermsAgreement()) return
 
     setLoading(true)
 
@@ -360,8 +390,12 @@ function LoginAuthForm() {
         try {
           const availability = await checkSignupUsernameAction(normalizedUsername)
           if (!availability.available) {
-            showError(availability.error || t('usernameTaken'))
-            return
+            if (!username.trim()) {
+              normalizedUsername = `${normalizedUsername.slice(0, 20)}${Date.now().toString(36).slice(-6)}`
+            } else {
+              showError(availability.error || t('usernameTaken'))
+              return
+            }
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
@@ -494,7 +528,7 @@ function LoginAuthForm() {
         ? `${ONBOARDING_PATH}?next=${encodeURIComponent(returnNext)}`
         : ONBOARDING_PATH
       // Hard navigation picks up the latest build after signup (avoids stale RSC).
-      window.location.assign(onboardingPath)
+      hardNavigate(onboardingPath)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       showError(friendlyAuthError(message, copy))
@@ -519,9 +553,9 @@ function LoginAuthForm() {
   ]
 
   return (
-    <main className="relative flex min-h-svh items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 pt-[calc(env(safe-area-inset-top)+5.5rem)] pb-12 text-foreground sm:items-center">
+    <main className="relative flex min-h-svh items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 pt-[calc(env(safe-area-inset-top)+4.75rem)] pb-10 text-foreground sm:items-center">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-radial from-gold/15 via-transparent to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] bg-radial from-gold/12 via-transparent to-transparent"
         aria-hidden="true"
       />
 
@@ -541,7 +575,7 @@ function LoginAuthForm() {
           </Link>
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center rounded-full border border-gold/40 px-4 text-xs font-semibold tracking-[0.15em] text-gold transition-all duration-200 active:scale-95 active:bg-gold/10"
+            className="inline-flex min-h-11 items-center px-2 text-sm font-medium text-muted-foreground hover:text-foreground"
           >
             {t('backHome')}
           </Link>
@@ -549,19 +583,19 @@ function LoginAuthForm() {
       </header>
 
       <div className="relative z-10 w-full max-w-md">
-        <div className="fade-up mb-8 flex flex-col items-center gap-3 text-center">
-          <p className="text-xs font-semibold tracking-[0.35em] text-gold">
+        <div className="fade-up mb-5 flex flex-col items-center gap-2 text-center">
+          <p className="section-kicker">
             {mode === 'signin' ? t('welcomeBack') : t('joinIronstack')}
           </p>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {mode === 'signin' ? t('readyNextSet') : t('startStacking')}
           </h1>
-          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-sm text-sm text-muted-foreground">
             {mode === 'signin' ? t('signinBody') : t('signupBody')}
           </p>
         </div>
 
-        <div className="fade-up rounded-2xl border border-gold/25 bg-card/60 p-5 shadow-2xl shadow-black/40 backdrop-blur-md sm:p-8">
+        <div className="fade-up rounded-2xl border border-border/70 bg-card/80 p-4 sm:p-6">
           <div
             className="mb-6 grid grid-cols-2 rounded-xl border border-border bg-background/70 p-1"
             role="tablist"
@@ -576,10 +610,11 @@ function LoginAuthForm() {
                 setError(null)
                 setConfirmPassword('')
                 setAgreedToTerms(false)
+                setTermsNeedsAttention(false)
               }}
               className={`flex min-h-11 items-center justify-center rounded-lg text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                 mode === 'signin'
-                  ? 'border border-gold/30 bg-gold/10 text-gold'
+                  ? 'bg-foreground text-background'
                   : 'text-muted-foreground active:text-foreground'
               }`}
             >
@@ -592,10 +627,11 @@ function LoginAuthForm() {
               onClick={() => {
                 setMode('signup')
                 setError(null)
+                setTermsNeedsAttention(false)
               }}
               className={`flex min-h-11 items-center justify-center rounded-lg text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                 mode === 'signup'
-                  ? 'border border-gold/30 bg-gold/10 text-gold'
+                  ? 'bg-foreground text-background'
                   : 'text-muted-foreground active:text-foreground'
               }`}
             >
@@ -604,36 +640,65 @@ function LoginAuthForm() {
           </div>
 
           {mode === 'signup' ? (
-            <label className="mb-4 flex items-start gap-3 rounded-xl border border-border/80 bg-background/50 px-3 py-3 text-sm leading-relaxed text-muted-foreground">
-              <span className="flex size-11 shrink-0 items-center justify-center">
+            <div className="mb-3 flex flex-col gap-1.5">
+              <label
+                ref={termsRef}
+                className={`flex items-start gap-2.5 rounded-xl px-1 py-1 text-sm leading-snug ${
+                  termsNeedsAttention
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={agreedToTerms}
-                  onChange={(event) => setAgreedToTerms(event.target.checked)}
-                  className="size-5 accent-[var(--gold)]"
+                  aria-invalid={termsNeedsAttention || undefined}
+                  aria-describedby={
+                    termsNeedsAttention ? 'signup-terms-error' : undefined
+                  }
+                  onChange={(event) => {
+                    const checked = event.target.checked
+                    setAgreedToTerms(checked)
+                    if (checked) {
+                      setTermsNeedsAttention(false)
+                      setError((current) =>
+                        current === t('mustAgree') ? null : current,
+                      )
+                    }
+                  }}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--gold)]"
                 />
-              </span>
-              <span>
-                {t('agreePrefix')}{' '}
-                <Link
-                  href="/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-gold underline-offset-2 hover:underline"
+                <span>
+                  {t('agreePrefix')}{' '}
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-gold underline-offset-2 hover:underline"
+                  >
+                    {t('termsOfService')}
+                  </Link>{' '}
+                  {t('agreeAnd')}{' '}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-gold underline-offset-2 hover:underline"
+                  >
+                    {t('privacyPolicy')}
+                  </Link>
+                </span>
+              </label>
+              {termsNeedsAttention ? (
+                <p
+                  id="signup-terms-error"
+                  role="alert"
+                  className="px-1 text-xs font-medium text-destructive"
                 >
-                  {t('termsOfService')}
-                </Link>{' '}
-                {t('agreeAnd')}{' '}
-                <Link
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-gold underline-offset-2 hover:underline"
-                >
-                  {t('privacyPolicy')}
-                </Link>
-              </span>
-            </label>
+                  {t('mustAgree')}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           <div className="flex flex-col gap-3">
@@ -641,7 +706,7 @@ function LoginAuthForm() {
               <button
                 key={button.provider}
                 type="button"
-                disabled={isBusy || (mode === 'signup' && !agreedToTerms)}
+                disabled={isBusy}
                 onClick={() => void handleOAuth(button.provider)}
                 className={`flex h-11 w-full items-center justify-center gap-3 rounded-xl border text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60 ${button.className}`}
               >
@@ -657,7 +722,7 @@ function LoginAuthForm() {
               type="button"
               disabled={isBusy}
               onClick={() => void handleContinueAsGuest()}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gold/35 bg-gold/5 text-sm font-semibold text-gold transition-colors hover:bg-gold/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {guestLoading ? (
                 <Loader2 className="size-5 animate-spin" aria-hidden="true" />
@@ -666,12 +731,12 @@ function LoginAuthForm() {
             </button>
           </div>
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gold/20" />
-            <span className="text-xs font-medium tracking-wider text-gold/80/45 uppercase">
+          <div className="my-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium text-muted-foreground">
               {t('orEmail')}
             </span>
-            <div className="h-px flex-1 bg-gold/20" />
+            <div className="h-px flex-1 bg-border" />
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
@@ -683,7 +748,9 @@ function LoginAuthForm() {
                         className="text-sm font-medium text-muted-foreground"
                       >
                         {t('username')}{' '}
-                        <span className="text-gold">*</span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          ({t('usernameOptional')})
+                        </span>
                       </label>
                       <div className="relative">
                         <span className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -693,7 +760,6 @@ function LoginAuthForm() {
                           id="signup-username"
                           name="username"
                           type="text"
-                          required
                           autoComplete="username"
                           maxLength={30}
                           value={username}
@@ -705,7 +771,7 @@ function LoginAuthForm() {
                           onBlur={async () => {
                             const handle = normalizeUsername(username)
                             if (!handle) {
-                              setUsernameStatus(t('usernameRequired'))
+                              setUsernameStatus(null)
                               return
                             }
                             const check = await checkSignupUsernameAction(handle)
@@ -716,7 +782,6 @@ function LoginAuthForm() {
                             )
                           }}
                           placeholder={t('usernamePlaceholder')}
-                          aria-required="true"
                           className="h-11 w-full rounded-xl border border-border bg-card/90 py-2 pe-4 ps-8 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20"
                         />
                       </div>
@@ -832,10 +897,12 @@ function LoginAuthForm() {
                 ) : null}
 
                 <div className="mt-4 flex w-full flex-col items-center gap-4">
+                  <ActionFeedbackBanner error={error} className="w-full" />
+
                   <button
                     type="submit"
-                    disabled={isBusy || (mode === 'signup' && !agreedToTerms)}
-                    className="cta-pulse btn-pill btn-pill-primary inline-flex min-h-14 w-full items-center justify-center gap-2 px-10 py-4 text-sm font-bold tracking-[0.25em] transition-transform duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+                    disabled={isBusy}
+                    className="btn-pill btn-pill-primary inline-flex min-h-12 w-full items-center justify-center gap-2 px-8 py-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {loading ? (
                       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
@@ -843,14 +910,13 @@ function LoginAuthForm() {
                     {mode === 'signin' ? t('signIn') : t('createAccount')}
                   </button>
 
-                  <ActionFeedbackBanner error={error} className="w-full" />
-
                   <button
                     type="button"
                     onClick={() => {
                       setMode(mode === 'signin' ? 'signup' : 'signin')
                       setError(null)
                       setConfirmPassword('')
+                      setTermsNeedsAttention(false)
                     }}
                     className="text-sm text-muted-foreground transition hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
                   >

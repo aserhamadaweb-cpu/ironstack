@@ -10,6 +10,7 @@ import {
   recordsToPreviousBests,
   refreshWorkoutCache,
 } from '@/lib/offline/cache'
+import { hardNavigate } from '@/lib/navigation-intent'
 import { OFFLINE_CHANGED_EVENT } from '@/lib/offline/session-store'
 import {
   ensureSplitCachedForSession,
@@ -148,10 +149,10 @@ export function ActiveSessionGate({
             onExit ??
             (() => {
               if (typeof navigator !== 'undefined' && !navigator.onLine) {
-                window.location.assign('/offline')
+                hardNavigate('/offline')
                 return
               }
-              window.location.assign('/dashboard/home')
+              hardNavigate('/dashboard/home')
             })
           }
         />

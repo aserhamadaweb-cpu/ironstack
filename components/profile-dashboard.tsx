@@ -11,7 +11,6 @@ import {
   CoachMemoryPanel,
   type MemoryItem,
 } from '@/components/coach-memory-panel'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { MonthHeatmap } from '@/components/month-heatmap'
 import { PersonalRecordsSection,
   type PersonalRecordItem,
@@ -90,12 +89,7 @@ export function ProfileDashboard({
 
   return (
     <div className="min-h-svh">
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={avatarUrl}
-        profileHref={publicHref}
-      />
+
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">
         <motion.div

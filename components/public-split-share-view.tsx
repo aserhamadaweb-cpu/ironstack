@@ -22,6 +22,8 @@ import { saveSharedSplit } from '@/lib/data/save-split'
 import type { PublicSharedSplitView } from '@/lib/data/split-share'
 import { profileHref } from '@/lib/profile-path'
 import { buildAuthEntryHref } from '@/lib/auth-entry'
+import { ShareLinkAppHandoff } from '@/components/share-link-app-handoff'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 
 type PublicSplitShareClientProps = {
   split: PublicSharedSplitView
@@ -101,6 +103,7 @@ export function PublicSplitShareClient({
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-6 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
+      <ShareLinkAppHandoff />
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-silver/10 bg-background/95 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6">
         <button
           type="button"
@@ -217,17 +220,25 @@ export function PublicSplitShareClient({
                   {day.exercises.map((exercise) => (
                     <li
                       key={exercise.id}
-                      className="rounded-xl border border-silver/10 bg-background/40 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-xl border border-silver/10 bg-background/40 px-3 py-2.5"
                     >
-                      <p className="text-sm font-semibold text-foreground">
-                        {exercise.name}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {t('setsReps', {
-                          sets: exercise.sets,
-                          reps: exercise.reps,
-                        })}
-                      </p>
+                      <ExerciseThumb
+                        muscle="Core"
+                        image={exercise.image}
+                        name={exercise.name}
+                        className="size-11"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
+                          {exercise.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {t('setsReps', {
+                            sets: exercise.sets,
+                            reps: exercise.reps,
+                          })}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>

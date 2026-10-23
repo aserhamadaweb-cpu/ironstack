@@ -6,7 +6,6 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { ExercisePicker } from '@/components/exercise-picker'
 import { ExerciseDetailView } from '@/components/exercise-detail-view'
-import { HomeWorkoutFilters } from '@/components/home-workout-filters'
 import { EASE } from '@/components/reveal'
 import {
   libraryToCatalogItem,
@@ -15,11 +14,7 @@ import {
 import type { LibraryExercise } from '@/lib/exercise-library'
 import { loadExerciseDetail } from '@/lib/exercises/fetch-detail-client'
 import type { ExerciseDetailDto } from '@/lib/exercises/actions'
-import {
-  filterHomeExercises,
-  isHomeExercise,
-  type HomeWorkoutQuery,
-} from '@/lib/exercises/home-workouts'
+import { isHomeExercise } from '@/lib/exercises/home-workouts'
 import { useOverlayHistory } from '@/lib/use-overlay-history'
 
 type ExerciseLibraryOverlayProps = {
@@ -55,11 +50,6 @@ export function ExerciseLibraryOverlay({
   )
   const [detailsAdded, setDetailsAdded] = useState(false)
   const [homeOnly, setHomeOnly] = useState(initialHomeOnly)
-  const [homeQuery, setHomeQuery] = useState<HomeWorkoutQuery>({
-    kit: null,
-    region: null,
-    pack: null,
-  })
 
   const byId = useMemo(() => {
     const map = new Map<string, LibraryExercise>()
@@ -73,11 +63,8 @@ export function ExerciseLibraryOverlay({
   )
   const pickerItems = useMemo(() => {
     if (!homeOnly) return catalogItems
-    return filterHomeExercises(
-      catalogItems.filter(isHomeExercise),
-      homeQuery,
-    )
-  }, [catalogItems, homeOnly, homeQuery])
+    return catalogItems.filter(isHomeExercise)
+  }, [catalogItems, homeOnly])
 
   const { requestCloseDetails, requestCloseLibrary } = useOverlayHistory({
     onCloseDetails: () => {
@@ -180,7 +167,7 @@ export function ExerciseLibraryOverlay({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-[80] flex items-stretch justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm sm:items-center sm:p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -196,7 +183,7 @@ export function ExerciseLibraryOverlay({
         aria-modal="true"
         aria-label={detailsId ? tCatalog('title') : t('libraryAria')}
         tabIndex={-1}
-        className="relative flex h-[92svh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-silver/15 bg-background shadow-2xl sm:h-[85svh] sm:rounded-3xl"
+        className="relative flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden bg-background shadow-2xl sm:h-[min(94dvh,960px)] sm:rounded-3xl sm:border sm:border-silver/15"
         initial={{ y: reduce ? 0 : 64, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: reduce ? 0 : 64, opacity: 0 }}
@@ -207,18 +194,18 @@ export function ExerciseLibraryOverlay({
           {liveMessage}
         </p>
 
-        <div className="border-b border-silver/10 p-4 sm:p-5">
+        <div className="border-b border-silver/10 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-semibold tracking-[0.25em] text-gold">
                 {t('libraryTitle')}
               </p>
-              <h2 className="font-heading mt-0.5 text-lg font-bold text-foreground">
+              <h2 className="font-heading mt-0.5 truncate text-xl font-bold text-foreground sm:text-2xl">
                 {t('addingTo', { day: dayName })}
-                <span className="ms-2 text-xs font-semibold text-muted-foreground">
-                  {t('addedCount', { count: addedCount })}
-                </span>
               </h2>
+              <p className="text-sm text-muted-foreground">
+                {t('addedCount', { count: addedCount })}
+              </p>
             </div>
             <button
               type="button"
@@ -233,18 +220,18 @@ export function ExerciseLibraryOverlay({
 
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
-            className={`flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5 ${
+            className={`flex min-h-0 flex-1 flex-col px-4 pb-2 pt-3 sm:px-6 ${
               detailsId ? 'pointer-events-none absolute inset-0 opacity-0' : ''
             }`}
             inert={Boolean(detailsId)}
             aria-hidden={Boolean(detailsId)}
           >
-            <div className="mb-3 flex gap-1.5">
+            <div className="mb-3 grid shrink-0 grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setHomeOnly(false)}
                 aria-pressed={!homeOnly}
-                className={`inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-3 text-xs font-bold tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
+                className={`inline-flex min-h-12 items-center justify-center rounded-full border px-3 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                   !homeOnly
                     ? 'border-gold/60 bg-gold/15 text-gold'
                     : 'border-silver/15 bg-card/60 text-muted-foreground hover:text-foreground'
@@ -256,7 +243,7 @@ export function ExerciseLibraryOverlay({
                 type="button"
                 onClick={() => setHomeOnly(true)}
                 aria-pressed={homeOnly}
-                className={`inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-3 text-xs font-bold tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
+                className={`inline-flex min-h-12 items-center justify-center rounded-full border px-3 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                   homeOnly
                     ? 'border-gold/60 bg-gold/15 text-gold'
                     : 'border-silver/15 bg-card/60 text-muted-foreground hover:text-foreground'
@@ -265,15 +252,6 @@ export function ExerciseLibraryOverlay({
                 {tHome('catalogHome')}
               </button>
             </div>
-            {homeOnly ? (
-              <div className="mb-3 shrink-0 overflow-x-auto pb-1">
-                <HomeWorkoutFilters
-                  query={homeQuery}
-                  onChange={setHomeQuery}
-                  compact
-                />
-              </div>
-            ) : null}
             <ExercisePicker
               key={homeOnly ? 'home' : 'all'}
               items={pickerItems}
@@ -284,9 +262,8 @@ export function ExerciseLibraryOverlay({
               onOpenDetails={handleOpenDetails}
               variant="list"
               homeMode={homeOnly}
-              maxHeightClassName="min-h-[16rem] h-[min(40svh,24rem)] max-h-[min(40svh,24rem)]"
-              listClassName=""
-              className="flex min-h-[16rem] flex-1 flex-col"
+              maxHeightClassName="h-full max-h-none min-h-0"
+              className="flex min-h-0 flex-1 flex-col"
             />
           </div>
 
@@ -326,11 +303,11 @@ export function ExerciseLibraryOverlay({
         </div>
 
         {!detailsId ? (
-          <div className="border-t border-silver/10 p-4">
+          <div className="border-t border-silver/10 p-3 sm:px-6 sm:py-4">
             <button
               type="button"
               onClick={requestCloseLibrary}
-              className="flex h-12 w-full items-center justify-center rounded-full bg-primary text-sm font-bold tracking-[0.15em] text-primary-foreground transition-all hover:scale-[1.01] hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+              className="flex h-14 w-full items-center justify-center rounded-full bg-primary text-base font-bold tracking-[0.08em] text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
             >
               {t('doneBackTo', { day: dayName })}
             </button>

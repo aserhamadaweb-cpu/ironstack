@@ -27,12 +27,11 @@ export function readAppTourState(
   return { status, step, shouldAutoOffer }
 }
 
-/** Dashboard home URL, with ?tour=1 when the user should see the app tour. */
+/** Post-login home. The guided tour only starts from Settings or an explicit ?tour=1. */
 export function homePathWithTourIfNeeded(
-  user: User | null | undefined,
+  _user: User | null | undefined,
 ): string {
-  const { shouldAutoOffer } = readAppTourState(user)
-  return shouldAutoOffer ? `${HOME_PATH}?tour=1` : HOME_PATH
+  return HOME_PATH
 }
 
 export function buildAppTourMetadataPatch(input: {

@@ -13,6 +13,8 @@ export type LocalLiftLog = {
   durationSeconds: number | null
   isSkipped: boolean
   loggedAt: string
+  /** Reps-only set. Weight is not a load the athlete lifted. */
+  bodyweight?: boolean
 }
 
 export type LocalSessionPr = {
@@ -40,6 +42,8 @@ export type SessionUiLoggedExercise = {
   muscle: string
   liftTypeId: string
   isCardio: boolean
+  isBodyweight?: boolean
+  image?: string | null
   targetSets: number
   targetReps: string
   sets: Array<{

@@ -159,19 +159,24 @@ export function WorkoutSplitCard({
       </div>
 
       <div className="mt-auto flex flex-col gap-2 pt-5">
-        <button
-          type="button"
-          data-tour="workout-start-cta"
-          onClick={() => onStart(split.slug)}
-          className={START_CTA}
-        >
-          <Play className="size-4 fill-current" aria-hidden="true" />
-          {t('startSession')}
-        </button>
+        {compact ? null : (
+          <button
+            type="button"
+            onClick={() => onStart(split.slug)}
+            className={START_CTA}
+          >
+            <Play className="size-4 fill-current" aria-hidden="true" />
+            {t('startSession')}
+          </button>
+        )}
         <Link
           href={`/dashboard/splits/${split.slug}`}
           prefetch={false}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-silver/15 text-xs font-semibold tracking-[0.15em] text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold"
+          className={
+            compact
+              ? 'inline-flex min-h-11 w-full items-center justify-center text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline'
+              : 'inline-flex min-h-11 w-full items-center justify-center rounded-full border border-border text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground'
+          }
         >
           {t('viewSplit')}
         </Link>

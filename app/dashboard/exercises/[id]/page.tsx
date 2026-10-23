@@ -1,11 +1,8 @@
 import { Suspense } from 'react'
 import { notFound, redirect } from 'next/navigation'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseDetailClient } from '@/components/exercise-detail-client'
 import { getExerciseById } from '@/lib/exercises/catalog'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/data/queries'
 
@@ -38,13 +35,7 @@ export default async function ExerciseDetailPage({ params }: Params) {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
         <BackToTrainLink />
         <Suspense fallback={null}>

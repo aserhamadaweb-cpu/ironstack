@@ -201,7 +201,7 @@ export const AGENT_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'propose_notification_setting',
     description:
-      'Preview turning one in-app notification category on or off. Keys: friend_request, friend_accepted, new_follower, new_message, message_request, pr_achievement, split_saved, unfinished_session.',
+      'Preview turning one in-app notification category on or off. Keys: friend_request, friend_accepted, new_follower, new_message, message_request, pr_achievement, split_saved, unfinished_session, streak_reminder, inactivity_reminder, train_today, weekly_recap, challenge_reminder.',
     parameters: {
       type: Type.OBJECT,
       properties: {

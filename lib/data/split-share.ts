@@ -19,6 +19,7 @@ import { sendGroupMessageAction } from '@/lib/data/group-chats'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rejectIfGuest } from '@/lib/data/guest-guard'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
 import type { SplitDetailRow } from '@/lib/database.types'
 
 const SPLIT_SELECT = `
@@ -58,6 +59,7 @@ export type PublicSharedSplitExercise = {
   name: string
   sets: number
   reps: string
+  image: string | null
 }
 
 export type PublicSharedSplitDay = {
@@ -109,16 +111,20 @@ function adaptPublicSplitRow(
       subtitle: day.subtitle,
       exercises: [...(day.split_day_exercises ?? [])]
         .sort((a, b) => a.exercise_order - b.exercise_order)
-        .map((exercise) => ({
-          id: exercise.id,
-          name: exercise.lift_types?.name ?? 'Exercise',
-          sets: exercise.target_sets,
-          reps: formatTargetReps(
-            exercise.target_reps_min,
-            exercise.target_reps_max,
-            exercise.lift_types?.category === 'cardio' ? '30' : '8–12',
-          ),
-        })),
+        .map((exercise) => {
+          const name = exercise.lift_types?.name ?? 'Exercise'
+          return {
+            id: exercise.id,
+            name,
+            sets: exercise.target_sets,
+            reps: formatTargetReps(
+              exercise.target_reps_min,
+              exercise.target_reps_max,
+              exercise.lift_types?.category === 'cardio' ? '30' : '8–12',
+            ),
+            image: resolveLibraryExercise(name)?.image ?? null,
+          }
+        }),
     }))
 
   const exerciseCount = schedule.reduce(

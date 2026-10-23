@@ -20,6 +20,7 @@ type OfflineFloorWorkoutProps = {
   avatarUrl?: string | null
   profileHref?: string
   isGuest?: boolean
+  includeNav?: boolean
 }
 
 export function OfflineFloorWorkout({
@@ -27,6 +28,7 @@ export function OfflineFloorWorkout({
   avatarUrl,
   profileHref,
   isGuest = false,
+  includeNav = true,
 }: OfflineFloorWorkoutProps) {
   const t = useTranslations('offline')
   const { pendingCount } = useOfflineStatus()
@@ -79,13 +81,15 @@ export function OfflineFloorWorkout({
         <div className="absolute inset-0 gold-radial-wash" />
       </div>
 
-      <DashboardNav
-        userName={cachedName}
-        initials={initialsFrom(cachedName)}
-        avatarUrl={cachedAvatar}
-        profileHref={cachedHref}
-        isGuest={cachedGuest}
-      />
+      {includeNav ? (
+        <DashboardNav
+          userName={cachedName}
+          initials={initialsFrom(cachedName)}
+          avatarUrl={cachedAvatar}
+          profileHref={cachedHref}
+          isGuest={cachedGuest}
+        />
+      ) : null}
 
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
         <ActiveWorkoutBanner onResumeOffline={setResumeSlug} />

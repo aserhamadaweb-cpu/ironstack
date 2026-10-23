@@ -187,7 +187,7 @@ export async function signInGuest(): Promise<AuthState> {
   // Guests skip onboarding entirely — a stale gate cookie would trap them there.
   const jar = await cookies()
   jar.set(ONBOARDING_COOKIE, '', { path: '/', maxAge: 0, sameSite: 'lax' })
-  redirect(HOME_PATH)
+  redirect('/dashboard/workout')
 }
 
 /** Convert the current anonymous guest into a permanent email/password account. */

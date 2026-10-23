@@ -4,6 +4,7 @@ import { DM_Sans, Noto_Sans_Arabic, Oswald } from 'next/font/google'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages } from 'next-intl/server'
 import { NavTransitionOverlay } from '@/components/nav-transition-overlay'
+import { NavigationProgress } from '@/components/navigation-progress'
 import { PwaWindowChrome } from '@/components/pwa-window-chrome'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ActionFeedbackProvider } from '@/components/action-feedback'
@@ -111,6 +112,7 @@ export default async function RootLayout({
             <ActionFeedbackProvider>
               <PwaWindowChrome />
               <NavTransitionOverlay />
+              <NavigationProgress />
               {children}
             </ActionFeedbackProvider>
           </ThemeProvider>

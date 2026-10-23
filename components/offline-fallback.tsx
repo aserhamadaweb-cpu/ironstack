@@ -7,7 +7,7 @@ import { Loader2, Wifi } from 'lucide-react'
 import { OfflineFloorHome } from '@/components/offline-floor-home'
 import { CTA_PRIMARY, CTA_SECONDARY } from '@/lib/accent'
 import { initialsFrom } from '@/lib/dashboard-utils'
-import { markNavigationIntent } from '@/lib/navigation-intent'
+import { hardNavigate } from '@/lib/navigation-intent'
 import { getHomeSnapshot } from '@/lib/offline/cache'
 import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import { useOfflineStatus } from '@/lib/offline/provider'
@@ -112,7 +112,6 @@ export function OfflineFallback() {
       } catch {
         /* ignore */
       }
-      markNavigationIntent(destination)
       router.replace(destination)
     }, ONLINE_STABLE_MS)
 
@@ -122,8 +121,7 @@ export function OfflineFallback() {
   const retryReturn = () => {
     const destination =
       returnTo && isSafeAppPath(returnTo) ? returnTo : '/dashboard/home'
-    markNavigationIntent(destination)
-    window.location.assign(destination)
+    hardNavigate(destination)
   }
 
   if (!hydrated || !snapshotReady) {
@@ -160,8 +158,7 @@ export function OfflineFallback() {
           <button
             type="button"
             onClick={() => {
-              markNavigationIntent('/dashboard/home')
-              window.location.assign('/dashboard/home')
+              hardNavigate('/dashboard/home')
             }}
             className={`${CTA_SECONDARY} inline-flex min-h-11 items-center px-5`}
           >

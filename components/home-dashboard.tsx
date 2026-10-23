@@ -1,22 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Activity, BrainCircuit, ChevronRight, Compass, Dumbbell, History, Layers, Medal, Plus, Settings, Swords, Trophy } from 'lucide-react'
+import { Activity, BrainCircuit, ChevronRight, Compass, Dumbbell, History, Layers, Medal, Plus, Settings, Swords, TrendingUp, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { AppShortcutGrid, type AppShortcut } from '@/components/app-shortcuts'
 import { BrandSocialLinks, DiscordIcon } from '@/components/brand-social-links'
-import { DashboardNav } from '@/components/dashboard-nav'
-import {
-  LeaderboardSection,
-  type LeaderboardRow,
-} from '@/components/leaderboard-section'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
 import { StreakBadge } from '@/components/streak-badge'
 import { StreakFlame } from '@/components/streak-flame'
-import { TrainingCircleFeed } from '@/components/training-circle-feed'
 import { UserAvatar } from '@/components/user-avatar'
 import { useIsGuest } from '@/components/use-is-guest'
 import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
@@ -31,7 +25,7 @@ import { OfflineFloorHome } from '@/components/offline-floor-home'
 import { useOfflineStatus } from '@/lib/offline/provider'
 import { useEmbeddedSessionActive } from '@/lib/offline/embedded-session'
 import { profileHref } from '@/lib/profile-path'
-import { createSplitChoiceHref } from '@/lib/split-create-paths'
+import { createSplitChoiceHref, RECOMMENDED_SPLITS_PATH } from '@/lib/split-create-paths'
 import type { WeightUnit } from '@/lib/units'
 
 function isPlaceholderGuestEmail(email: string) {
@@ -44,15 +38,6 @@ function isPlaceholderGuestEmail(email: string) {
 
 type WeekDay = { day: string; done: boolean }
 
-type FriendAvatar = {
-  id: string
-  name: string
-  initials: string
-  tone: string
-  username?: string | null
-  avatarUrl?: string | null
-}
-
 type HomeDashboardProps = {
   displayName: string
   email: string
@@ -63,14 +48,9 @@ type HomeDashboardProps = {
   streakDays: number
   streakHoursLeft?: number | null
   lastSessionCaption: string
-  friends: FriendAvatar[]
   currentUserId: string
   weightUnit: WeightUnit
-  leaderboard: {
-    globalRows: LeaderboardRow[]
-    friendsRows: LeaderboardRow[]
-    friendCount: number
-  }
+  community: ReactNode
   avatarUrl?: string | null
   liveDegraded?: boolean
   customSplitCount?: number
@@ -91,10 +71,9 @@ export function HomeDashboard({
   streakDays,
   streakHoursLeft = null,
   lastSessionCaption,
-  friends,
   currentUserId,
   weightUnit,
-  leaderboard,
+  community,
   avatarUrl,
   liveDegraded = false,
   customSplitCount = 0,
@@ -181,21 +160,17 @@ export function HomeDashboard({
   const needsFirstSplit = customSplitCount <= 0
   const canStartSession = Boolean(featuredSplitId)
   const trainPrimaryHref = needsFirstSplit
-    ? createSplitChoiceHref()
+    ? RECOMMENDED_SPLITS_PATH
     : canStartSession
       ? `/dashboard/splits/${featuredSplitId}/session`
       : '/dashboard/workout'
   const trainPrimaryLabel = needsFirstSplit
-    ? t('ctaCreateSplit')
+    ? t('ctaChooseReadySplit')
     : canStartSession
       ? t('ctaStartSession')
       : tCommon('openWorkout')
-  const trainSecondaryHref = needsFirstSplit
-    ? '/dashboard/workout'
-    : createSplitChoiceHref()
-  const trainSecondaryLabel = needsFirstSplit
-    ? t('ctaOpenTrain')
-    : t('ctaCreateSplit')
+  const trainSecondaryHref = createSplitChoiceHref()
+  const trainSecondaryLabel = t('ctaCreateSplit')
 
   useEffect(() => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return
@@ -216,6 +191,7 @@ export function HomeDashboard({
         isGuest={isGuest}
         weekActivity={resolvedWeek}
         lastSessionCaption={resolvedLast}
+        includeNav={false}
       />
     )
   }
@@ -237,13 +213,6 @@ export function HomeDashboard({
         <div className="absolute top-[40%] -start-32 h-80 w-80 rounded-full bg-silver/[0.04] blur-3xl" />
       </div>
 
-      <DashboardNav
-        userName={resolvedName}
-        initials={initialsFrom(resolvedName)}
-        profileHref={profileHref(resolvedUsername, resolvedUserId)}
-        avatarUrl={resolvedAvatar}
-        isGuest={isGuest}
-      />
 
       <main
         data-tour="page-home"
@@ -253,24 +222,13 @@ export function HomeDashboard({
         <ProfileCompletenessBanner
           missingCount={profileMissingCount}
           missingLabels={profileMissingLabels}
+          hasTrained={completedSessionCount > 0}
         />
         <section
           className="is-panel relative mb-8 overflow-hidden p-5 sm:mb-10 sm:p-8 md:p-10"
           data-tour="home-hero"
         >
-          <div
-            className="pointer-events-none absolute -top-16 -end-10 h-40 w-40 rounded-full bg-gold/10 blur-3xl"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute -bottom-16 -start-8 h-36 w-36 rounded-full bg-heat/8 blur-3xl"
-            aria-hidden="true"
-          />
-          <Dumbbell
-            className="absolute -end-4 -bottom-8 size-40 -rotate-12 text-silver opacity-[0.08] sm:-end-8 sm:-bottom-10 sm:size-56"
-            aria-hidden="true"
-          />
-          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-4 sm:gap-5">
               <UserAvatar
                 name={resolvedName}
@@ -323,7 +281,7 @@ export function HomeDashboard({
           className="is-panel mb-8 overflow-hidden p-5 sm:mb-10 sm:p-7"
           data-tour="home-train-cta"
         >
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col items-start gap-4">
             <div className="min-w-0">
               <p className="section-kicker">{t('trainCtaKicker')}</p>
               <h2 className="font-heading mt-1 text-2xl font-bold text-headline">
@@ -341,13 +299,13 @@ export function HomeDashboard({
                     : t('trainCtaContinueBody')}
               </p>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[14rem]">
+            <div className="flex w-full flex-col items-stretch gap-3">
               <Link
                 href={trainPrimaryHref}
-                className={`cta-pulse inline-flex min-h-12 items-center justify-center gap-2 px-6 ${CTA_PRIMARY}`}
+                className={`inline-flex min-h-14 w-full items-center justify-center gap-2 px-6 text-base ${CTA_PRIMARY}`}
               >
                 {needsFirstSplit ? (
-                  <Plus className="size-4" aria-hidden="true" />
+                  <Layers className="size-4" aria-hidden="true" />
                 ) : (
                   <Dumbbell className="size-4" aria-hidden="true" />
                 )}
@@ -355,13 +313,8 @@ export function HomeDashboard({
               </Link>
               <Link
                 href={trainSecondaryHref}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-silver/25 px-5 text-xs font-semibold tracking-[0.12em] text-muted-foreground transition hover:border-gold/35 hover:text-foreground"
+                className="inline-flex min-h-11 items-center text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
               >
-                {needsFirstSplit ? (
-                  <Dumbbell className="size-3.5" aria-hidden="true" />
-                ) : (
-                  <Layers className="size-3.5" aria-hidden="true" />
-                )}
                 {trainSecondaryLabel}
               </Link>
             </div>
@@ -393,6 +346,11 @@ export function HomeDashboard({
                   href: '/dashboard/history',
                   label: tNav('history'),
                   icon: History,
+                },
+                {
+                  href: '/dashboard/progress',
+                  label: tNav('progress'),
+                  icon: TrendingUp,
                 },
                 ...(!isGuest
                   ? [
@@ -432,6 +390,30 @@ export function HomeDashboard({
           />
         </section>
 
+        <section
+          className="is-panel mb-8 overflow-hidden p-5 sm:mb-10 sm:p-7"
+          data-tour="home-ready-splits"
+        >
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="section-kicker">{t('readySplitsKicker')}</p>
+              <h2 className="font-heading mt-1 text-2xl font-bold text-headline">
+                {t('readySplitsTitle')}
+              </h2>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                {t('readySplitsBody')}
+              </p>
+            </div>
+            <Link
+              href={RECOMMENDED_SPLITS_PATH}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 text-sm font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              {t('ctaBrowseReadySplits')}
+              <ChevronRight className="size-4 rtl-flip" aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
         <section className="mb-8 sm:mb-10">
           <article className="is-panel p-5 sm:p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -452,7 +434,7 @@ export function HomeDashboard({
                 <button
                   type="button"
                   onClick={() => setDiscordNotice(t('discordComingSoon'))}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors active:opacity-80"
+                  className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors active:opacity-80 sm:w-auto"
                 >
                   <DiscordIcon className="size-4" />
                   {t('discordJoin')}
@@ -490,7 +472,7 @@ export function HomeDashboard({
               {resolvedWeek.map((day) => (
                 <div key={day.day} className="flex flex-col items-center gap-1.5 sm:gap-2">
                   <div
-                    className="relative flex aspect-square w-full min-h-[2.25rem] items-center justify-center overflow-hidden rounded-xl"
+                    className="relative flex aspect-square w-full min-h-12 items-center justify-center overflow-hidden rounded-xl"
                     aria-label={
                       day.done
                         ? t('dayTrained', { day: day.day })
@@ -502,7 +484,7 @@ export function HomeDashboard({
                       className="h-[88%] w-[88%]"
                     />
                   </div>
-                  <span className="text-[9px] tracking-wider text-muted-foreground max-[380px]:tracking-normal sm:text-[10px]">
+                  <span className="text-xs text-muted-foreground">
                     {day.day}
                   </span>
                 </div>
@@ -518,41 +500,7 @@ export function HomeDashboard({
           </article>
         </section>
 
-        {!isGuest && (
-        <section className="mb-8 sm:mb-10" data-tour="home-social">
-          <TrainingCircleFeed friends={friends} />
-        </section>
-        )}
-
-        <section className="mb-8 sm:mb-10" data-tour="home-leaderboard">
-          <LeaderboardSection
-            currentUserId={resolvedUserId}
-            globalRows={leaderboard.globalRows}
-            friendsRows={isGuest ? [] : leaderboard.friendsRows}
-            friendCount={isGuest ? 0 : leaderboard.friendCount}
-            hideFriendsTab={isGuest}
-          />
-        </section>
-
-        <section className="is-panel mb-8 p-5 sm:mb-10 sm:p-8">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="section-kicker">{t('readyKicker')}</p>
-              <h2 className="font-heading mt-1 text-2xl font-bold text-headline md:text-3xl">
-                {needsFirstSplit ? t('trainCtaCreateTitle') : t('readyTitle')}
-              </h2>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                {needsFirstSplit ? t('trainCtaCreateBody') : t('readyBody')}
-              </p>
-            </div>
-            <Link
-              href={trainPrimaryHref}
-              className={`cta-pulse shrink-0 px-8 ${CTA_PRIMARY}`}
-            >
-              {trainPrimaryLabel}
-            </Link>
-          </div>
-        </section>
+        {community}
       </main>
     </div>
   )

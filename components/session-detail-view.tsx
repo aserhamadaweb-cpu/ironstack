@@ -3,12 +3,11 @@ import {
   ArrowLeft,
   Check,
   Clock3,
-  Dumbbell,
   Layers,
   SkipForward,
   Weight,
 } from 'lucide-react'
-import { DashboardNav } from '@/components/dashboard-nav'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import {
   formatClock,
   formatRelativeFinishedAt,
@@ -22,13 +21,17 @@ import {
 
 export type SessionDetailLift = {
   name: string
+  image?: string | null
+  muscle?: string | null
   isCardio?: boolean
+  repsOnly?: boolean
   sets: Array<{
     setNumber: number
     weight: number
     reps: number
     durationSeconds?: number | null
     skipped: boolean
+    repsOnly?: boolean
   }>
 }
 
@@ -74,7 +77,6 @@ export function SessionDetailView({
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       <main className="mx-auto max-w-3xl px-4 pt-6 sm:px-6 md:pt-10">
         <Link
@@ -159,9 +161,13 @@ export function SessionDetailView({
             <div className="mt-6 space-y-4">
               {lifts.map((lift) => {
                 const completed = lift.sets.filter((s) => !s.skipped)
-                const liftVolume = lift.isCardio
-                  ? 0
-                  : completed.reduce((sum, s) => sum + s.weight * s.reps, 0)
+                const liftVolume =
+                  lift.isCardio || lift.repsOnly
+                    ? 0
+                    : completed.reduce(
+                        (sum, s) => (s.repsOnly ? sum : sum + s.weight * s.reps),
+                        0,
+                      )
                 return (
                   <article
                     key={lift.name}
@@ -169,9 +175,12 @@ export function SessionDetailView({
                   >
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold">
-                          <Dumbbell className="size-5" aria-hidden="true" />
-                        </div>
+                        <ExerciseThumb
+                          muscle={lift.muscle || 'Core'}
+                          image={lift.image}
+                          name={lift.name}
+                          className="size-12"
+                        />
                         <div className="min-w-0">
                           <h3 className="font-heading truncate text-lg font-bold text-foreground">
                             {lift.name}
@@ -222,6 +231,7 @@ export function SessionDetailView({
                                 durationSeconds: set.durationSeconds,
                                 weightUnit,
                                 isCardio: lift.isCardio,
+                                repsOnly: set.repsOnly || lift.repsOnly,
                               })}
                             </span>
                           )}
@@ -236,6 +246,7 @@ export function SessionDetailView({
                                 durationSeconds: set.durationSeconds,
                                 weightUnit,
                                 isCardio: lift.isCardio,
+                                repsOnly: set.repsOnly || lift.repsOnly,
                               })}
                             </span>
                           )}

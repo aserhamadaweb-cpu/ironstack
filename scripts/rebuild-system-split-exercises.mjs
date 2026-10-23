@@ -1,7 +1,7 @@
 /**
- * Rebuild exercise lists for the 3 system splits using data/exercises-dataset/exercises.json
- * as the source of truth. Reuses existing lift_types by case-insensitive name
- * (and known aliases); inserts only genuinely new system lifts.
+ * Rebuild exercise lists for the 3 system splits using the Gym visual
+ * 1,324-exercise catalog (data/exercises-dataset/exercises.json) as source of truth.
+ * Uses local /exercises/images/… media — not the retired free-exercise-db set.
  *
  * Usage: node scripts/rebuild-system-split-exercises.mjs
  */
@@ -29,58 +29,34 @@ const sb = createClient(
   env.SUPABASE_SERVICE_ROLE_KEY,
 )
 
-const IMG =
-  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises'
-
 const MUSCLE_MAP = {
-  abdominals: 'ABS',
-  adductors: 'ADDUCTORS',
-  biceps: 'BICEPS',
-  calves: 'CALVES',
   chest: 'CHEST',
-  forearms: 'FOREARMS',
-  glutes: 'GLUTES',
-  hamstrings: 'HAMSTRINGS',
+  'upper chest': 'CHEST',
+  back: 'BACK',
   lats: 'BACK',
+  'upper back': 'BACK',
   'lower back': 'BACK',
-  'middle back': 'BACK',
-  quadriceps: 'LEGS',
   shoulders: 'SHOULDERS',
-  traps: 'TRAPS',
+  delts: 'SHOULDERS',
+  biceps: 'BICEPS',
   triceps: 'TRICEPS',
-}
-
-/** Existing DB short names → exercise-file canonical name (for metadata). */
-const FILE_NAME_FOR_EXISTING = {
-  'Bench Press': 'Barbell Bench Press - Medium Grip',
-  Squat: 'Barbell Squat',
-  'Front Squat': 'Front Barbell Squat',
-  Deadlift: 'Barbell Deadlift',
-  'Barbell Row': 'Bent Over Barbell Row',
-  'Overhead Press': 'Standing Military Press',
-  'Pull-Up': 'Pullups',
-  Dip: 'Dips - Triceps Version',
-  'Romanian Deadlift': 'Romanian Deadlift',
-  'Alternate Hammer Curl': 'Alternate Hammer Curl',
-  'Alternate Incline Dumbbell Curl': 'Alternate Incline Dumbbell Curl',
-  Adductor: 'Adductor',
-  'Adductor/Groin': 'Adductor/Groin',
-  'Air Bike': 'Air Bike',
-}
-
-/**
- * When selecting an exercise by file name, also accept these existing DB names
- * as equivalents (reuse row, do not insert duplicate).
- */
-const REUSE_ALIASES = {
-  'Barbell Bench Press - Medium Grip': ['Bench Press'],
-  'Barbell Squat': ['Squat'],
-  'Front Barbell Squat': ['Front Squat'],
-  'Barbell Deadlift': ['Deadlift'],
-  'Bent Over Barbell Row': ['Barbell Row'],
-  'Standing Military Press': ['Overhead Press'],
-  Pullups: ['Pull-Up'],
-  'Dips - Triceps Version': ['Dip'],
+  'upper legs': 'LEGS',
+  quadriceps: 'LEGS',
+  quads: 'LEGS',
+  hamstrings: 'HAMSTRINGS',
+  glutes: 'GLUTES',
+  calves: 'CALVES',
+  'lower legs': 'CALVES',
+  waist: 'ABS',
+  abs: 'ABS',
+  abdominals: 'ABS',
+  core: 'ABS',
+  traps: 'TRAPS',
+  trapezius: 'TRAPS',
+  adductors: 'ADDUCTORS',
+  abductors: 'ADDUCTORS',
+  forearms: 'FOREARMS',
+  cardio: 'ABS',
 }
 
 const CATALOG_PATH = resolve(root, 'data/exercises-dataset/exercises.json')
@@ -88,46 +64,152 @@ const CATALOG_PATH = resolve(root, 'data/exercises-dataset/exercises.json')
 function loadCatalogRows() {
   const raw = JSON.parse(readFileSync(CATALOG_PATH, 'utf8'))
   return raw.map((row) => ({
-    id: row.id,
+    id: String(row.id).padStart(4, '0'),
     name: row.name,
     category: row.category || 'strength',
-    primaryMuscles: [row.target || row.muscle_group].filter(Boolean),
-    images: row.image ? [String(row.image).replace(/^images\//, '')] : [],
+    muscleGroup: row.muscle_group || row.target || '',
+    image: row.image ? String(row.image).replace(/^images\//, '') : null,
   }))
 }
 
 const exercises = loadCatalogRows()
+const byId = new Map(exercises.map((e) => [e.id, e]))
 const byName = new Map(exercises.map((e) => [e.name.toLowerCase(), e]))
 
-function fileEntry(name) {
-  const e = byName.get(name.toLowerCase())
-  if (!e) throw new Error(`Exercise not in file: ${name}`)
+/**
+ * Legacy free-exercise display names → Gym visual catalog source ids.
+ * Every system-split slot resolves through this map.
+ */
+const LEGACY_NAME_TO_CATALOG_ID = {
+  'Barbell Squat': '0043',
+  'Barbell Bench Press - Medium Grip': '0025',
+  'Bent Over Barbell Row': '0027',
+  'Side Lateral Raise': '0334',
+  'Standing Calf Raises': '1372',
+  Plank: '0464',
+  'Barbell Deadlift': '0032',
+  'Standing Military Press': '1456',
+  Pullups: '0652',
+  'Dumbbell Lunges': '0336',
+  'Face Pull': '0203',
+  'Seated Calf Raise': '0088',
+  'Front Barbell Squat': '0042',
+  'Incline Dumbbell Press': '0314',
+  'Seated Cable Rows': '0180',
+  'Lying Leg Curls': '0586',
+  'Barbell Shrug': '0095',
+  'Hanging Leg Raise': '0472',
+  'Dips - Triceps Version': '0251',
+  'Triceps Pushdown': '0200',
+  'Barbell Curl': '0031',
+  'Alternate Hammer Curl': '0313',
+  'Romanian Deadlift': '0085',
+  'Adductor/Groin': '1775',
+  'Dumbbell Flyes': '0308',
+  'Dumbbell Shoulder Press': '0405',
+  'Cable Seated Lateral Raise': '0178',
+  'Close-Grip Barbell Bench Press': '0030',
+  'Cable Rope Overhead Triceps Extension': '0194',
+  'Wide-Grip Lat Pulldown': '2616',
+  'Reverse Flyes': '0602',
+  'Dumbbell Shrug': '0406',
+  'Alternate Incline Dumbbell Curl': '0318',
+  'Hammer Curls': '0313',
+  'Palms-Up Barbell Wrist Curl Over A Bench': '1412',
+  'Barbell Hip Thrust': '1409',
+  'Split Squats': '2368',
+  'Seated Leg Curl': '0599',
+  Adductor: '1775',
+  'Air Bike': '0003',
+  'Thigh Adductor': '1775',
+  'Cable Crunch': '0226',
+}
+
+/** Existing DB short names → catalog id (reuse row, do not insert duplicate). */
+const DB_NAME_TO_CATALOG_ID = {
+  'Bench Press': '0025',
+  Squat: '0043',
+  'Front Squat': '0042',
+  Deadlift: '0032',
+  'Barbell Row': '0027',
+  'Overhead Press': '1456',
+  'Pull-Up': '0652',
+  Dip: '0251',
+  'Romanian Deadlift': '0085',
+  'Barbell Bench Press': '0025',
+  'Back Squat': '0043',
+  'Cable Lateral Raise': '0178',
+  'Seated Dumbbell Shoulder Press': '0405',
+  'Incline Dumbbell Press': '0314',
+  'Hammer Curl': '0313',
+  'Barbell Curl': '0031',
+  'Leg Press': '0739',
+  'Standing Calf Raise': '1372',
+  'Seated Calf Raise': '0088',
+  'Hanging Leg Raise': '0472',
+  'Barbell Shrug': '0095',
+  'Close-Grip Bench Press': '0030',
+  'Bulgarian Split Squat': '2368',
+  'Barbell Hip Thrust': '1409',
+  'Cable Crunch': '0226',
+  'Lying Leg Curl': '0586',
+  'Seated Leg Curl': '0599',
+  'Chest-Supported Row': '0327',
+  'Seated Cable Row': '0180',
+  'Lat Pulldown': '2616',
+  'Face Pull': '0203',
+  'Dumbbell Lateral Raise': '0334',
+  'Triceps Pushdown': '0200',
+  'Rope Pushdown': '0200',
+  'Overhead Rope Triceps Extension': '0194',
+  'Incline Dumbbell Curl': '0318',
+  'Walking Lunge': '1460',
+}
+
+function catalogEntry(catalogId) {
+  const id = String(catalogId).padStart(4, '0')
+  const e = byId.get(id)
+  if (!e) throw new Error(`Exercise not in GIF catalog: ${id}`)
   return e
 }
 
+function entryFromLegacyName(fileName) {
+  const catalogId = LEGACY_NAME_TO_CATALOG_ID[fileName]
+  if (!catalogId) throw new Error(`No catalog mapping for: ${fileName}`)
+  return catalogEntry(catalogId)
+}
+
 function muscleOf(entry) {
-  const raw = (entry.primaryMuscles?.[0] || '').toLowerCase()
+  const raw = (entry.muscleGroup || '').toLowerCase()
   const mapped = MUSCLE_MAP[raw]
-  if (!mapped) throw new Error(`No muscle map for ${raw} (${entry.name})`)
-  return mapped
+  if (mapped) return mapped
+  if (raw.includes('chest')) return 'CHEST'
+  if (raw.includes('back') || raw.includes('lat')) return 'BACK'
+  if (raw.includes('shoulder') || raw.includes('delt')) return 'SHOULDERS'
+  if (raw.includes('bicep')) return 'BICEPS'
+  if (raw.includes('tricep')) return 'TRICEPS'
+  if (raw.includes('hamstring')) return 'HAMSTRINGS'
+  if (raw.includes('glute')) return 'GLUTES'
+  if (raw.includes('calf')) return 'CALVES'
+  if (raw.includes('quad') || raw.includes('leg')) return 'LEGS'
+  if (raw.includes('ab') || raw.includes('waist') || raw.includes('core'))
+    return 'ABS'
+  return 'BACK'
 }
 
 function categoryOf(entry) {
-  if (entry.equipment === 'body only') return 'bodyweight'
-  if (entry.mechanic === 'isolation') return 'accessory'
+  const c = (entry.category || '').toLowerCase()
+  if (c === 'cardio') return 'cardio'
+  if (c.includes('stretch')) return 'accessory'
   return 'compound'
 }
 
 function slugOf(entry) {
-  return entry.id
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '')
+  return `gv_${entry.id}`
 }
 
 function imageOf(entry) {
-  const path = entry.images?.[0]
-  return path ? `${IMG}/${path}` : null
+  return entry.image ? `/exercises/images/${entry.image}` : null
 }
 
 /** @type {Map<string, any>} */
@@ -138,25 +220,24 @@ async function loadLifts() {
     .from('lift_types')
     .select('id, slug, name, muscle_group, category, is_system, image_url, sort_order')
   if (error) throw error
-  liftByNameLower = new Map(
-    data.map((r) => [r.name.toLowerCase(), r]),
-  )
+  liftByNameLower = new Map(data.map((r) => [r.name.toLowerCase(), r]))
   return data
 }
 
-function findExisting(fileName) {
-  const direct = liftByNameLower.get(fileName.toLowerCase())
+function findExistingForEntry(entry) {
+  const direct = liftByNameLower.get(entry.name.toLowerCase())
   if (direct) return direct
-  for (const alias of REUSE_ALIASES[fileName] ?? []) {
-    const hit = liftByNameLower.get(alias.toLowerCase())
-    if (hit) return hit
+  for (const [dbName, catalogId] of Object.entries(DB_NAME_TO_CATALOG_ID)) {
+    if (catalogId === entry.id) {
+      const hit = liftByNameLower.get(dbName.toLowerCase())
+      if (hit) return hit
+    }
   }
   return null
 }
 
-async function ensureLift(fileName) {
-  const existing = findExisting(fileName)
-  const entry = fileEntry(fileName)
+async function ensureLiftFromEntry(entry) {
+  const existing = findExistingForEntry(entry)
   const muscle = muscleOf(entry)
   const category = categoryOf(entry)
   const image_url = imageOf(entry)
@@ -165,10 +246,17 @@ async function ensureLift(fileName) {
     const patch = {}
     if ((existing.muscle_group || '').toUpperCase() !== muscle) {
       patch.muscle_group = muscle
-    } else if (existing.muscle_group !== muscle) {
-      patch.muscle_group = muscle
     }
-    if (!existing.image_url && image_url) patch.image_url = image_url
+    if (image_url && existing.image_url !== image_url) {
+      // Prefer local GIF-catalog media over retired free-exercise-db URLs
+      if (
+        !existing.image_url ||
+        existing.image_url.includes('yuhonas/free-exercise-db') ||
+        !existing.image_url.startsWith('/exercises/')
+      ) {
+        patch.image_url = image_url
+      }
+    }
     if (Object.keys(patch).length) {
       const { error } = await sb
         .from('lift_types')
@@ -191,7 +279,6 @@ async function ensureLift(fileName) {
     image_url,
   }
 
-  // Slug collision: append suffix
   const { data: slugHit } = await sb
     .from('lift_types')
     .select('id')
@@ -199,77 +286,18 @@ async function ensureLift(fileName) {
     .maybeSingle()
   if (slugHit) row.slug = `${row.slug}_${row.id.slice(0, 8)}`
 
-  const { data, error } = await sb
-    .from('lift_types')
-    .insert(row)
-    .select()
-    .single()
+  const { data, error } = await sb.from('lift_types').insert(row).select().single()
   if (error) throw error
   liftByNameLower.set(data.name.toLowerCase(), data)
   console.log('  + inserted lift:', data.name, `(${data.muscle_group})`)
   return data
 }
 
-/**
- * Prefer reusing DB short name when alias maps to it; otherwise file name.
- * @param {string} fileName
- */
 async function lift(fileName) {
-  return ensureLift(fileName)
-}
-
-/** @typedef {{ file: string, sets: number, min: number, max: number }} Slot */
-
-/**
- * @param {string} dayId
- * @param {Slot[]} slots
- */
-async function replaceDay(dayId, slots) {
-  const { error: delErr } = await sb
-    .from('split_day_exercises')
-    .delete()
-    .eq('split_day_id', dayId)
-  if (delErr) throw delErr
-
-  const rows = []
-  for (let i = 0; i < slots.length; i++) {
-    const slot = slots[i]
-    const lt = await lift(slot.file)
-    rows.push({
-      id: randomUUID(),
-      split_day_id: dayId,
-      lift_type_id: lt.id,
-      exercise_order: i + 1,
-      target_sets: slot.sets,
-      target_reps_min: slot.min,
-      target_reps_max: slot.max,
-    })
-  }
-
-  const { error: insErr } = await sb.from('split_day_exercises').insert(rows)
-  if (insErr) throw insErr
-  return rows.map((r, i) => ({
-    order: i + 1,
-    name: liftByNameLower.get(
-      [...liftByNameLower.entries()].find(([, v]) => v.id === r.lift_type_id)?.[0] ?? '',
-    ),
-    lift_type_id: r.lift_type_id,
-    sets: r.target_sets,
-    reps: `${r.target_reps_min}–${r.target_reps_max}`,
-    file: slots[i].file,
-  }))
-}
-
-async function setSubtitle(dayId, subtitle) {
-  const { error } = await sb
-    .from('split_days')
-    .update({ subtitle })
-    .eq('id', dayId)
-  if (error) throw error
+  return ensureLiftFromEntry(entryFromLegacyName(fileName))
 }
 
 const PROGRAM = {
-  // Full Body Power
   '81e41b82-3f7f-4734-9e11-554552c958ec': {
     label: 'Full Body Power · Full Body A',
     subtitle: 'Squat + press + pull · side delts · calves · core',
@@ -306,8 +334,6 @@ const PROGRAM = {
       { file: 'Hanging Leg Raise', sets: 3, min: 12, max: 20 },
     ],
   },
-
-  // PPL — Push A
   '1a6d2245-c7b8-4cde-baad-1ab2f8303439': {
     label: 'PPL · Push A',
     subtitle: 'Chest · shoulders · side delts · triceps',
@@ -320,7 +346,6 @@ const PROGRAM = {
       { file: 'Triceps Pushdown', sets: 3, min: 10, max: 15 },
     ],
   },
-  // PPL — Pull A
   'cd0ed589-aa84-499c-95d9-1edb8a7e4f2e': {
     label: 'PPL · Pull A',
     subtitle: 'Vertical + horizontal pull · rear delts · traps · biceps',
@@ -333,7 +358,6 @@ const PROGRAM = {
       { file: 'Alternate Hammer Curl', sets: 3, min: 10, max: 15 },
     ],
   },
-  // PPL — Legs A
   '3da7996f-6595-43ce-9301-9008b01de422': {
     label: 'PPL · Legs A',
     subtitle: 'Squat · RDL · lunges · curl · calves · adductors · core',
@@ -347,7 +371,6 @@ const PROGRAM = {
       { file: 'Hanging Leg Raise', sets: 3, min: 12, max: 20 },
     ],
   },
-  // PPL — Push B
   '308d51be-ea7a-4aad-999a-3902d6becf49': {
     label: 'PPL · Push B',
     subtitle: 'Incline focus · fly · DB press · laterals · close-grip · overhead tri',
@@ -360,7 +383,6 @@ const PROGRAM = {
       { file: 'Cable Rope Overhead Triceps Extension', sets: 3, min: 10, max: 15 },
     ],
   },
-  // PPL — Pull B
   'f78bdbea-ff5a-4c2b-b978-c86acddc23f3': {
     label: 'PPL · Pull B',
     subtitle: 'Pulldown + row · rear delts · shrugs · 2 curls · forearms',
@@ -374,7 +396,6 @@ const PROGRAM = {
       { file: 'Palms-Up Barbell Wrist Curl Over A Bench', sets: 2, min: 12, max: 20 },
     ],
   },
-  // PPL — Legs B
   '6c005039-9d4a-4710-a45e-fbe08d7b502b': {
     label: 'PPL · Legs B',
     subtitle: 'Front squat · hip thrust · split squat · curl · calves · adductors · core',
@@ -388,8 +409,6 @@ const PROGRAM = {
       { file: 'Air Bike', sets: 3, min: 15, max: 20 },
     ],
   },
-
-  // Upper / Lower
   '8009d5c1-8108-4a45-8f47-a717587925e1': {
     label: 'Upper/Lower · Upper A — Strength',
     subtitle: 'Heavy bench · row · OHP · pull-up · light laterals',
@@ -450,14 +469,13 @@ async function fetchSummary(dayIds) {
 }
 
 async function main() {
-  console.log('Loading lift_types…')
+  console.log('Loading GIF catalog + lift_types…')
   await loadLifts()
 
-  // Pre-validate all file names exist
   for (const day of Object.values(PROGRAM)) {
-    for (const slot of day.slots) fileEntry(slot.file)
+    for (const slot of day.slots) entryFromLegacyName(slot.file)
   }
-  console.log('All programmed exercises found in exercises.json ✓')
+  console.log('All programmed exercises mapped to GIF catalog ✓')
 
   const dayIds = Object.keys(PROGRAM)
   const before = await fetchSummary(dayIds)
@@ -470,8 +488,7 @@ async function main() {
     console.log(`\n→ ${day.label}`)
     await setSubtitle(dayId, day.subtitle)
     const resolved = []
-    for (let i = 0; i < day.slots.length; i++) {
-      const slot = day.slots[i]
+    for (const slot of day.slots) {
       const lt = await lift(slot.file)
       resolved.push({ slot, lt })
     }
@@ -500,30 +517,15 @@ async function main() {
     }
   }
 
-  // Normalize muscle groups on all lifts we touched / existing system lifts used
-  const { data: allLifts } = await sb
-    .from('lift_types')
-    .select('id, name, muscle_group')
-  for (const row of allLifts ?? []) {
-    const fileName =
-      FILE_NAME_FOR_EXISTING[row.name] ||
-      (byName.has(row.name.toLowerCase()) ? row.name : null)
-    if (!fileName) continue
-    const entry = byName.get(fileName.toLowerCase())
-    if (!entry) continue
-    const muscle = muscleOf(entry)
-    if ((row.muscle_group || '') !== muscle) {
-      await sb
-        .from('lift_types')
-        .update({ muscle_group: muscle })
-        .eq('id', row.id)
-    }
-  }
-
   const after = await fetchSummary(dayIds)
   console.log('\n========== AFTER ==========')
   printSummary(after)
   console.log('\nDone.')
+}
+
+async function setSubtitle(dayId, subtitle) {
+  const { error } = await sb.from('split_days').update({ subtitle }).eq('id', dayId)
+  if (error) throw error
 }
 
 function printSummary(days) {
@@ -548,9 +550,9 @@ function printSummary(days) {
       const ex = [...(d.split_day_exercises ?? [])].sort(
         (a, b) => a.exercise_order - b.exercise_order,
       )
-      for (const e of ex) {
+      for (const row of ex) {
         console.log(
-          `    ${e.exercise_order}. ${e.lift_types?.name} (${e.lift_types?.muscle_group}) — ${e.target_sets}×${e.target_reps_min}–${e.target_reps_max}`,
+          `    - ${row.lift_types?.name} (${row.target_sets}×${row.target_reps_min}–${row.target_reps_max})`,
         )
       }
     }

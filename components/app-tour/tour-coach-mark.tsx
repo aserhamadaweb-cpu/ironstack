@@ -318,8 +318,20 @@ function TourCoachMarkShell({
   )
 }
 
-function TourLoadingContent() {
+function TourLoadingContent({ step }: { step?: AppTourStepDef }) {
   const t = useTranslations('tour')
+  // Show the upcoming tip immediately so waiting on a page load never feels blank.
+  if (step) {
+    return (
+      <div className="min-w-0" data-tour-ui="loading">
+        <TourCoachMarkContent step={step} />
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin text-gold" aria-hidden="true" />
+          {t('loadingStep')}
+        </p>
+      </div>
+    )
+  }
   return (
     <div
       className="flex min-h-[4rem] items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
@@ -463,6 +475,17 @@ export function TourCoachMark({
       tryLocate()
     }
 
+    // React to DOM paints as soon as the tour target mounts (faster than polling alone).
+    const observer =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(() => {
+            if (cancelled) return
+            const el = findTourTarget(step.target)
+            if (el) bringIntoViewThenMeasure(el)
+          })
+        : null
+    observer?.observe(document.body, { childList: true, subtree: true })
+
     const scheduleMeasure = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(measureOnly)
@@ -474,6 +497,7 @@ export function TourCoachMark({
       cancelled = true
       window.clearTimeout(pollTimer)
       cancelAnimationFrame(raf)
+      observer?.disconnect()
       window.removeEventListener('resize', scheduleMeasure)
       window.removeEventListener('scroll', scheduleMeasure, true)
     }
@@ -483,7 +507,7 @@ export function TourCoachMark({
     locateState === 'found' && Boolean(spot && !isTransitioning && !isDone)
 
   const stepContent = isTransitioning ? (
-    <TourLoadingContent />
+    <TourLoadingContent step={step} />
   ) : locateState === 'missed' ? (
     <>
       <TourCoachMarkContent step={step} />
@@ -492,7 +516,7 @@ export function TourCoachMark({
       </div>
     </>
   ) : locateState === 'pending' ? (
-    <TourLoadingContent />
+    <TourLoadingContent step={step} />
   ) : (
     <div data-tour-ui="found">
       <TourCoachMarkContent step={step} />
@@ -543,7 +567,7 @@ export function TourCoachMark({
       <>
         <TourCutoutBackdrop spot={null} />
         <TourCoachMarkShell {...shellProps} centered>
-          <TourLoadingContent />
+          <TourLoadingContent step={step} />
         </TourCoachMarkShell>
       </>
     )

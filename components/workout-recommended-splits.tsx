@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowRight, Sparkles } from 'lucide-react'
-import type { SplitRecommendation } from '@/lib/split-recommendations'
+import type { SplitRecommendation } from '@/lib/split-recommendations/types'
 import { applySplitRecommendationAction } from '@/lib/data/split-recommendation-actions'
 import { SplitRecommendationCard } from '@/components/split-recommendation-card'
 import { useGuestGate } from '@/components/guest-gate-provider'
@@ -16,12 +16,18 @@ type WorkoutRecommendedSplitsProps = {
   error?: string | null
   /** Hide for guests — they see upgrade on save. */
   isGuest?: boolean
+  /** When true, hide the “see all” link (e.g. home already shows all five). */
+  hideSeeAll?: boolean
+  /** Optional section id for in-page anchors. */
+  sectionId?: string
 }
 
 export function WorkoutRecommendedSplits({
   recommendations,
   error = null,
   isGuest = false,
+  hideSeeAll = false,
+  sectionId = 'ready-splits',
 }: WorkoutRecommendedSplitsProps) {
   const t = useTranslations('workout')
   const tRec = useTranslations('splitRecommendations')
@@ -35,7 +41,11 @@ export function WorkoutRecommendedSplits({
 
   if (error && recommendations.length === 0) {
     return (
-      <section className="mb-10" data-tour="workout-recommendations">
+      <section
+        id={sectionId}
+        className="mb-10 scroll-mt-24"
+        data-tour="workout-recommendations"
+      >
         <div className="mb-4">
           <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
             {t('recommendedForYou')}
@@ -60,7 +70,7 @@ export function WorkoutRecommendedSplits({
     return null
   }
 
-  const visible = recommendations.slice(0, 3)
+  const visible = recommendations.slice(0, 5)
 
   const handleSave = (rec: SplitRecommendation) => {
     requireAccount('createSplit', () => {
@@ -78,7 +88,11 @@ export function WorkoutRecommendedSplits({
   }
 
   return (
-    <section className="mb-10 min-w-0" data-tour="workout-recommendations">
+    <section
+      id={sectionId}
+      className="mb-10 min-w-0 scroll-mt-24"
+      data-tour="workout-recommendations"
+    >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
@@ -89,13 +103,15 @@ export function WorkoutRecommendedSplits({
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">{t('chooseSplitBody')}</p>
         </div>
-        <Link
-          href="/dashboard/splits/recommendations"
-          className="inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-semibold tracking-[0.12em] text-gold"
-        >
-          {tRec('seeAllPrograms')}
-          <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
-        </Link>
+        {!hideSeeAll ? (
+          <Link
+            href="/dashboard/splits/recommendations"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 text-xs font-semibold tracking-[0.12em] text-gold"
+          >
+            {tRec('seeAllPrograms')}
+            <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
+          </Link>
+        ) : null}
       </div>
 
       {isGuest ? (

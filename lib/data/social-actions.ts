@@ -565,3 +565,59 @@ export async function searchPeopleAction(
     }),
   }
 }
+
+/** Messages from other people newer than `sinceIso`. Empty since looks back 7 days. */
+export async function countUnseenIncomingMessagesAction(
+  sinceIso: string | null,
+): Promise<{ count: number }> {
+  const blocked = await rejectIfGuest()
+  if (blocked) return { count: 0 }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { count: 0 }
+
+  const parsed = sinceIso ? Date.parse(sinceIso) : Number.NaN
+  const since = Number.isFinite(parsed)
+    ? new Date(parsed).toISOString()
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [{ data: threads }, { data: memberships }] = await Promise.all([
+    supabase
+      .from('dm_threads')
+      .select('id')
+      .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`),
+    supabase
+      .from('group_chat_members')
+      .select('group_chat_id')
+      .eq('user_id', user.id),
+  ])
+
+  const threadIds = (threads ?? []).map((row) => row.id)
+  const groupIds = (memberships ?? []).map((row) => row.group_chat_id)
+
+  const [dmResult, groupResult] = await Promise.all([
+    threadIds.length > 0
+      ? supabase
+          .from('dm_messages')
+          .select('id', { count: 'exact', head: true })
+          .in('thread_id', threadIds)
+          .neq('sender_id', user.id)
+          .gt('created_at', since)
+      : Promise.resolve({ count: 0, error: null }),
+    groupIds.length > 0
+      ? supabase
+          .from('group_messages')
+          .select('id', { count: 'exact', head: true })
+          .in('group_chat_id', groupIds)
+          .neq('sender_id', user.id)
+          .gt('created_at', since)
+      : Promise.resolve({ count: 0, error: null }),
+  ])
+
+  const dmCount = dmResult.error ? 0 : (dmResult.count ?? 0)
+  const groupCount = groupResult.error ? 0 : (groupResult.count ?? 0)
+  return { count: dmCount + groupCount }
+}

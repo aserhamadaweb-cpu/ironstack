@@ -1,10 +1,7 @@
 import { redirect } from 'next/navigation'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { HomeWorkoutsClient } from '@/components/home-workouts-client'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
 
@@ -36,13 +33,7 @@ export default async function HomeWorkoutsPage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <OfflineConnectionGate feature="homeWorkouts">
         <main
           data-tour="page-home-workouts"

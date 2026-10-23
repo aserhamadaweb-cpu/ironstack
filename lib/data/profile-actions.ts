@@ -724,6 +724,12 @@ const NOTIFICATION_KEYS = [
   'message_request',
   'pr_achievement',
   'split_saved',
+  'unfinished_session',
+  'streak_reminder',
+  'inactivity_reminder',
+  'train_today',
+  'weekly_recap',
+  'challenge_reminder',
 ] as const
 
 export async function updateNotificationPreferencesAction(

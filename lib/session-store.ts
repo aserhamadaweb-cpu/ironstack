@@ -11,7 +11,7 @@ export type LoggedSet = {
   setNumber: number
   weight: number
   reps: number
-  /** false = the set was unchecked when the exercise was finished (skipped). */
+  /** false = the set was left unfinished and stored as skipped. */
   completed: boolean
 }
 

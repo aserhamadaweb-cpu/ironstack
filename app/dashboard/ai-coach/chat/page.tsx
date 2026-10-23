@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { AiCoachChat } from '@/components/ai-coach-chat'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { GuestBlockedScreen } from '@/components/guest-blocked-screen'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
@@ -16,7 +15,7 @@ import {
   mapMessagesWithUsedTools,
 } from '@/lib/ai/conversations'
 import { getActiveMemories } from '@/lib/ai/memory'
-import { getProfile } from '@/lib/data/queries'
+import { countCompletedSessions, getProfile } from '@/lib/data/queries'
 import { getIsGuestAction } from '@/lib/data/profile-actions'
 import { onboardingDataFromUser } from '@/lib/data/onboarding-read'
 import {
@@ -49,12 +48,7 @@ export default async function AiCoachPage() {
       'Athlete'
     return (
       <>
-        <DashboardNav
-          userName={displayName}
-          initials={initialsFrom(displayName)}
-          avatarUrl={profileResult.data?.avatar_url}
-          isGuest
-        />
+
         <GuestBlockedScreen reason="aiCoach" returnPath="/dashboard/ai-coach/chat" />
       </>
     )
@@ -80,11 +74,12 @@ export default async function AiCoachPage() {
   const locale = profileResult.data?.language === 'ar' ? 'ar' : 'en'
 
   try {
-    const [{ conversation, messages }, conversations, memories] =
+    const [{ conversation, messages }, conversations, memories, trainedResult] =
       await Promise.all([
         getOrCreateLatestConversation(user.id),
         listConversations(user.id),
         getActiveMemories(user.id),
+        countCompletedSessions(user.id),
       ])
 
     let chatMessages = mapMessagesWithUsedTools(messages)
@@ -173,6 +168,7 @@ export default async function AiCoachPage() {
         }))}
         profileMissingCount={missing.length}
         profileMissingLabels={missing}
+        hasTrained={(trainedResult.data ?? 0) > 0}
       />
       </GuestPageGate>
       </OfflineConnectionGate>

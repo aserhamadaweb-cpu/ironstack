@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Clock3,
   CloudOff,
-  Dumbbell,
   Flag,
   Layers,
   Save,
@@ -20,8 +19,8 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseDemoGif } from '@/components/exercise-demo-gif'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { SessionCoachChat } from '@/components/session-coach-chat'
 import { CelebrationBanner } from '@/components/celebration-banner'
 import { EASE } from '@/components/reveal'
@@ -32,7 +31,6 @@ import {
   getActiveLocalSession,
   getLocalSession,
   saveSessionProgress,
-  upsertLocalLog,
   upsertLocalLogs,
 } from '@/lib/offline/session-store'
 import { awaitSessionSync, queueSessionSync } from '@/lib/offline/sync'
@@ -101,8 +99,10 @@ type LoggedExercise = {
   slotId: string
   name: string
   muscle: string
+  image?: string | null
   liftTypeId: string
   isCardio: boolean
+  isBodyweight?: boolean
   targetSets: number
   targetReps: string
   sets: Array<{
@@ -144,6 +144,7 @@ function logsFromLoggedExercises(
         durationSeconds: set.durationSeconds ?? null,
         isSkipped: !set.completed,
         loggedAt: previous?.loggedAt ?? new Date().toISOString(),
+        bodyweight: Boolean(ex.isBodyweight || previous?.bodyweight),
       })
     }
   }
@@ -202,7 +203,6 @@ export function ActiveSession({
 
   const startRef = useRef<number | null>(null)
   const finalSecRef = useRef(0)
-  const missTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   /** Keep a sync copy so Finish Session never reads a stale React state snapshot. */
   const loggedExercisesRef = useRef<LoggedExercise[]>([])
   const writesRef = useRef(Promise.resolve())
@@ -611,96 +611,6 @@ export function ActiveSession({
     }
   }
 
-  const persistLog = async (log: LocalLiftLog) => {
-    if (!sessionId) return
-    await enqueueWrite(
-      upsertLocalLog(sessionId, log).then((local) => {
-        if (local) queueSessionSync(local)
-        return local
-      }),
-    )
-  }
-
-  /**
-   * Checkmark only updates local UI state. DB writes happen once on
-   * "Finish exercise" so we never race and re-save completed sets as skipped.
-   */
-  const toggleSet = (index: number) => {
-    setEntries((prev) => {
-      const entry = prev[index]
-      if (!entry || entry.saved) return prev
-      const cardio = isCardioCategory(exercise?.category)
-      if (entry.done) {
-        return prev.map((e, i) => (i === index ? { ...e, done: false } : e))
-      }
-
-      const missDuration = !(Number.parseFloat(entry.durationMinutes) > 0)
-      const missWeight = !(Number.parseFloat(entry.weight) > 0)
-      const missReps = !(Number.parseInt(entry.reps, 10) > 0)
-      if (cardio ? missDuration : missWeight || missReps) {
-        const existing = missTimersRef.current.get(index)
-        if (existing) clearTimeout(existing)
-        missTimersRef.current.set(
-          index,
-          setTimeout(() => {
-            setEntries((current) =>
-              current.map((e, i) =>
-                i === index
-                  ? { ...e, missWeight: false, missReps: false, missDuration: false }
-                  : e,
-              ),
-            )
-          }, 1400),
-        )
-        return prev.map((e, i) =>
-          i === index
-            ? {
-                ...e,
-                missDuration: cardio ? missDuration : false,
-                missWeight: cardio ? false : missWeight,
-                missReps: cardio ? false : missReps,
-              }
-            : e,
-        )
-      }
-
-      const logId = entry.logId ?? crypto.randomUUID()
-      if (exercise) {
-        const minutes = Number.parseFloat(entry.durationMinutes)
-        const weight = Number.parseFloat(entry.weight)
-        const reps = Number.parseInt(entry.reps, 10)
-        void persistLog({
-          id: logId,
-          liftTypeId: liftKeyFor(exercise),
-          setNumber: index + 1,
-          weight: cardio ? 0 : displayToKg(weight, weightUnit),
-          reps: cardio ? 0 : reps,
-          durationSeconds:
-            cardio && Number.isFinite(minutes)
-              ? Math.round(minutes * 60)
-              : null,
-          isSkipped: false,
-          loggedAt: new Date().toISOString(),
-        })
-      }
-
-      return prev.map((e, i) =>
-        i === index
-          ? {
-              ...e,
-              done: true,
-              skipped: false,
-              saved: true,
-              logId,
-              missWeight: false,
-              missReps: false,
-              missDuration: false,
-            }
-          : e,
-      )
-    })
-  }
-
   const updateEntry = (index: number, patch: Partial<SetEntry>) => {
     setEntries((prev) =>
       prev.map((e, i) => (i === index ? { ...e, ...patch } : e)),
@@ -720,6 +630,7 @@ export function ActiveSession({
     setActionError(null)
 
     const isCardio = isCardioCategory(exercise.category)
+    const isBodyweight = Boolean(exercise.bodyweight) && !isCardio
     const nextEntries = entries.map((entry) => ({ ...entry }))
     const persistedSets: LoggedExercise['sets'] = []
     const logs: LocalLiftLog[] = []
@@ -728,40 +639,16 @@ export function ActiveSession({
       const entry = nextEntries[i]
 
       if (isCardio) {
+        const typed = entry.durationMinutes.trim() !== ''
         const minutes = Number.parseFloat(entry.durationMinutes)
         const hasDuration = Number.isFinite(minutes) && minutes > 0
-        const durationSeconds = hasDuration ? Math.round(minutes * 60) : 0
-
-        if (entry.done) {
-          if (!hasDuration) {
-            setActionError(`Set ${i + 1} is checked but missing duration.`)
-            setPersisting(false)
-            return
-          }
-          const logId = entry.logId ?? crypto.randomUUID()
-          logs.push({
-            id: logId,
-            liftTypeId,
-            setNumber: i + 1,
-            weight: 0,
-            reps: 0,
-            durationSeconds,
-            isSkipped: false,
-            loggedAt: new Date().toISOString(),
-          })
-          nextEntries[i] = { ...entry, saved: true, skipped: false, logId }
-          persistedSets.push({
-            setNumber: i + 1,
-            weight: 0,
-            reps: 0,
-            durationSeconds,
-            completed: true,
-          })
-          continue
+        if (!typed) continue
+        if (!hasDuration) {
+          setActionError(`Set ${i + 1} needs a duration.`)
+          setPersisting(false)
+          return
         }
-
-        if (!hasDuration) continue
-
+        const durationSeconds = Math.round(minutes * 60)
         const logId = entry.logId ?? crypto.randomUUID()
         logs.push({
           id: logId,
@@ -770,54 +657,64 @@ export function ActiveSession({
           weight: 0,
           reps: 0,
           durationSeconds,
-          isSkipped: true,
+          isSkipped: false,
           loggedAt: new Date().toISOString(),
         })
-        nextEntries[i] = { ...entry, skipped: true, saved: true, logId }
+        nextEntries[i] = { ...entry, done: true, saved: true, skipped: false, logId }
         persistedSets.push({
           setNumber: i + 1,
           weight: 0,
           reps: 0,
           durationSeconds,
-          completed: false,
+          completed: true,
         })
         continue
       }
 
-      const weight = Number.parseFloat(entry.weight)
-      const reps = Number.parseInt(entry.reps, 10)
-      const hasValues =
-        Number.isFinite(weight) && weight > 0 && Number.isFinite(reps) && reps > 0
-
-      if (entry.done) {
-        if (!hasValues) {
-            setActionError(`Set ${i + 1} is checked but missing weight or reps.`)
-            setPersisting(false)
-            return
-          }
-        const weightKg = displayToKg(weight, weightUnit)
+      if (isBodyweight) {
+        const repsTyped = entry.reps.trim() !== ''
+        if (!repsTyped) continue
+        const reps = Number.parseInt(entry.reps, 10)
+        if (!Number.isFinite(reps) || reps <= 0) {
+          setActionError(`Set ${i + 1} needs reps.`)
+          setPersisting(false)
+          return
+        }
         const logId = entry.logId ?? crypto.randomUUID()
         logs.push({
           id: logId,
           liftTypeId,
           setNumber: i + 1,
-          weight: weightKg,
+          weight: 0,
           reps,
           durationSeconds: null,
           isSkipped: false,
           loggedAt: new Date().toISOString(),
+          bodyweight: true,
         })
-        nextEntries[i] = { ...entry, saved: true, skipped: false, logId }
+        nextEntries[i] = { ...entry, done: true, saved: true, skipped: false, logId }
         persistedSets.push({
           setNumber: i + 1,
-          weight: weightKg,
+          weight: 0,
           reps,
           completed: true,
         })
         continue
       }
 
-      if (!hasValues) continue
+      const weightTyped = entry.weight.trim() !== ''
+      const repsTyped = entry.reps.trim() !== ''
+      if (!weightTyped && !repsTyped) continue
+
+      const weight = Number.parseFloat(entry.weight)
+      const reps = Number.parseInt(entry.reps, 10)
+      const hasValues =
+        Number.isFinite(weight) && weight > 0 && Number.isFinite(reps) && reps > 0
+      if (!hasValues) {
+        setActionError(`Set ${i + 1} needs both weight and reps.`)
+        setPersisting(false)
+        return
+      }
 
       const weightKg = displayToKg(weight, weightUnit)
       const logId = entry.logId ?? crypto.randomUUID()
@@ -828,15 +725,15 @@ export function ActiveSession({
         weight: weightKg,
         reps,
         durationSeconds: null,
-        isSkipped: true,
+        isSkipped: false,
         loggedAt: new Date().toISOString(),
       })
-      nextEntries[i] = { ...entry, skipped: true, saved: true, logId }
+      nextEntries[i] = { ...entry, done: true, saved: true, skipped: false, logId }
       persistedSets.push({
         setNumber: i + 1,
         weight: weightKg,
         reps,
-        completed: false,
+        completed: true,
       })
     }
 
@@ -844,8 +741,10 @@ export function ActiveSession({
       slotId: exercise.id,
       name: exercise.name,
       muscle: exercise.muscle,
+      image: exercise.image,
       liftTypeId,
       isCardio,
+      isBodyweight,
       targetSets: exercise.sets,
       targetReps: exercise.reps,
       sets: persistedSets,
@@ -905,7 +804,7 @@ export function ActiveSession({
     }> = []
 
     for (const logged of exercises) {
-      if (logged.isCardio) continue
+      if (logged.isCardio || logged.isBodyweight) continue
 
       let bestThis: { weight: number; reps: number } | null = null
       for (const set of logged.sets) {
@@ -998,7 +897,7 @@ export function ActiveSession({
       []
 
     for (const logged of loggedExercises) {
-      if (logged.isCardio) {
+      if (logged.isCardio || logged.isBodyweight) {
         for (const set of logged.sets) {
           if (!set.completed) setsSkipped += 1
           else setsCompleted += 1
@@ -1089,7 +988,6 @@ export function ActiveSession({
     return () => window.removeEventListener('keydown', onKey)
   }, [confirmDiscard, persisting])
 
-  const uncheckedCount = entries.filter((e) => !e.done && !e.skipped).length
   const isLastExercise = exerciseIndex === (day?.exercises.length ?? 0) - 1
   const sessionOffline = hydrated && !online && stage !== 'pick'
 
@@ -1101,7 +999,6 @@ export function ActiveSession({
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       {sessionOffline ? (
         <div className="border-b border-gold/30 bg-gold/10 px-4 py-2.5 text-center text-xs font-semibold text-gold">
@@ -1178,7 +1075,7 @@ export function ActiveSession({
         </div>
       ) : null}
 
-      {(stage === 'lift' || stage === 'done') && !hydrating && day && (
+      {stage === 'lift' && !hydrating && day && (
         <div className="sticky top-[var(--app-header-height)] z-40 border-b border-silver/10 bg-background/90 backdrop-blur-xl">
           <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="min-w-0">
@@ -1321,6 +1218,7 @@ export function ActiveSession({
           <>
             {(() => {
               const isCardio = isCardioCategory(exercise.category)
+              const isBodyweight = Boolean(exercise.bodyweight) && !isCardio
               return (
                 <>
             {isFirstEver && (
@@ -1351,7 +1249,14 @@ export function ActiveSession({
                 transition={{ duration: 0.3, ease: EASE }}
               >
                 <div className="glass-card rounded-2xl border border-silver/10 p-4 sm:p-6">
-                  <div>
+                  <div className="flex items-center gap-3">
+                      <ExerciseThumb
+                        muscle={exercise.muscle}
+                        image={exercise.image}
+                        name={exercise.name}
+                        className="size-14"
+                      />
+                      <div className="min-w-0">
                       <h1 className="font-heading text-xl font-bold text-foreground sm:text-2xl">
                         {exercise.name}
                       </h1>
@@ -1363,6 +1268,7 @@ export function ActiveSession({
                       <span className="mt-2 inline-block rounded-full border border-silver/20 bg-background/60 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground">
                         {exercise.muscle.toUpperCase()}
                       </span>
+                      </div>
                   </div>
                   <ExerciseDemoGif
                     name={exercise.name}
@@ -1398,7 +1304,9 @@ export function ActiveSession({
                                   ? previous.durationSeconds
                                     ? `Previous: ${formatDurationSeconds(previous.durationSeconds)}`
                                     : 'Previous: —'
-                                  : `Previous: ${formatWeightKg(previous.weight, weightUnit)} × ${previous.reps}`
+                                  : isBodyweight
+                                    ? `Previous: ${previous.reps} reps`
+                                    : `Previous: ${formatWeightKg(previous.weight, weightUnit)} × ${previous.reps}`
                                 : 'Previous: —'}
                             </p>
                           </div>
@@ -1421,7 +1329,6 @@ export function ActiveSession({
                                     updateEntry(index, {
                                       durationMinutes: e.target.value,
                                       missDuration: false,
-                                      done: false,
                                     })
                                   }
                                   className={`h-11 w-24 rounded-xl border bg-background/70 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20 disabled:opacity-60 ${
@@ -1432,6 +1339,35 @@ export function ActiveSession({
                                 />
                                 <span className="text-[10px] font-semibold tracking-wide text-muted-foreground">
                                   MIN
+                                </span>
+                              </label>
+                            ) : isBodyweight ? (
+                              <label className="flex items-center gap-1.5">
+                                <span className="sr-only">
+                                  Reps for set {index + 1}
+                                </span>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  step="1"
+                                  placeholder="0"
+                                  value={entry.reps}
+                                  disabled={entry.saved}
+                                  onChange={(e) =>
+                                    updateEntry(index, {
+                                      reps: e.target.value,
+                                      missReps: false,
+                                    })
+                                  }
+                                  className={`h-11 w-24 rounded-xl border bg-background/70 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20 disabled:opacity-60 ${
+                                    entry.missReps
+                                      ? 'border-destructive ring-2 ring-destructive/40'
+                                      : 'border-border'
+                                  }`}
+                                />
+                                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground">
+                                  REPS
                                 </span>
                               </label>
                             ) : (
@@ -1452,8 +1388,6 @@ export function ActiveSession({
                                   updateEntry(index, {
                                     weight: e.target.value,
                                     missWeight: false,
-                                    // Editing clears the check so the user re-confirms.
-                                    done: false,
                                   })
                                 }
                                 className={`h-11 w-20 rounded-xl border bg-background/70 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20 disabled:opacity-60 ${
@@ -1483,7 +1417,6 @@ export function ActiveSession({
                                   updateEntry(index, {
                                     reps: e.target.value,
                                     missReps: false,
-                                    done: false,
                                   })
                                 }
                                 className={`h-11 w-16 rounded-xl border bg-background/70 px-3 text-center text-sm font-semibold tabular-nums text-foreground outline-none transition placeholder:text-muted-foreground focus:border-gold focus:ring-2 focus:ring-gold/20 disabled:opacity-60 ${
@@ -1499,28 +1432,6 @@ export function ActiveSession({
                               </>
                             )}
 
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                toggleSet(index)
-                              }}
-                              disabled={entry.saved}
-                              aria-pressed={entry.done}
-                              aria-label={
-                                entry.done
-                                  ? `Set ${index + 1} completed — tap to undo`
-                                  : `Mark set ${index + 1} complete`
-                              }
-                              className={`relative z-10 flex size-11 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 disabled:cursor-default ${
-                                entry.done
-                                  ? 'border-success bg-success text-background'
-                                  : 'border-silver/20 bg-background/60 text-muted-foreground hover:border-gold/40 hover:text-gold'
-                              }`}
-                            >
-                              <Check className="size-5" aria-hidden="true" />
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -1528,21 +1439,17 @@ export function ActiveSession({
                   })}
                 </div>
 
-                {uncheckedCount > 0 && (
-                  <p className="mt-4 text-center text-xs text-muted-foreground">
-                    {uncheckedCount} unchecked{' '}
-                    {uncheckedCount === 1 ? 'set' : 'sets'} with{' '}
-                    {isCardio ? 'duration' : 'values'} will be marked skipped;
-                    empty {isCardio ? 'entries' : 'sets'} won&apos;t be saved.
-                  </p>
-                )}
                 <button
                   type="button"
                   onClick={finishExercise}
                   disabled={persisting}
-                  className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold tracking-[0.18em] text-primary-foreground transition-all hover:scale-[1.01] hover:bg-primary/90 disabled:opacity-60"
+                  className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-semibold text-primary-foreground transition-all active:scale-[0.99] hover:bg-primary/90 disabled:opacity-60"
                 >
-                  {persisting ? 'SAVING…' : 'FINISH EXERCISE'}
+                  {persisting
+                    ? 'Saving…'
+                    : isLastExercise
+                      ? 'Finish'
+                      : 'Next'}
                   {!persisting &&
                     (isLastExercise ? (
                       <Flag className="size-4" aria-hidden="true" />
@@ -1560,30 +1467,71 @@ export function ActiveSession({
 
         {stage === 'done' && (
           <motion.section
-            className="mt-10 text-center"
-            initial={{ opacity: 0, y: reduce ? 0 : 20 }}
+            className="mt-2"
+            initial={{ opacity: 0, y: reduce ? 0 : 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE }}
+            transition={{ duration: 0.35, ease: EASE }}
           >
-            <div className="mx-auto flex size-16 items-center justify-center rounded-full border border-success/50 bg-success/15 text-success">
-              <Check className="size-8" aria-hidden="true" />
-            </div>
-            <h1 className="font-heading mt-5 text-2xl font-bold text-foreground sm:text-3xl">
-              All exercises complete
+            <h1 className="font-heading text-2xl font-bold text-foreground">
+              Save workout
             </h1>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              Finish the session to stop the timer, lock in volume, and check for
-              PRs.
+            <p className="mt-1 text-sm text-muted-foreground">
+              {day?.focus} · {split.name}
             </p>
             <button
               type="button"
               onClick={finishSession}
               disabled={persisting}
-              className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-full bg-primary px-10 text-sm font-bold tracking-[0.18em] text-primary-foreground transition-all hover:scale-[1.02] hover:bg-primary/90 disabled:opacity-60"
+              className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60"
             >
-              <Flag className="size-4" aria-hidden="true" />
-              {persisting ? 'SAVING…' : 'FINISH SESSION'}
+              <Save className="size-4" aria-hidden="true" />
+              {persisting ? 'Saving…' : 'Save workout'}
             </button>
+
+            <div className="mt-5 grid grid-cols-3 gap-2">
+              {[
+                { label: 'Time', value: formatClock(elapsed) },
+                { label: 'Volume', value: formatVolume(summary.volumeKg, weightUnit) },
+                { label: 'Sets', value: String(summary.setsCompleted) },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-2xl border border-border bg-card px-2 py-3 text-center"
+                >
+                  <p className="font-heading text-lg font-bold tabular-nums text-foreground">
+                    {stat.value}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <ul className="mt-4 flex flex-col gap-2">
+              {loggedExercises.map((logged, index) => {
+                const completed = logged.sets.filter((set) => set.completed).length
+                return (
+                  <li
+                    key={logged.slotId || `${logged.liftTypeId}-${index}`}
+                    className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-border bg-card px-4"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <ExerciseThumb
+                        muscle={logged.muscle}
+                        image={logged.image}
+                        name={logged.name}
+                        className="size-10"
+                      />
+                      <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                        {logged.name}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                      {completed} {completed === 1 ? 'set' : 'sets'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
           </motion.section>
         )}
 
@@ -1593,12 +1541,18 @@ export function ActiveSession({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: EASE }}
           >
-            <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
-              SESSION COMPLETE
-            </p>
-            <h1 className="font-heading mt-1 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+            <p className="section-kicker">Saved</p>
+            <h1 className="font-heading mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               {day.focus} · {split.name}
             </h1>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-primary text-base font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60"
+            >
+              {saving ? 'Opening Train…' : 'Back to Train'}
+            </button>
 
             {celebrations.length > 0 && (
               <div className="mt-4">
@@ -1724,9 +1678,11 @@ export function ActiveSession({
                     className="rounded-2xl border border-silver/10 bg-card/50 p-4"
                   >
                     <div className="flex items-center gap-3">
-                      <Dumbbell
-                        className="size-4 shrink-0 text-gold"
-                        aria-hidden="true"
+                      <ExerciseThumb
+                        muscle={logged.muscle}
+                        image={logged.image}
+                        name={logged.name}
+                        className="size-11"
                       />
                       <h3 className="min-w-0 truncate font-heading text-base font-semibold text-foreground">
                         {logged.name}
@@ -1748,12 +1704,13 @@ export function ActiveSession({
                           <span>Set {set.setNumber}</span>
                           <span>
                             {set.completed
-                              ? formatLiftSetDisplay({
+                              ?                                 formatLiftSetDisplay({
                                   weightKg: set.weight,
                                   reps: set.reps,
                                   durationSeconds: set.durationSeconds,
                                   weightUnit,
                                   isCardio: logged.isCardio,
+                                  repsOnly: logged.isBodyweight,
                                 })
                               : 'Skipped'}
                           </span>
@@ -1765,15 +1722,6 @@ export function ActiveSession({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-sm font-bold tracking-[0.18em] text-primary-foreground transition-all hover:scale-[1.01] hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save className="size-4" aria-hidden="true" />
-              {saving ? 'SAVING…' : 'SAVE SESSION'}
-            </button>
           </motion.section>
         )}
       </main>

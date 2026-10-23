@@ -508,9 +508,6 @@ async function ensureLiftTypeId(
 export async function saveCustomSplit(
   input: SaveSplitInput,
 ): Promise<SaveSplitResult> {
-  const guest = await rejectIfGuest()
-  if (guest) return { data: null, error: guest }
-
   const supabase = await createClient()
   const { userId } = await getAuthIdentity()
   const user = userId ? { id: userId } : null

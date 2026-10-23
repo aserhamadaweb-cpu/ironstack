@@ -1,7 +1,7 @@
 -- Allow custom-split saves to create missing lift_types rows.
 -- Run once in the Supabase SQL Editor.
 
--- 1) Authenticated athletes may insert non-system lift types (from the 800+ library).
+-- 1) Authenticated athletes may insert non-system lift types (from the GIF catalog).
 alter table public.lift_types enable row level security;
 
 drop policy if exists "Authenticated users can read lift types" on public.lift_types;

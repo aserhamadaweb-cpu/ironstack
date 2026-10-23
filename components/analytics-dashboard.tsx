@@ -1,9 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Trophy, BarChart3, History, TrendingUp, Zap, Dumbbell } from 'lucide-react'
-import { DashboardNav } from '@/components/dashboard-nav'
+import { Trophy, BarChart3, History, TrendingUp, Zap } from 'lucide-react'
 import { BackToTrainLink } from '@/components/back-to-train-link'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { MOCK_PRS, type PersonalRecord } from '@/lib/mock-pr-data'
 
 export function AnalyticsDashboard() {
@@ -38,7 +38,7 @@ export function AnalyticsDashboard() {
 
   return (
     <div className="min-h-svh">
-      <DashboardNav />
+
 
       <main className="mx-auto max-w-7xl px-6 py-8 md:py-10">
         <BackToTrainLink className="mb-6" />
@@ -163,9 +163,11 @@ export function AnalyticsDashboard() {
             {records.map((r) => (
               <div key={r.id} className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-3">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-silver/5 border border-silver/10">
-                    <Dumbbell className="size-4 text-muted-foreground" />
-                  </div>
+                  <ExerciseThumb
+                    muscle="Core"
+                    name={r.liftName}
+                    className="size-10"
+                  />
                   <div>
                     <p className="font-medium text-sm text-foreground">{r.liftName}</p>
                     <p className="text-[10px] text-muted-foreground font-mono">

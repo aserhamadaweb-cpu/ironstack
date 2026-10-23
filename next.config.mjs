@@ -94,16 +94,6 @@ const withPWA = withPWAInit({
           expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 30 },
         },
       },
-      {
-        urlPattern:
-          /^https:\/\/raw\.githubusercontent\.com\/yuhonas\/free-exercise-db\/.*/i,
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'exercise-images',
-          expiration: { maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 30 },
-          cacheableResponse: { statuses: [0, 200] },
-        },
-      },
     ],
   },
   customWorkerSrc: 'worker',
@@ -126,11 +116,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'raw.githubusercontent.com',
-        pathname: '/yuhonas/free-exercise-db/**',
-      },
       {
         protocol: 'https',
         hostname: '*.supabase.co',

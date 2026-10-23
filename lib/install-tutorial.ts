@@ -24,11 +24,15 @@ export const INSTALL_TUTORIAL_STEP_DEFS: Record<
   ios: [
     {
       id: 'step1',
-      imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/ios/step-1-share.jpg`,
+      imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/ios/step-1-tap-menu.jpg`,
     },
     {
       id: 'step2',
-      imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/ios/step-2-add-to-home-screen.jpg`,
+      imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/ios/step-2-choose-share.jpg`,
+    },
+    {
+      id: 'step3',
+      imageSrc: `${INSTALL_TUTORIAL_ASSET_ROOT}/ios/step-3-add-to-home-screen.jpg`,
     },
   ],
   android: [

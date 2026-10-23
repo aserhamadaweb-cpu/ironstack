@@ -1,7 +1,6 @@
 'use client'
 
 import { AiCoachPanel } from '@/components/ai-coach-panel'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { PersonalPrBoard } from '@/components/training-circle-feed'
 import type { CoachInsightView } from '@/lib/ai/insights'
 import { initialsFrom } from '@/lib/dashboard-utils'
@@ -17,10 +16,7 @@ export function AiCoachDashboard({
 }: AiCoachDashboardProps) {
   return (
     <div className="min-h-svh">
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-      />
+
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">
         <div className="mb-8">

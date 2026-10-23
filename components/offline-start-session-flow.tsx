@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Layers, Play, WifiOff } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { CTA_PRIMARY } from '@/lib/accent'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { OfflineSessionLaunch } from '@/components/offline-session-launch'
 import {
@@ -203,13 +202,6 @@ export function OfflineStartSessionFlow({
           <div className="absolute inset-0 gold-radial-wash" />
         </div>
 
-        <DashboardNav
-          userName={displayName}
-          initials={initials}
-          avatarUrl={avatarUrl}
-          profileHref={profileHref}
-          isGuest={isGuest}
-        />
 
         <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
           <button

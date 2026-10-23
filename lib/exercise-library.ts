@@ -1,4 +1,4 @@
-import { gifUrlFromImageUrl } from '@/lib/exercises/paths'
+import { gifUrlFromImageUrl, localImageUrlFromSource } from '@/lib/exercises/paths'
 
 /** Slimmed-down exercise entry sent to the client (no instructions etc.). */
 export type LibraryExercise = {
@@ -20,9 +20,6 @@ export type LibraryExercise = {
   /** Existing lift_types.slug when this catalog row matched a previously seeded exercise. */
   legacySlug?: string | null
 }
-
-export const EXERCISE_IMAGE_BASE =
-  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/'
 
 const MUSCLE_LABELS: Record<string, string> = {
   chest: 'Chest',
@@ -78,13 +75,23 @@ function titleCase(value: string) {
 
 function localOrRemoteImage(exercise: RawLibraryExercise): string | null {
   if (exercise.image?.startsWith('/') || exercise.image?.startsWith('http')) {
+    if (exercise.image.includes('yuhonas/free-exercise-db')) return null
     return exercise.image
   }
+  if (exercise.image?.startsWith('images/')) {
+    return localImageUrlFromSource(exercise.image)
+  }
   if (exercise.images?.[0]) {
-    if (exercise.images[0].startsWith('/') || exercise.images[0].startsWith('http')) {
-      return exercise.images[0]
+    const first = exercise.images[0]
+    if (first.startsWith('/') || first.startsWith('http')) {
+      if (first.includes('yuhonas/free-exercise-db')) return null
+      return first
     }
-    return `${EXERCISE_IMAGE_BASE}${exercise.images[0]}`
+    if (first.startsWith('images/') || /^\d{4}-/.test(first)) {
+      return localImageUrlFromSource(
+        first.startsWith('images/') ? first : `images/${first}`,
+      )
+    }
   }
   return null
 }

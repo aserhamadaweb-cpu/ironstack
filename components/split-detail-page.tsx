@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion, type Variants } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { ExerciseCard } from '@/components/exercise-card'
 import { ExerciseDetailOverlay } from '@/components/exercise-detail-overlay'
@@ -233,7 +232,6 @@ export function SplitDetailPage({
         <div className="absolute bottom-[20%] left-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       <motion.main
         className="mx-auto max-w-4xl px-6 pt-8 md:pt-12"

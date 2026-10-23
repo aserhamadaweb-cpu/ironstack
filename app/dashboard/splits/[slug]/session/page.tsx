@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
 import { ActiveSessionGate } from '@/components/active-session-gate'
-import { GuestBlockedScreen } from '@/components/guest-blocked-screen'
 import {
   countCompletedSessions,
   getPreviousBestsMap,
@@ -10,7 +9,6 @@ import {
 import { toSplitDetail } from '@/lib/data/split-adapter'
 import { enrichSplitFromLibrary } from '@/lib/exercise-library.server'
 import { initialsFrom } from '@/lib/dashboard-utils'
-import { getIsGuestAction } from '@/lib/data/profile-actions'
 import { getAuthIdentity } from '@/lib/supabase/server'
 
 type Params = { params: Promise<{ slug: string }> }
@@ -35,15 +33,6 @@ export async function generateMetadata({ params }: Params) {
 
 export default async function ActiveSessionPage({ params }: Params) {
   const { slug } = await params
-
-  if (await getIsGuestAction()) {
-    return (
-      <GuestBlockedScreen
-        reason="startSession"
-        returnPath={`/dashboard/splits/${slug}/session`}
-      />
-    )
-  }
 
   const { userId, email } = await getAuthIdentity()
   if (!userId) {

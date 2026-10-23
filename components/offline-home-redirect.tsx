@@ -80,6 +80,7 @@ export function OfflineHomeRedirect({ children }: { children: ReactNode }) {
         lastSessionCaption={
           snapshot?.lastSessionCaption ?? tHome('noSessionsYet')
         }
+        includeNav={false}
       />
     )
   }

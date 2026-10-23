@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { OfflineHomeRedirect } from '@/components/offline-home-redirect'
 import { SettingsPageClient } from '@/components/settings-page'
 import {
@@ -11,8 +10,6 @@ import {
   type ProfileGender,
 } from '@/lib/database.types'
 import { getProfile, listBodyWeightLogs } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import type { AppLocale } from '@/lib/i18n'
 import type { WeightUnit } from '@/lib/units'
@@ -59,13 +56,7 @@ export default async function SettingsPage() {
 
   return (
     <OfflineHomeRedirect>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        avatarUrl={profileResult.data?.avatar_url}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <SettingsPageClient
         email={email ?? ''}
         preferredUnit={unit}

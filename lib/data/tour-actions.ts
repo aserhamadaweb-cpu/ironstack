@@ -25,6 +25,7 @@ export type TourActionResult =
 async function writeTour(
   status: AppTourStatus,
   step: number,
+  options?: { revalidate?: boolean },
 ): Promise<TourActionResult> {
   const blocked = await rejectIfGuestOk()
   if (blocked) return blocked
@@ -43,8 +44,13 @@ async function writeTour(
     return { ok: false, error: 'Could not save tour progress. Try again.' }
   }
 
-  revalidatePath('/dashboard', 'layout')
-  revalidatePath('/dashboard/settings')
+  // Never revalidate the dashboard layout on every step — that nuked RSC
+  // caches and made each Next feel like a cold page load. Only refresh
+  // Settings when the tour ends so its restart/status UI stays accurate.
+  if (options?.revalidate) {
+    revalidatePath('/dashboard/settings')
+  }
+
   return { ok: true, status, step: nextStep }
 }
 
@@ -85,6 +91,7 @@ export async function getAppTourStateAction(): Promise<{
   }
 }
 
+/** Lightweight step save — no layout revalidation (called often during Next). */
 export async function saveAppTourProgressAction(
   step: number,
   status: AppTourStatus = 'active',
@@ -93,11 +100,11 @@ export async function saveAppTourProgressAction(
 }
 
 export async function skipAppTourAction(): Promise<TourActionResult> {
-  return writeTour('skipped', APP_TOUR_STEP_COUNT - 1)
+  return writeTour('skipped', APP_TOUR_STEP_COUNT - 1, { revalidate: true })
 }
 
 export async function completeAppTourAction(): Promise<TourActionResult> {
-  return writeTour('completed', APP_TOUR_STEP_COUNT - 1)
+  return writeTour('completed', APP_TOUR_STEP_COUNT - 1, { revalidate: true })
 }
 
 export async function deferAppTourAction(step: number): Promise<TourActionResult> {
@@ -105,5 +112,5 @@ export async function deferAppTourAction(step: number): Promise<TourActionResult
 }
 
 export async function restartAppTourAction(): Promise<TourActionResult> {
-  return writeTour('active', 0)
+  return writeTour('active', 0, { revalidate: true })
 }

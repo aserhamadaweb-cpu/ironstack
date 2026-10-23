@@ -12,6 +12,8 @@ type ProfileCompletenessBannerProps = {
   missingCount: number
   /** Optional short list for the subtitle, e.g. "weight, height, goal". */
   missingLabels?: string[]
+  /** Stay quiet until the athlete has finished at least one session. */
+  hasTrained?: boolean
   className?: string
 }
 
@@ -22,6 +24,7 @@ type ProfileCompletenessBannerProps = {
 export function ProfileCompletenessBanner({
   missingCount,
   missingLabels = [],
+  hasTrained = false,
   className = '',
 }: ProfileCompletenessBannerProps) {
   const t = useTranslations('home')
@@ -45,7 +48,7 @@ export function ProfileCompletenessBanner({
       window.removeEventListener('ironstack:fitness-profile-updated', onUpdated)
   }, [])
 
-  if (!mounted || dismissed || cleared || missingCount <= 0) return null
+  if (!mounted || !hasTrained || dismissed || cleared || missingCount <= 0) return null
 
   const preview =
     missingLabels.length > 0

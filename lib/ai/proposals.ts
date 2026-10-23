@@ -101,6 +101,7 @@ function hydrateExercise(
       sets,
       reps,
       homeSuitable: isHomeEquipment(catalog.equipment),
+      image: catalog.image || null,
     },
     substitutedFrom,
   }

@@ -1,11 +1,9 @@
 import { redirect } from 'next/navigation'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { PageError } from '@/components/page-states'
 import { OfflineHomeRedirect } from '@/components/offline-home-redirect'
 import { OfflineProfilePage } from '@/components/offline-profile-page'
 import { UnifiedProfileView } from '@/components/public-profile-view'
 import { getPublicProfileBundle } from '@/lib/data/social'
-import { initialsFrom } from '@/lib/dashboard-utils'
 import { isNetworkFailure } from '@/lib/log'
 import { createClient, getAuthIdentity } from '@/lib/supabase/server'
 
@@ -55,7 +53,7 @@ export default async function ProfilePage() {
     if (isNetworkFailure(err)) {
       return (
         <OfflineHomeRedirect>
-          <OfflineProfilePage />
+          <OfflineProfilePage includeNav={false} />
         </OfflineHomeRedirect>
       )
     }
@@ -66,7 +64,7 @@ export default async function ProfilePage() {
     if (bundle.error && isNetworkFailure(bundle.error)) {
       return (
         <OfflineHomeRedirect>
-          <OfflineProfilePage />
+          <OfflineProfilePage includeNav={false} />
         </OfflineHomeRedirect>
       )
     }
@@ -94,13 +92,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="min-h-svh">
-      <DashboardNav
-        userName={viewerName}
-        initials={initialsFrom(viewerName)}
-        profileHref="/dashboard/profile"
-        avatarUrl={viewerLite.data?.avatar_url}
-        isGuest={viewerLite.data?.is_guest === true}
-      />
+
       <UnifiedProfileView
         data={bundle.data}
         editInitial={editInitial}

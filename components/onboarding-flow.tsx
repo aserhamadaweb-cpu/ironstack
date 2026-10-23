@@ -9,12 +9,11 @@ import {
 } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { hardNavigate } from '@/lib/navigation-intent'
 import {
   ArrowLeft,
-  ArrowRight,
   CheckCircle2,
   Dumbbell,
-  ListPlus,
   Loader2,
   Monitor,
   Moon,
@@ -39,7 +38,6 @@ import {
 } from '@/lib/data/split-recommendation-actions'
 import { deferAppTourAction } from '@/lib/data/tour-actions'
 import { updateLanguagePreferenceAction } from '@/lib/data/profile-actions'
-import { pathWithTourParam } from '@/lib/app-tour-storage'
 import {
   ProfileAvatarPicker,
   type ProfileAvatarPickerValue,
@@ -89,7 +87,7 @@ function OptionButton({
       disabled={disabled}
       aria-pressed={selected}
       onClick={onClick}
-      className={`flex min-h-12 w-full flex-col items-start rounded-xl border px-4 py-3 text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50 ${
+      className={`flex min-h-11 w-full flex-col items-start rounded-xl border px-3.5 py-2.5 text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50 ${
         selected ? CHOICE_SELECTED : CHOICE_IDLE
       }`}
     >
@@ -281,9 +279,9 @@ export function OnboardingFlow({
 
   async function validateIdentity(): Promise<string | null> {
     const name = data.displayName.trim()
-    if (name.length < 2 || name.length > 40) return t('errors.displayName')
+    if (name && (name.length < 2 || name.length > 40)) return t('errors.displayName')
     const handle = data.username.trim().toLowerCase()
-    if (!handle) return t('errors.usernameFormat')
+    if (!handle) return null
     if (!/^[a-z0-9_]{3,30}$/.test(handle)) return t('errors.usernameFormat')
     if (!usernameLocked || handle !== initialData.username.trim().toLowerCase()) {
       const check = await checkUsernameAvailableAction(handle)
@@ -292,18 +290,7 @@ export function OnboardingFlow({
     return null
   }
 
-  function validateTraining(): string | null {
-    if (!data.primaryGoal) return t('errors.primaryGoal')
-    if (!data.fitnessLevel) return t('errors.fitnessLevel')
-    if (data.daysPerWeek == null || data.daysPerWeek < 1 || data.daysPerWeek > 7) {
-      return t('errors.daysPerWeek')
-    }
-    if (!data.workoutDuration) return t('errors.duration')
-    if (!data.trainingLocation) return t('errors.location')
-    return null
-  }
-
-  const homeAfterOnboarding = returnNext ?? '/dashboard/home?tour=1'
+  const homeAfterOnboarding = returnNext ?? '/dashboard/workout'
 
   async function handleContinue() {
     setError(null)
@@ -346,11 +333,6 @@ export function OnboardingFlow({
     }
 
     if (step === 3) {
-      const err = validateTraining()
-      if (err) {
-        showError(err)
-        return
-      }
       await persist(
         {
           primaryGoal: data.primaryGoal,
@@ -369,16 +351,8 @@ export function OnboardingFlow({
         void finishOnboarding({ redirectTo: '/dashboard/settings' })
         return
       }
-      if (!programChoice) {
-        showError(t('errors.programChoice'))
-        return
-      }
       void finishOnboarding({
-        redirectTo:
-          programChoice === 'manual'
-            ? '/dashboard/splits/create?tourAfterSave=1'
-            : homeAfterOnboarding,
-        choice: programChoice,
+        redirectTo: homeAfterOnboarding,
       })
     }
   }
@@ -424,16 +398,7 @@ export function OnboardingFlow({
           }
         }
 
-        const withTour =
-          !editMode &&
-          result.offerTour &&
-          choice !== 'manual' &&
-          options.redirectTo.startsWith('/dashboard')
-        const destination = withTour
-          ? pathWithTourParam(options.redirectTo)
-          : options.redirectTo
-        // Hard navigation so middleware sees refreshed session cookies.
-        window.location.assign(destination)
+        hardNavigate(options.redirectTo)
       } catch {
         showError(t('saveFailed'))
       } finally {
@@ -467,62 +432,63 @@ export function OnboardingFlow({
         : 'en'
 
   return (
-    <main className="relative mx-auto flex min-h-svh w-full max-w-lg flex-col px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+1.25rem)] text-foreground">
+    <main className="relative mx-auto flex min-h-svh w-full max-w-md flex-col px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(env(safe-area-inset-top)+0.75rem)] text-foreground">
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] gold-radial-wash"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[16rem] gold-radial-wash opacity-70"
         aria-hidden="true"
       />
 
-      <header className="sticky top-0 z-20 -mx-4 mb-6 bg-background/95 px-4 pb-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <header className="relative z-20 mb-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold">
+            <span className="flex size-8 items-center justify-center rounded-full bg-gold/10 text-gold">
               <Dumbbell className="size-4" aria-hidden="true" />
             </span>
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.28em] text-gold">
-                {editMode ? t('editKicker') : t('kicker')}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {step < ONBOARDING_STEPS
-                  ? t('stepOf', { current: step, total: ONBOARDING_STEPS })
-                  : t('reviewTitle')}
-              </p>
-            </div>
+            <p className="text-sm font-semibold text-foreground">
+              {editMode ? t('editKicker') : t('kicker')}
+            </p>
           </div>
-          {editMode ? (
-            <Link
-              href="/dashboard/settings"
-              className="text-xs font-medium text-muted-foreground hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
-            >
-              {t('backToSettings')}
-            </Link>
-          ) : null}
+          <p className="text-xs tabular-nums text-muted-foreground">
+            {step}/{ONBOARDING_STEPS}
+          </p>
         </div>
+        {editMode ? (
+          <Link
+            href="/dashboard/settings"
+            className="mb-3 inline-block text-xs font-medium text-muted-foreground hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+          >
+            {t('backToSettings')}
+          </Link>
+        ) : null}
 
         <div
-          className="h-1.5 overflow-hidden rounded-full bg-silver/15"
+          className="flex gap-1.5"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={progressPct}
           aria-label={t('progressLabel')}
         >
-          <div
-            className="h-full rounded-full bg-gold transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
+          {Array.from({ length: ONBOARDING_STEPS }, (_, i) => (
+            <span
+              key={i}
+              className={`h-1 flex-1 rounded-full transition-colors ${
+                i < step ? 'bg-gold' : 'bg-silver/20'
+              }`}
+            />
+          ))}
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">{t('skipHint')}</p>
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col rounded-2xl border border-gold/20 bg-card/70 p-5 shadow-2xl shadow-black/30 backdrop-blur-md sm:p-7">
+      <div className="relative z-10 flex flex-1 flex-col">
         {step === 1 ? (
           <section className="flex flex-col gap-6">
             <div>
               <h1 className="font-heading text-2xl font-bold tracking-tight">
                 {t('step1.title')}
               </h1>
-              <p className="mt-2 text-sm text-muted-foreground">{t('step1.body')}</p>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t('step1.body')}</p>
             </div>
 
             <div>
@@ -547,7 +513,7 @@ export function OnboardingFlow({
                       patch({ appearance: value })
                       previewAppearance(value)
                     }}
-                    className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-center text-xs font-semibold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
+                    className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 text-center text-xs font-semibold transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                       data.appearance === value
                         ? CHOICE_SELECTED
                         : CHOICE_IDLE
@@ -569,7 +535,7 @@ export function OnboardingFlow({
                     type="button"
                     aria-pressed={selectedLanguage === value}
                     onClick={() => selectLanguage(value)}
-                    className={`flex min-h-14 flex-col items-center justify-center rounded-full border px-4 text-center transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
+                    className={`flex min-h-12 flex-col items-center justify-center rounded-full border px-4 text-center transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 ${
                       selectedLanguage === value
                         ? CHOICE_SELECTED
                         : CHOICE_IDLE
@@ -591,7 +557,7 @@ export function OnboardingFlow({
               <h1 className="font-heading text-2xl font-bold tracking-tight">
                 {t('step2.title')}
               </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="mt-1.5 text-sm text-muted-foreground">
                 {usernameLocked ? t('step2.bodyLocked') : t('step2.body')}
               </p>
             </div>
@@ -599,7 +565,9 @@ export function OnboardingFlow({
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium text-muted-foreground">
                 {t('step2.displayName')}{' '}
-                <span className="text-gold">*</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </span>
               <input
                 value={data.displayName}
@@ -613,7 +581,9 @@ export function OnboardingFlow({
             <label className="flex flex-col gap-2">
               <span className="text-sm font-medium text-muted-foreground">
                 {t('step2.username')}{' '}
-                <span className="text-gold">*</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </span>
               <div className="relative">
                 <span className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -671,6 +641,7 @@ export function OnboardingFlow({
               username={data.username}
               initialAvatarUrl={initialAvatarUrl}
               disabled={pending}
+              compact
               onChange={setAvatarSelection}
               onError={(message) => showError(message)}
             />
@@ -681,14 +652,17 @@ export function OnboardingFlow({
           <section className="flex flex-col gap-6">
             <div>
               <h1 className="font-heading text-2xl font-bold">{t('step3.title')}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{t('step3.body')}</p>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t('step3.body')}</p>
             </div>
 
             <div>
               <p className="mb-2 text-sm font-medium">
-                {t('step3.goal')} <span className="text-gold">*</span>
+                {t('step3.goal')}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
                 {(
                   [
                     'build_muscle',
@@ -700,11 +674,16 @@ export function OnboardingFlow({
                     'other',
                   ] as FitnessGoal[]
                 ).map((value) => (
-                  <OptionButton
+                  <Chip
                     key={value}
                     selected={data.primaryGoal === value}
                     label={goalLabel(value)}
-                    onClick={() => patch({ primaryGoal: value })}
+                    onClick={() =>
+                      patch({
+                        primaryGoal:
+                          data.primaryGoal === value ? null : value,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -712,7 +691,10 @@ export function OnboardingFlow({
 
             <div>
               <p className="mb-2 text-sm font-medium">
-                {t('step3.level')} <span className="text-gold">*</span>
+                {t('step3.level')}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </p>
               <div className="flex flex-col gap-2">
                 {(['beginner', 'intermediate', 'advanced'] as FitnessLevel[]).map(
@@ -722,7 +704,12 @@ export function OnboardingFlow({
                       selected={data.fitnessLevel === value}
                       label={t(`levels.${value}`)}
                       hint={t(`levels.${value}Hint`)}
-                      onClick={() => patch({ fitnessLevel: value })}
+                      onClick={() =>
+                        patch({
+                          fitnessLevel:
+                            data.fitnessLevel === value ? null : value,
+                        })
+                      }
                     />
                   ),
                 )}
@@ -731,7 +718,10 @@ export function OnboardingFlow({
 
             <div>
               <p className="mb-2 text-sm font-medium">
-                {t('step3.days')} <span className="text-gold">*</span>
+                {t('step3.days')}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {[1, 2, 3, 4, 5, 6, 7].map((n) => (
@@ -739,7 +729,9 @@ export function OnboardingFlow({
                     key={n}
                     selected={data.daysPerWeek === n}
                     label={String(n)}
-                    onClick={() => patch({ daysPerWeek: n })}
+                    onClick={() =>
+                      patch({ daysPerWeek: data.daysPerWeek === n ? null : n })
+                    }
                   />
                 ))}
               </div>
@@ -747,9 +739,12 @@ export function OnboardingFlow({
 
             <div>
               <p className="mb-2 text-sm font-medium">
-                {t('step3.duration')} <span className="text-gold">*</span>
+                {t('step3.duration')}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
                 {(
                   [
                     'under_30',
@@ -758,11 +753,16 @@ export function OnboardingFlow({
                     'over_60',
                   ] as WorkoutDuration[]
                 ).map((value) => (
-                  <OptionButton
+                  <Chip
                     key={value}
                     selected={data.workoutDuration === value}
                     label={t(`durations.${value}`)}
-                    onClick={() => patch({ workoutDuration: value })}
+                    onClick={() =>
+                      patch({
+                        workoutDuration:
+                          data.workoutDuration === value ? null : value,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -770,15 +770,23 @@ export function OnboardingFlow({
 
             <div>
               <p className="mb-2 text-sm font-medium">
-                {t('step3.location')} <span className="text-gold">*</span>
+                {t('step3.location')}{' '}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t('optional')})
+                </span>
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
                 {(['home', 'gym', 'both'] as TrainingLocation[]).map((value) => (
-                  <OptionButton
+                  <Chip
                     key={value}
                     selected={data.trainingLocation === value}
                     label={t(`locations.${value}`)}
-                    onClick={() => patch({ trainingLocation: value })}
+                    onClick={() =>
+                      patch({
+                        trainingLocation:
+                          data.trainingLocation === value ? null : value,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -798,7 +806,9 @@ export function OnboardingFlow({
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {t('reviewBody', {
-                    name: data.displayName.trim().split(/\s+/)[0] || t('athleteFallback'),
+                    name:
+                      data.displayName.trim().split(/\s+/)[0] ||
+                      t('athleteFallback'),
                   })}
                 </p>
               </div>
@@ -841,7 +851,7 @@ export function OnboardingFlow({
                 <p className="text-sm text-muted-foreground">
                   {t('programChoiceBody')}
                 </p>
-                <div className="flex flex-col gap-3" role="group" aria-label={t('programChoiceTitle')}>
+                <div className="flex flex-col items-start gap-3" role="group" aria-label={t('programChoiceTitle')}>
                   <button
                     type="button"
                     disabled={busy}
@@ -853,26 +863,16 @@ export function OnboardingFlow({
                         choice: 'ai',
                       })
                     }}
-                    className="inline-flex min-h-14 w-full items-center justify-between gap-3 rounded-full border border-gold/45 bg-gold-tint px-5 text-start transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={`inline-flex min-h-12 w-full items-center justify-center gap-2 px-5 ${CTA_PRIMARY} disabled:cursor-not-allowed disabled:opacity-60`}
                   >
-                    <span className="flex items-center gap-3">
-                      {buildingProgram && programChoice === 'ai' ? (
-                        <Loader2 className="size-5 shrink-0 animate-spin text-gold" aria-hidden="true" />
-                      ) : (
-                        <Sparkles className="size-5 shrink-0 text-gold" aria-hidden="true" />
-                      )}
-                      <span>
-                        <span className="block text-sm font-bold tracking-wide text-gold">
-                          {buildingProgram && programChoice === 'ai'
-                            ? t('buildingProgram')
-                            : t('programChoiceAi')}
-                        </span>
-                        <span className="mt-0.5 block text-xs font-medium text-muted-foreground">
-                          {t('programChoiceAiHint')}
-                        </span>
-                      </span>
-                    </span>
-                    <ArrowRight className="size-4 shrink-0 text-gold rtl-flip" aria-hidden="true" />
+                    {buildingProgram && programChoice === 'ai' ? (
+                      <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Sparkles className="size-4 shrink-0" aria-hidden="true" />
+                    )}
+                    {buildingProgram && programChoice === 'ai'
+                      ? t('buildingProgram')
+                      : t('programChoiceAi')}
                   </button>
                   <button
                     type="button"
@@ -885,20 +885,20 @@ export function OnboardingFlow({
                         choice: 'manual',
                       })
                     }}
-                    className="inline-flex min-h-14 w-full items-center justify-between gap-3 rounded-full border-2 border-gold/60 bg-card px-5 text-start shadow-sm transition hover:bg-gold/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center text-sm font-semibold text-foreground underline-offset-4 hover:underline disabled:opacity-60"
                   >
-                    <span className="flex items-center gap-3">
-                      <ListPlus className="size-5 shrink-0 text-gold" aria-hidden="true" />
-                      <span>
-                        <span className="block text-sm font-bold tracking-wide text-foreground">
-                          {t('programChoiceManual')}
-                        </span>
-                        <span className="mt-0.5 block text-xs font-medium text-muted-foreground">
-                          {t('programChoiceManualHint')}
-                        </span>
-                      </span>
-                    </span>
-                    <ArrowRight className="size-4 shrink-0 text-gold rtl-flip" aria-hidden="true" />
+                    {t('programChoiceManual')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null)
+                      void finishOnboarding({ redirectTo: homeAfterOnboarding })
+                    }}
+                    className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-60"
+                  >
+                    {t('skip')}
                   </button>
                 </div>
               </div>
@@ -906,7 +906,7 @@ export function OnboardingFlow({
           </section>
         ) : null}
 
-        <div className="sticky bottom-0 z-20 -mx-4 mt-8 space-y-3 border-t border-silver/10 bg-background/95 px-4 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+        <div className="sticky bottom-0 z-20 -mx-4 mt-6 space-y-3 bg-background/90 px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
           <ActionFeedbackBanner
             error={error}
             onRetry={() => void handleContinue()}
@@ -918,24 +918,24 @@ export function OnboardingFlow({
                 type="button"
                 disabled={busy}
                 onClick={goBack}
-                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border-2 border-silver/35 bg-card px-4 text-xs font-bold tracking-[0.12em] text-foreground shadow-sm transition hover:border-gold/45 hover:bg-gold/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50"
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 disabled:opacity-50"
               >
                 <ArrowLeft className="size-4 rtl-flip" aria-hidden="true" />
                 {t('back')}
               </button>
             ) : null}
             {step === 4 && !editMode ? null : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleContinue()}
-                className={`inline-flex min-h-12 flex-[1.4] items-center justify-center gap-2 ${CTA_PRIMARY} px-4 tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {busy ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : null}
-                {step === 4 && editMode ? t('saveChanges') : t('continue')}
-              </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleContinue()}
+              className={`inline-flex min-h-12 flex-[1.6] items-center justify-center gap-2 ${CTA_PRIMARY} px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {step === 4 && editMode ? t('saveChanges') : t('continue')}
+            </button>
             )}
           </div>
         </div>

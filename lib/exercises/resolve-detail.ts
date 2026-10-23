@@ -50,18 +50,40 @@ function catalogIdFromHints(id: string, name?: string): string | null {
   return null
 }
 
-/** Resolve catalog id + full exercise row for detail views. */
 export function resolveExerciseDetail(
   id: string,
   name?: string,
 ): ExerciseDetailDto | null {
   const nameTrim = name?.trim() ?? ''
-  const library = resolveLibraryExercise(nameTrim || id, isDbUuid(id) ? id : null)
-  const catalogId =
-    catalogIdFromHints(id, name) ??
-    library?.id ??
-    (nameTrim ? catalogIdFromHints(nameTrim, nameTrim) : null)
+  const idTrim = id.trim()
 
+  // Prefer explicit catalog ids + curated aliases over fuzzy name search.
+  // Fuzzy search alone maps short labels like "Plank" to the wrong row.
+  const strongId =
+    (isCatalogNumericId(idTrim) ? padCatalogId(idTrim) : null) ??
+    (nameTrim ? resolveExerciseIdAlias(nameTrim) : null) ??
+    (!isDbUuid(idTrim) ? resolveExerciseIdAlias(idTrim) : null)
+
+  if (strongId) {
+    const strong = getExerciseById(strongId)
+    if (strong) {
+      const { source, ...rest } = strong
+      void source
+      return rest
+    }
+  }
+
+  const library = resolveLibraryExercise(nameTrim || id, isDbUuid(id) ? id : null)
+  if (library?.id) {
+    const fromLibrary = getExerciseById(library.id)
+    if (fromLibrary) {
+      const { source, ...rest } = fromLibrary
+      void source
+      return rest
+    }
+  }
+
+  const catalogId = catalogIdFromHints(id, name)
   if (!catalogId) return null
 
   const exercise = getExerciseById(catalogId)

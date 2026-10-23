@@ -1,11 +1,8 @@
 import { redirect } from 'next/navigation'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { FitnessProfilePage } from '@/components/fitness-profile-page'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { OfflineHomeRedirect } from '@/components/offline-home-redirect'
 import { loadOnboardingPageState } from '@/lib/data/onboarding-read'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity, createClient } from '@/lib/supabase/server'
 import { userNeedsOnboarding } from '@/lib/onboarding-storage'
 
@@ -40,12 +37,7 @@ export default async function FitnessProfileRoute() {
         reason="editProfile"
         returnPath="/dashboard/fitness-profile"
       >
-        <DashboardNav
-          userName={displayName}
-          initials={initialsFrom(displayName)}
-          profileHref={profileHref(state.data.username || null, userId)}
-          avatarUrl={state.avatarUrl}
-        />
+
         <FitnessProfilePage initialData={state.data} />
       </GuestPageGate>
     </OfflineHomeRedirect>

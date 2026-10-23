@@ -17,6 +17,10 @@ import {
 } from '@/lib/app-tour'
 import { releaseAppScrollLock } from '@/lib/app-tour-scroll-lock'
 import {
+  setTourNavigationActive,
+  subscribeNavigationSettled,
+} from '@/lib/navigation-intent'
+import {
   completeAppTourAction,
   deferAppTourAction,
   getAppTourStateAction,
@@ -96,6 +100,10 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const forceOffer = useRef(false)
   const busyDepth = useRef(0)
   const syncingPath = useRef(false)
+  const persistTimer = useRef<number | null>(null)
+  const pendingPersist = useRef<{ step: number; status: AppTourStatus } | null>(
+    null,
+  )
 
   const beginBusy = useCallback(() => {
     busyDepth.current += 1
@@ -107,18 +115,59 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     if (busyDepth.current === 0) setBusy(false)
   }, [])
 
+  /** Flush debounced progress — never apply a stale step back onto local state. */
+  const flushPersist = useCallback(async () => {
+    if (persistTimer.current) {
+      window.clearTimeout(persistTimer.current)
+      persistTimer.current = null
+    }
+    const pending = pendingPersist.current
+    if (!pending) return false
+    pendingPersist.current = null
+    const result = await saveAppTourProgressAction(pending.step, pending.status)
+    if (result.ok) {
+      setStatus(result.status)
+      // Only sync step if the user hasn't already moved past this save.
+      if (result.step === stepRef.current) setStep(result.step)
+      return true
+    }
+    return false
+  }, [])
+
+  /**
+   * Step saves are debounced so Next isn't blocked by a Supabase round-trip
+   * (and so we don't thrash auth metadata on every tap).
+   */
+  const clearPendingPersist = useCallback(() => {
+    pendingPersist.current = null
+    if (persistTimer.current) {
+      window.clearTimeout(persistTimer.current)
+      persistTimer.current = null
+    }
+  }, [])
+
   const persistQuiet = useCallback(
-    async (nextStep: number, nextStatus: AppTourStatus = 'active') => {
-      const result = await saveAppTourProgressAction(nextStep, nextStatus)
-      if (result.ok) {
-        setStatus(result.status)
-        setStep(result.step)
-        return true
-      }
-      return false
+    (nextStep: number, nextStatus: AppTourStatus = 'active') => {
+      pendingPersist.current = { step: nextStep, status: nextStatus }
+      if (persistTimer.current) window.clearTimeout(persistTimer.current)
+      persistTimer.current = window.setTimeout(() => {
+        persistTimer.current = null
+        void flushPersist()
+      }, 1_200)
     },
-    [],
+    [flushPersist],
   )
+
+  useEffect(() => {
+    setTourNavigationActive(visible)
+    return () => setTourNavigationActive(false)
+  }, [visible])
+
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) window.clearTimeout(persistTimer.current)
+    }
+  }, [])
 
   const goToStep = useCallback(
     (
@@ -148,6 +197,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       ) {
         setAwaitingPath(def.href)
         syncingPath.current = true
+        // Prefetch first so replace can reuse a warm Flight payload.
         try {
           router.prefetch(def.href)
         } catch {
@@ -156,13 +206,14 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
         router.replace(def.href)
       } else {
         setAwaitingPath(null)
+        syncingPath.current = false
         if (def.href && !pathReadyForStep(pathname, def.href)) {
           setVisible(false)
         }
       }
 
       if (options?.persist !== false) {
-        void persistQuiet(clamped, nextStatus)
+        persistQuiet(clamped, nextStatus)
       }
     },
     [pathname, persistQuiet, router],
@@ -296,10 +347,8 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // Deferred / mid-tour leftovers must not nag on every app open.
-    // Only first-time `pending`, or an explicit ?tour=1 / Settings restart.
-    const shouldOffer =
-      forceOffer.current || currentStatus === 'pending'
+    // The full tour starts only from Settings or an explicit ?tour=1.
+    const shouldOffer = forceOffer.current
 
     if (!shouldOffer) {
       setVisible(false)
@@ -369,6 +418,15 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   }, [pathname, awaitingPath])
 
   useEffect(() => {
+    if (!awaitingPath) return
+    // Step navigation gave up (Stay) or landed elsewhere — re-sync to the page shown.
+    return subscribeNavigationSettled(() => {
+      setAwaitingPath(null)
+      syncingPath.current = false
+    })
+  }, [awaitingPath])
+
+  useEffect(() => {
     if (!visible || awaitingPath || syncingPath.current) return
     const def = APP_TOUR_STEPS[step]
     if (pathReadyForStep(pathname, def?.href ?? null)) return
@@ -421,6 +479,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
   const onSkip = useCallback(async () => {
     beginBusy()
     try {
+      clearPendingPersist()
       const result = await skipAppTourAction()
       if (result.ok) {
         setStatus(result.status)
@@ -434,11 +493,12 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     } finally {
       endBusy()
     }
-  }, [beginBusy, endBusy, releaseTourScrollLock, router])
+  }, [beginBusy, clearPendingPersist, endBusy, releaseTourScrollLock, router])
 
   const onDismiss = useCallback(async () => {
     beginBusy()
     try {
+      clearPendingPersist()
       const result = await deferAppTourAction(step)
       if (result.ok) {
         setStatus(result.status)
@@ -452,12 +512,13 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     } finally {
       endBusy()
     }
-  }, [beginBusy, endBusy, releaseTourScrollLock, router, step])
+  }, [beginBusy, clearPendingPersist, endBusy, releaseTourScrollLock, router, step])
 
   const onFinish = useCallback(
     async (destination: 'home' | 'workout' | 'coach') => {
       beginBusy()
       try {
+        clearPendingPersist()
         const result = await completeAppTourAction()
         if (result.ok) {
           setStatus(result.status)
@@ -477,12 +538,13 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
         endBusy()
       }
     },
-    [beginBusy, endBusy, releaseTourScrollLock, router],
+    [beginBusy, clearPendingPersist, endBusy, releaseTourScrollLock, router],
   )
 
   const onStartLater = useCallback(async () => {
     beginBusy()
     try {
+      clearPendingPersist()
       // Skip (not defer): "later" must not reappear on every cold start.
       // Athletes can still restart the tour from Settings.
       const result = await skipAppTourAction()
@@ -497,7 +559,7 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     } finally {
       endBusy()
     }
-  }, [beginBusy, endBusy, releaseTourScrollLock])
+  }, [beginBusy, clearPendingPersist, endBusy, releaseTourScrollLock])
 
   const onStartNow = useCallback(async () => {
     const def = APP_TOUR_STEPS[step]
@@ -542,16 +604,28 @@ export function AppTourProvider({ children }: { children: ReactNode }) {
     !tourBlocked && visible && (pathOk || awaitingPath !== null)
   const showDeferredBanner = !tourBlocked && showDeferred
 
-  // Warm the next 1–2 tour routes so Next doesn't feel like a cold page load.
-  // Tour destinations were left out of the global 3-tab prefetch trim.
+  // Warm every tour route as soon as the tour is visible so Next/Back feel instant.
   useEffect(() => {
     if (!visible || tourBlocked) return
     const hrefs = new Set<string>()
-    for (let i = step; i <= Math.min(step + 2, APP_TOUR_STEPS.length - 1); i++) {
-      const href = APP_TOUR_STEPS[i]?.href
-      if (href) hrefs.add(href)
+    for (const tourStep of APP_TOUR_STEPS) {
+      if (tourStep.href) hrefs.add(tourStep.href)
     }
     for (const href of hrefs) {
+      try {
+        router.prefetch(href)
+      } catch {
+        /* prefetch is best-effort */
+      }
+    }
+  }, [visible, tourBlocked, router])
+
+  // Keep the immediate next/prev warm even if the full set was already prefetched.
+  useEffect(() => {
+    if (!visible || tourBlocked) return
+    for (const i of [step - 1, step + 1, step + 2]) {
+      const href = APP_TOUR_STEPS[i]?.href
+      if (!href) continue
       try {
         router.prefetch(href)
       } catch {

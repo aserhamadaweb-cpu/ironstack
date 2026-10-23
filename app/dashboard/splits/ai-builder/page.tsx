@@ -1,13 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { SplitAiBuilderStandalone } from '@/components/split-ai-builder-standalone'
 import { getProfile } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 
 export async function generateMetadata() {
@@ -30,12 +27,7 @@ export default async function SplitAiBuilderPage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-      />
+
       <OfflineConnectionGate feature="splitsManage">
         <GuestPageGate reason="createSplit" returnPath="/dashboard/splits/ai-builder">
         <main className="mx-auto min-w-0 max-w-2xl space-y-6 overflow-x-clip px-4 py-6 sm:px-6">

@@ -3,14 +3,11 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Plus } from 'lucide-react'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { MySplitsCustomSection } from '@/components/my-splits-custom-section'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { OfflineCreateSplitLink } from '@/components/offline-create-split-link'
 import { CTA_PRIMARY } from '@/lib/accent'
 import { getProfile, getSplitsForUser } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { formatSplitSavedDate, sortSplitsByRecentSaved } from '@/lib/split-display'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
 import { createSplitChoiceHref } from '@/lib/split-create-paths'
@@ -58,12 +55,7 @@ export default async function MySplitsPage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-      />
+
       <OfflineConnectionGate feature="splitsManage">
       <main className="mx-auto min-w-0 max-w-3xl space-y-8 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8">
         <BackToTrainLink />

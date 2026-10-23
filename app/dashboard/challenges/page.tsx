@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { FriendChallengesPage } from '@/components/friend-challenges-page'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
@@ -10,8 +9,6 @@ import {
   listMyChallenges,
 } from '@/lib/data/challenges'
 import { getAcceptedFriends, getProfile } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { getAuthIdentity } from '@/lib/supabase/server'
 
 export const metadata = {
@@ -46,13 +43,7 @@ export default async function ChallengesPage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        avatarUrl={profileResult.data?.avatar_url}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <OfflineConnectionGate feature="leaderboard">
       <GuestPageGate reason="challenges" returnPath="/dashboard/challenges">
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">

@@ -4,7 +4,6 @@ import type { ComponentType } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { EASE } from '@/components/reveal'
 
 type FeaturePlaceholderProps = {
@@ -32,7 +31,7 @@ export function FeaturePlaceholder({
 
   return (
     <div className="min-h-svh">
-      <DashboardNav />
+
 
       <main className="mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center md:py-32">
         <motion.div

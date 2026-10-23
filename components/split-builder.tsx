@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { hardNavigate } from '@/lib/navigation-intent'
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,7 +22,6 @@ import {
   useReducedMotion,
 } from 'framer-motion'
 import { useLocale, useTranslations } from 'next-intl'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { ExerciseCard } from '@/components/exercise-card'
 import { ExerciseLibraryOverlay } from '@/components/exercise-library-overlay'
 import { EASE } from '@/components/reveal'
@@ -431,7 +431,7 @@ export function SplitBuilder({
         /* ignore */
       }
       if (startTourAfterSave && !isEdit) {
-        window.location.assign('/dashboard/home?tour=1')
+        hardNavigate('/dashboard/workout')
         return
       }
       router.refresh()
@@ -441,7 +441,7 @@ export function SplitBuilder({
         setSavedSplitId(splitId)
         setSaved(true)
         if (startTourAfterSave && !isEdit) {
-          window.location.assign('/dashboard/home?tour=1')
+          hardNavigate('/dashboard/workout')
           return
         }
       } else {
@@ -464,7 +464,6 @@ export function SplitBuilder({
         <div className="absolute bottom-[20%] start-[-6rem] h-80 w-80 rounded-full bg-gold/[0.08] blur-3xl" />
       </div>
 
-      <DashboardNav userName={displayName} initials={initials} avatarUrl={avatarUrl} />
 
       <main className="mx-auto max-w-3xl px-6 pt-8 md:pt-12">
         <Link

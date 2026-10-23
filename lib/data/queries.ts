@@ -1,3 +1,8 @@
+import { cache } from 'react'
+import { isBodyweightLogNote } from '@/lib/units'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
+import { displayMuscleGroup } from '@/lib/lift-progress'
+import { computeWeeklyVolumeTrend } from '@/lib/volume-trend'
 import { createClient, getAuthUserId } from '@/lib/supabase/server'
 import type {
   Friendship,
@@ -46,21 +51,26 @@ export async function getCurrentUser() {
   return user
 }
 
-export async function getProfile(userId: string): Promise<DataResult<Profile | null>> {
+export const getProfile = cache(async function getProfile(
+  userId: string,
+): Promise<DataResult<Profile | null>> {
   try {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(
-      'id, username, display_name, avatar_url, bio, preferred_unit, theme_preference, language, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, current_weight_kg, is_email_verified, is_guest, username_change_count, primary_split_id, created_at, updated_at',
-    )
-    .eq('id', userId)
-    .maybeSingle()
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(
+        'id, username, display_name, avatar_url, bio, preferred_unit, theme_preference, language, notification_preferences, privacy_follow, privacy_friend_request, privacy_message, height_cm, gender, birth_date, current_weight_kg, is_email_verified, is_guest, username_change_count, primary_split_id, created_at, updated_at',
+      )
+      .eq('id', userId)
+      .maybeSingle()
 
-  if (error) {
-    return { data: null, error: friendlyError('Could not load your profile.', error.message) }
-  }
-  return { data: data as Profile | null, error: null }
+    if (error) {
+      return {
+        data: null,
+        error: friendlyError('Could not load your profile.', error.message),
+      }
+    }
+    return { data: data as Profile | null, error: null }
   } catch (err) {
     return {
       data: null,
@@ -70,7 +80,7 @@ export async function getProfile(userId: string): Promise<DataResult<Profile | n
       ),
     }
   }
-}
+})
 
 export async function listBodyWeightLogs(
   userId: string,
@@ -186,6 +196,278 @@ export async function getCompletedSessions(
   return { data: rows, error: null }
 }
 
+export type ProgressSessionMuscle = {
+  name: string
+  volumeKg: number
+  sets: number
+}
+
+export type ProgressSessionSummary = {
+  id: string
+  splitName: string
+  dayName: string | null
+  finishedAt: string
+  durationSeconds: number
+  totalVolumeKg: number
+  setsCompleted: number
+  setsSkipped: number
+  muscles: ProgressSessionMuscle[]
+}
+
+export type MuscleProgressSummary = {
+  muscle: string
+  sessionCount: number
+  setCount: number
+  totalVolumeKg: number
+  /** First session that trained this muscle vs the latest one. */
+  changePct: number | null
+}
+
+export type ProgressOverview = {
+  sessions: ProgressSessionSummary[]
+  muscles: MuscleProgressSummary[]
+  totals: {
+    sessionCount: number
+    totalVolumeKg: number
+    totalSets: number
+    totalDurationSeconds: number
+  }
+  weeklyBars: number[]
+  loadChangePct: number | null
+  loadInsight: 'empty' | 'baseline' | 'up' | 'down' | 'flat'
+}
+
+/** Completed sessions plus how each muscle's work changed from first to latest. */
+export async function getProgressOverview(
+  userId: string,
+): Promise<DataResult<ProgressOverview>> {
+  const supabase = await createClient()
+  const [sessionsRes, logsRes] = await Promise.all([
+    supabase
+      .from('sessions')
+      .select(
+        'id, started_at, finished_at, duration_seconds, total_volume, total_sets_completed, total_sets_skipped, splits(name), split_days(name)',
+      )
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('finished_at', { ascending: false, nullsFirst: false })
+      .limit(200),
+    supabase
+      .from('lift_logs')
+      .select(
+        'session_id, weight, reps, duration_seconds, notes, logged_at, lift_types(name, muscle_group, category)',
+      )
+      .eq('user_id', userId)
+      .or('is_skipped.is.null,is_skipped.eq.false')
+      .order('logged_at', { ascending: true })
+      .limit(5000),
+  ])
+
+  if (sessionsRes.error) {
+    return {
+      data: null,
+      error: friendlyError(
+        'Could not load your training summary.',
+        sessionsRes.error.message,
+      ),
+    }
+  }
+  if (logsRes.error) {
+    return {
+      data: null,
+      error: friendlyError(
+        'Could not load your training summary.',
+        logsRes.error.message,
+      ),
+    }
+  }
+
+  type LogRow = {
+    session_id: string | null
+    weight: number
+    reps: number
+    duration_seconds: number | null
+    notes: string | null
+    logged_at: string
+    lift_types:
+      | { name?: string | null; muscle_group?: string | null; category?: string | null }
+      | { name?: string | null; muscle_group?: string | null; category?: string | null }[]
+      | null
+  }
+
+  type Bucket = {
+    at: string
+    volume: number
+    sets: number
+    bestWeight: number
+    bestReps: number
+  }
+
+  const muscleBuckets = new Map<string, Map<string, Bucket>>()
+  const muscleSets = new Map<string, number>()
+  const sessionMuscles = new Map<string, Map<string, { volumeKg: number; sets: number }>>()
+  const sessionVolumeFromLogs = new Map<string, number>()
+  const sessionSetsFromLogs = new Map<string, number>()
+
+  for (const row of (logsRes.data ?? []) as unknown as LogRow[]) {
+    const lift = oneRelation(row.lift_types)
+    const muscle = displayMuscleGroup(lift?.muscle_group) || 'Other'
+    const sessionKey = row.session_id ?? `day:${row.logged_at.slice(0, 10)}`
+    const weight = Number(row.weight) || 0
+    const reps = Number(row.reps) || 0
+    const bodyweight = isBodyweightLogNote(row.notes)
+    const cardio =
+      (lift?.category ?? '').trim().toLowerCase() === 'cardio' ||
+      (Number(row.duration_seconds) || 0) > 0
+    const volume = bodyweight || cardio ? 0 : weight * reps
+
+    let buckets = muscleBuckets.get(muscle)
+    if (!buckets) {
+      buckets = new Map()
+      muscleBuckets.set(muscle, buckets)
+    }
+    const bucket = buckets.get(sessionKey) ?? {
+      at: row.logged_at,
+      volume: 0,
+      sets: 0,
+      bestWeight: 0,
+      bestReps: 0,
+    }
+    bucket.sets += 1
+    bucket.volume += volume
+    if (row.logged_at < bucket.at) bucket.at = row.logged_at
+    if (bodyweight || cardio) {
+      if (reps > bucket.bestReps) bucket.bestReps = reps
+    } else if (
+      weight > bucket.bestWeight ||
+      (weight === bucket.bestWeight && reps > bucket.bestReps)
+    ) {
+      bucket.bestWeight = weight
+      bucket.bestReps = reps
+    }
+    buckets.set(sessionKey, bucket)
+    muscleSets.set(muscle, (muscleSets.get(muscle) ?? 0) + 1)
+
+    if (row.session_id) {
+      let byMuscle = sessionMuscles.get(row.session_id)
+      if (!byMuscle) {
+        byMuscle = new Map()
+        sessionMuscles.set(row.session_id, byMuscle)
+      }
+      const current = byMuscle.get(muscle) ?? { volumeKg: 0, sets: 0 }
+      current.volumeKg += volume
+      current.sets += 1
+      byMuscle.set(muscle, current)
+      sessionVolumeFromLogs.set(
+        row.session_id,
+        (sessionVolumeFromLogs.get(row.session_id) ?? 0) + volume,
+      )
+      sessionSetsFromLogs.set(
+        row.session_id,
+        (sessionSetsFromLogs.get(row.session_id) ?? 0) + 1,
+      )
+    }
+  }
+
+  const muscles: MuscleProgressSummary[] = [...muscleBuckets.entries()]
+    .map(([muscle, buckets]) => {
+      const ordered = [...buckets.values()].sort((a, b) => a.at.localeCompare(b.at))
+      const first = ordered[0]
+      const latest = ordered[ordered.length - 1]
+      let changePct: number | null = null
+      if (ordered.length > 1 && first && latest) {
+        const firstVolume = first.volume
+        const latestVolume = latest.volume
+        if (firstVolume > 0 && latestVolume > 0) {
+          changePct = Math.round(((latestVolume - firstVolume) / firstVolume) * 100)
+        } else if (firstVolume <= 0 && latestVolume <= 0) {
+          const from = first.bestReps || first.bestWeight
+          const to = latest.bestReps || latest.bestWeight
+          if (from > 0) changePct = Math.round(((to - from) / from) * 100)
+        }
+      }
+      return {
+        muscle,
+        sessionCount: ordered.length,
+        setCount: muscleSets.get(muscle) ?? 0,
+        totalVolumeKg: ordered.reduce((sum, bucket) => sum + bucket.volume, 0),
+        changePct,
+      }
+    })
+    .sort((a, b) => b.totalVolumeKg - a.totalVolumeKg || a.muscle.localeCompare(b.muscle))
+
+  type SessionRow = {
+    id: string
+    started_at: string
+    finished_at: string | null
+    duration_seconds: number | null
+    total_volume: number | null
+    total_sets_completed: number | null
+    total_sets_skipped: number | null
+    splits: { name?: string | null } | { name?: string | null }[] | null
+    split_days: { name?: string | null } | { name?: string | null }[] | null
+  }
+
+  const sessions: ProgressSessionSummary[] = (
+    (sessionsRes.data ?? []) as unknown as SessionRow[]
+  ).map((row) => {
+    const split = oneRelation(row.splits)
+    const day = oneRelation(row.split_days)
+    const storedVolume = Number(row.total_volume) || 0
+    const storedSets = Number(row.total_sets_completed) || 0
+    const musclesForSession = [...(sessionMuscles.get(row.id)?.entries() ?? [])]
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a, b) => b.volumeKg - a.volumeKg || b.sets - a.sets)
+    return {
+      id: row.id,
+      splitName: split?.name?.trim() || 'Workout',
+      dayName: day?.name?.trim() || null,
+      finishedAt: row.finished_at ?? row.started_at,
+      durationSeconds: Number(row.duration_seconds) || 0,
+      totalVolumeKg: storedVolume > 0 ? storedVolume : sessionVolumeFromLogs.get(row.id) ?? 0,
+      setsCompleted: storedSets > 0 ? storedSets : sessionSetsFromLogs.get(row.id) ?? 0,
+      setsSkipped: Number(row.total_sets_skipped) || 0,
+      muscles: musclesForSession,
+    }
+  })
+
+  const totals = sessions.reduce(
+    (acc, session) => {
+      acc.sessionCount += 1
+      acc.totalVolumeKg += session.totalVolumeKg
+      acc.totalSets += session.setsCompleted
+      acc.totalDurationSeconds += session.durationSeconds
+      return acc
+    },
+    {
+      sessionCount: 0,
+      totalVolumeKg: 0,
+      totalSets: 0,
+      totalDurationSeconds: 0,
+    },
+  )
+
+  const trend = computeWeeklyVolumeTrend(
+    sessions.map((session) => ({
+      started_at: session.finishedAt,
+      finished_at: session.finishedAt,
+      total_volume: session.totalVolumeKg,
+    })),
+  )
+
+  return {
+    data: {
+      sessions,
+      muscles,
+      totals,
+      weeklyBars: trend.bars,
+      loadChangePct: trend.loadChangePct,
+      loadInsight: trend.loadInsight,
+    },
+    error: null,
+  }
+}
+
 export async function getSessionById(
   userId: string,
   sessionId: string,
@@ -231,7 +513,10 @@ export async function getSessionLiftLogs(
 ): Promise<
   DataResult<
     (LiftLog & {
-      lift_types: Pick<LiftType, 'id' | 'name' | 'slug' | 'category'> | null
+      lift_types: Pick<
+        LiftType,
+        'id' | 'name' | 'slug' | 'category' | 'image_url' | 'muscle_group'
+      > | null
     })[]
   >
 > {
@@ -239,7 +524,7 @@ export async function getSessionLiftLogs(
   const { data, error } = await supabase
     .from('lift_logs')
     .select(
-      'id, user_id, lift_type_id, weight, reps, weight_unit, duration_seconds, logged_at, notes, created_at, updated_at, session_id, set_number, is_skipped, lift_types(id, name, slug, category)',
+      'id, user_id, lift_type_id, weight, reps, weight_unit, duration_seconds, logged_at, notes, created_at, updated_at, session_id, set_number, is_skipped, lift_types(id, name, slug, category, image_url, muscle_group)',
     )
     .eq('session_id', sessionId)
     .order('set_number', { ascending: true })
@@ -251,17 +536,28 @@ export async function getSessionLiftLogs(
     }
   }
 
+  type LogLift = Pick<
+    LiftType,
+    'id' | 'name' | 'slug' | 'category' | 'image_url' | 'muscle_group'
+  >
   type LogRow = LiftLog & {
-    lift_types:
-      | Pick<LiftType, 'id' | 'name' | 'slug' | 'category'>
-      | Pick<LiftType, 'id' | 'name' | 'slug' | 'category'>[]
-      | null
+    lift_types: LogLift | LogLift[] | null
   }
 
-  const rows = ((data ?? []) as unknown as LogRow[]).map((row) => ({
-    ...row,
-    lift_types: oneRelation(row.lift_types),
-  }))
+  const rows = ((data ?? []) as unknown as LogRow[]).map((row) => {
+    const lift = oneRelation(row.lift_types)
+    const catalog = lift?.name ? resolveLibraryExercise(lift.name) : null
+    return {
+      ...row,
+      lift_types: lift
+        ? {
+            ...lift,
+            image_url: lift.image_url || catalog?.image || null,
+            muscle_group: lift.muscle_group || catalog?.muscles[0] || null,
+          }
+        : null,
+    }
+  })
 
   return { data: rows, error: null }
 }
@@ -537,7 +833,7 @@ export async function getPreviousBestsMap(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('lift_logs')
-    .select('lift_type_id, weight, reps, duration_seconds, lift_types(category)')
+    .select('lift_type_id, weight, reps, duration_seconds, notes, lift_types(category)')
     .eq('user_id', userId)
     .in('lift_type_id', unique)
     .or('is_skipped.is.null,is_skipped.eq.false')
@@ -554,6 +850,7 @@ export async function getPreviousBestsMap(
     weight: number
     reps: number
     duration_seconds: number | null
+    notes: string | null
     lift_types: { category: string } | { category: string }[] | null
   }
 
@@ -582,6 +879,12 @@ export async function getPreviousBestsMap(
     const weight = Number(row.weight) || 0
     const reps = Number(row.reps) || 0
     const current = map[row.lift_type_id]
+    if (isBodyweightLogNote(row.notes)) {
+      if (!current || reps > current.reps) {
+        map[row.lift_type_id] = { weight: 0, reps }
+      }
+      continue
+    }
     if (!current || weight > current.weight) {
       map[row.lift_type_id] = { weight, reps }
     }
@@ -752,10 +1055,21 @@ export async function getPersonalRecordsBoard(
   }
 
   const mapRows = (data: unknown): PersonalRecordWithLift[] =>
-    ((data ?? []) as unknown as Row[]).map((row) => ({
-      ...row,
-      lift_types: oneRelation(row.lift_types),
-    }))
+    ((data ?? []) as unknown as Row[]).map((row) => {
+      const lift = oneRelation(row.lift_types)
+      return {
+        ...row,
+        lift_types: lift
+          ? {
+              ...lift,
+              image_url:
+                lift.image_url ||
+                resolveLibraryExercise(lift.name)?.image ||
+                null,
+            }
+          : null,
+      }
+    })
 
   return {
     data: {
@@ -764,6 +1078,234 @@ export async function getPersonalRecordsBoard(
     },
     error: null,
   }
+}
+
+export type PracticedLiftSummary = {
+  liftTypeId: string
+  name: string
+  muscleGroup: string | null
+  imageUrl: string | null
+  category: string | null
+  setCount: number
+  sessionCount: number
+  lastLoggedAt: string
+  bestWeightKg: number | null
+  bestReps: number | null
+  bestDurationSeconds: number | null
+}
+
+export type LiftProgressLog = {
+  id: string
+  liftTypeId: string
+  sessionId: string | null
+  weightKg: number
+  reps: number
+  durationSeconds: number | null
+  repsOnly?: boolean
+  setNumber: number | null
+  loggedAt: string
+}
+
+export type LiftProgressMeta = {
+  liftTypeId: string
+  name: string
+  muscleGroup: string | null
+  imageUrl: string | null
+  category: string | null
+}
+
+/** Distinct lifts the athlete has logged (non-skipped sets), with simple aggregates. */
+export async function getPracticedLifts(
+  userId: string,
+): Promise<DataResult<PracticedLiftSummary[]>> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('lift_logs')
+    .select(
+      'lift_type_id, weight, reps, duration_seconds, notes, logged_at, session_id, lift_types(id, name, muscle_group, image_url, category)',
+    )
+    .eq('user_id', userId)
+    .or('is_skipped.is.null,is_skipped.eq.false')
+    .order('logged_at', { ascending: false })
+    .limit(5000)
+
+  if (error) {
+    return {
+      data: null,
+      error: friendlyError('Could not load your practiced exercises.', error.message),
+    }
+  }
+
+  type Row = {
+    lift_type_id: string
+    weight: number
+    reps: number
+    duration_seconds: number | null
+    notes: string | null
+    logged_at: string
+    session_id: string | null
+    lift_types:
+      | Pick<LiftType, 'id' | 'name' | 'muscle_group' | 'image_url' | 'category'>
+      | Pick<LiftType, 'id' | 'name' | 'muscle_group' | 'image_url' | 'category'>[]
+      | null
+  }
+
+  type Acc = {
+    liftTypeId: string
+    name: string
+    muscleGroup: string | null
+    imageUrl: string | null
+    category: string | null
+    setCount: number
+    sessionIds: Set<string>
+    lastLoggedAt: string
+    bestWeightKg: number
+    bestReps: number
+    bestDurationSeconds: number
+  }
+
+  const byLift = new Map<string, Acc>()
+
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const lift = oneRelation(row.lift_types)
+    const liftTypeId = row.lift_type_id
+    if (!liftTypeId) continue
+
+    let acc = byLift.get(liftTypeId)
+    if (!acc) {
+      acc = {
+        liftTypeId,
+        name: lift?.name?.trim() || 'Exercise',
+        muscleGroup: lift?.muscle_group ?? null,
+        imageUrl:
+          lift?.image_url || resolveLibraryExercise(lift?.name ?? '')?.image || null,
+        category: lift?.category ?? null,
+        setCount: 0,
+        sessionIds: new Set(),
+        lastLoggedAt: row.logged_at,
+        bestWeightKg: 0,
+        bestReps: 0,
+        bestDurationSeconds: 0,
+      }
+      byLift.set(liftTypeId, acc)
+    }
+
+    acc.setCount += 1
+    if (row.session_id) acc.sessionIds.add(row.session_id)
+    if (row.logged_at > acc.lastLoggedAt) acc.lastLoggedAt = row.logged_at
+
+    const category = (lift?.category ?? acc.category)?.trim().toLowerCase()
+    const isCardio = category === 'cardio'
+    if (isCardio) {
+      const duration = Number(row.duration_seconds) || 0
+      if (duration > acc.bestDurationSeconds) {
+        acc.bestDurationSeconds = duration
+      }
+    } else if (isBodyweightLogNote(row.notes)) {
+      const reps = Number(row.reps) || 0
+      if (reps > acc.bestReps) acc.bestReps = reps
+    } else {
+      const weight = Number(row.weight) || 0
+      const reps = Number(row.reps) || 0
+      if (
+        weight > acc.bestWeightKg ||
+        (weight === acc.bestWeightKg && reps > acc.bestReps)
+      ) {
+        acc.bestWeightKg = weight
+        acc.bestReps = reps
+      }
+    }
+  }
+
+  const summaries: PracticedLiftSummary[] = [...byLift.values()]
+    .map((acc) => ({
+      liftTypeId: acc.liftTypeId,
+      name: acc.name,
+      muscleGroup: acc.muscleGroup,
+      imageUrl: acc.imageUrl,
+      category: acc.category,
+      setCount: acc.setCount,
+      sessionCount: Math.max(acc.sessionIds.size, acc.setCount > 0 ? 1 : 0),
+      lastLoggedAt: acc.lastLoggedAt,
+      bestWeightKg: acc.bestWeightKg > 0 ? acc.bestWeightKg : null,
+      bestReps: acc.bestReps > 0 ? acc.bestReps : null,
+      bestDurationSeconds:
+        acc.bestDurationSeconds > 0 ? acc.bestDurationSeconds : null,
+    }))
+    .sort((a, b) => b.lastLoggedAt.localeCompare(a.lastLoggedAt))
+
+  return { data: summaries, error: null }
+}
+
+/** Full non-skipped set history for one lift, oldest → newest for charting. */
+export async function getLiftProgressHistory(
+  userId: string,
+  liftTypeId: string,
+): Promise<
+  DataResult<{
+    meta: LiftProgressMeta | null
+    logs: LiftProgressLog[]
+  }>
+> {
+  const id = liftTypeId.trim()
+  if (!id) {
+    return { data: { meta: null, logs: [] }, error: null }
+  }
+
+  const supabase = await createClient()
+  const [logsRes, liftRes] = await Promise.all([
+    supabase
+      .from('lift_logs')
+      .select(
+        'id, lift_type_id, session_id, weight, reps, duration_seconds, notes, set_number, logged_at',
+      )
+      .eq('user_id', userId)
+      .eq('lift_type_id', id)
+      .or('is_skipped.is.null,is_skipped.eq.false')
+      .order('logged_at', { ascending: true })
+      .limit(2000),
+    supabase
+      .from('lift_types')
+      .select('id, name, muscle_group, image_url, category')
+      .eq('id', id)
+      .maybeSingle(),
+  ])
+
+  if (logsRes.error) {
+    return {
+      data: null,
+      error: friendlyError('Could not load exercise history.', logsRes.error.message),
+    }
+  }
+
+  const lift = liftRes.data
+  const meta: LiftProgressMeta | null = lift
+    ? {
+        liftTypeId: lift.id,
+        name: lift.name?.trim() || 'Exercise',
+        muscleGroup: lift.muscle_group ?? null,
+        imageUrl:
+          lift.image_url || resolveLibraryExercise(lift.name)?.image || null,
+        category: lift.category ?? null,
+      }
+    : null
+
+  const logs: LiftProgressLog[] = (logsRes.data ?? []).map((row) => {
+    const repsOnly = isBodyweightLogNote(row.notes)
+    return {
+      id: row.id,
+      liftTypeId: row.lift_type_id,
+      sessionId: row.session_id,
+      weightKg: repsOnly ? 0 : Number(row.weight) || 0,
+      reps: Number(row.reps) || 0,
+      durationSeconds: row.duration_seconds,
+      setNumber: row.set_number,
+      loggedAt: row.logged_at,
+      repsOnly,
+    }
+  })
+
+  return { data: { meta, logs }, error: null }
 }
 
 export async function getAcceptedFriendIds(

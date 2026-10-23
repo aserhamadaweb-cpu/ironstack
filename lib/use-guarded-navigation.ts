@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation'
 import { markNavigationIntent } from '@/lib/navigation-intent'
 
 /**
- * Prevents duplicate navigations from rapid taps and records navigation intent
- * so reconnect/sync logic does not fight the user's chosen route.
+ * Records navigation intent and ignores duplicate taps of the same href.
+ * Does not preventDefault on a different in-flight destination — that would
+ * cancel Next's transition and look like a jump back to the previous tab.
  */
 export function useGuardedNavigation() {
   const pathname = usePathname()
@@ -15,11 +16,12 @@ export function useGuardedNavigation() {
   const guardNavigation = useCallback(
     (href: string) => {
       const target = href.split('#')[0] ?? href
-      if (!target || target === pathname || pendingHrefRef.current === target) {
-        return false
-      }
+      if (!target) return false
+      const here = pathname.split('#')[0] ?? pathname
+      if (target === here) return false
+      if (pendingHrefRef.current === target) return false
       pendingHrefRef.current = target
-      markNavigationIntent(target)
+      markNavigationIntent(target, 'push')
       window.setTimeout(() => {
         if (pendingHrefRef.current === target) pendingHrefRef.current = null
       }, 2_000)
@@ -30,11 +32,15 @@ export function useGuardedNavigation() {
 
   const onNavClick = useCallback(
     (href: string, e: MouseEvent<HTMLAnchorElement>) => {
-      if (!guardNavigation(href)) {
+      const target = href.split('#')[0] ?? href
+      const here = pathname.split('#')[0] ?? pathname
+      if (target === here || pendingHrefRef.current === target) {
         e.preventDefault()
+        return
       }
+      guardNavigation(href)
     },
-    [guardNavigation],
+    [guardNavigation, pathname],
   )
 
   return { guardNavigation, onNavClick, pathname }

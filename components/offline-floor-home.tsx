@@ -26,6 +26,7 @@ type OfflineFloorHomeProps = {
   isGuest?: boolean
   weekActivity: WeekDay[]
   lastSessionCaption: string
+  includeNav?: boolean
 }
 
 export function OfflineFloorHome({
@@ -36,6 +37,7 @@ export function OfflineFloorHome({
   isGuest = false,
   weekActivity,
   lastSessionCaption,
+  includeNav = true,
 }: OfflineFloorHomeProps) {
   const t = useTranslations('offline')
   const tHome = useTranslations('home')
@@ -78,13 +80,15 @@ export function OfflineFloorHome({
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_30%_at_0%_80%,rgba(198,40,40,0.12),transparent_50%)]" />
       </div>
 
-      <DashboardNav
-        userName={displayName}
-        initials={safeInitials}
-        avatarUrl={avatarUrl}
-        profileHref={profileHref}
-        isGuest={isGuest}
-      />
+      {includeNav ? (
+        <DashboardNav
+          userName={displayName}
+          initials={safeInitials}
+          avatarUrl={avatarUrl}
+          profileHref={profileHref}
+          isGuest={isGuest}
+        />
+      ) : null}
 
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
         <ActiveWorkoutBanner onResumeOffline={setResumeSlug} />

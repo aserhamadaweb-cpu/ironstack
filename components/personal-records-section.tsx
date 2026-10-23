@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, Search, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { formatSessionDate } from '@/lib/session-store'
 import { formatWeightKg } from '@/lib/units'
 
@@ -11,6 +12,7 @@ export type PersonalRecordItem = {
   id: string
   liftName: string
   muscleGroup: string
+  image?: string | null
   weight: number
   reps: number
   loggedAt: string
@@ -177,9 +179,17 @@ export function PersonalRecordsSection({
                             key={record.id}
                             className="rounded-lg border border-silver/10 bg-card/60 px-2.5 py-2.5"
                           >
-                            <p className="line-clamp-2 font-heading text-xs font-semibold leading-snug text-foreground sm:text-[13px]">
-                              {record.liftName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <ExerciseThumb
+                                muscle={record.muscleGroup || 'Core'}
+                                image={record.image}
+                                name={record.liftName}
+                                className="size-9"
+                              />
+                              <p className="line-clamp-2 font-heading text-xs font-semibold leading-snug text-foreground sm:text-[13px]">
+                                {record.liftName}
+                              </p>
+                            </div>
                             <p className="mt-1.5 font-heading text-sm font-bold tabular-nums text-gold">
                               {formatWeightKg(record.weight, weightUnit)}
                             </p>

@@ -1,8 +1,50 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import { loadExerciseLibraryOffline } from '@/lib/exercise-library.client'
+import { normalizeKey } from '@/lib/exercises/normalizers'
 import { resolveLiftImageUrl } from '@/lib/lift-image'
+
+type CatalogVisual = { image: string | null; muscle: string | null }
+
+let visualIndexPromise: Promise<Map<string, CatalogVisual>> | null = null
+
+function exerciseVisualIndex() {
+  if (!visualIndexPromise) {
+    visualIndexPromise = loadExerciseLibraryOffline()
+      .then((rows) => {
+        const index = new Map<string, CatalogVisual>()
+        for (const row of rows) {
+          const key = normalizeKey(row.name)
+          if (!key || index.has(key)) continue
+          index.set(key, {
+            image: row.image || row.gifUrl || null,
+            muscle: row.muscles[0] ?? row.muscleGroup ?? null,
+          })
+        }
+        return index
+      })
+      .catch(() => new Map<string, CatalogVisual>())
+  }
+  return visualIndexPromise
+}
+
+function useCatalogVisual(name: string, enabled: boolean) {
+  const [visual, setVisual] = useState<CatalogVisual | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    void exerciseVisualIndex().then((index) => {
+      if (cancelled) return
+      setVisual(index.get(normalizeKey(name)) ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, name])
+  return visual
+}
 
 type HighlightShape = { cx: number; cy: number; rx: number; ry: number }
 
@@ -99,9 +141,19 @@ type ExerciseThumbProps = {
  * no image exists (or it fails to load).
  */
 export function ExerciseThumb({ muscle, image, name, className }: ExerciseThumbProps) {
-  const resolved = resolveLiftImageUrl(image)
+  const direct = resolveLiftImageUrl(image)
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null)
-  const showImage = Boolean(resolved) && brokenSrc !== resolved
+  const directBroken = Boolean(direct) && brokenSrc === direct
+  const catalog = useCatalogVisual(name, !direct || directBroken)
+  const catalogImage = resolveLiftImageUrl(catalog?.image)
+  const resolved =
+    direct && !directBroken
+      ? direct
+      : catalogImage && catalogImage !== brokenSrc
+        ? catalogImage
+        : null
+  const muscleLabel = muscle || catalog?.muscle || 'Core'
+  const showImage = Boolean(resolved)
 
   return (
     <div
@@ -119,7 +171,7 @@ export function ExerciseThumb({ muscle, image, name, className }: ExerciseThumbP
           onError={() => setBrokenSrc(resolved)}
         />
       ) : (
-        <SilhouetteSvg muscle={muscle} />
+        <SilhouetteSvg muscle={muscleLabel} />
       )}
     </div>
   )

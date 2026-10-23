@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { BODYWEIGHT_LOG_NOTE } from '@/lib/units'
 import { getCachedLiftTypes, getCachedUserId, refreshWorkoutCache, resolveSessionUserId } from '@/lib/offline/cache'
 import { isNetworkFailure, logServerError } from '@/lib/log'
 import {
@@ -13,6 +14,7 @@ import { flushSplitMutations } from '@/lib/offline/split-store'
 import { isAlreadyExistsError, upsertRows } from '@/lib/offline/rest-upsert'
 import { offlineLog, offlineWarn } from '@/lib/offline/debug'
 import { reconcileOutboxWithServer } from '@/lib/offline/reconcile'
+import { registerSessionBackgroundSync } from '@/lib/offline/register-background-sync'
 import type { LocalSession } from '@/lib/offline/db'
 import type { LiftType } from '@/lib/database.types'
 
@@ -24,6 +26,32 @@ const SYNC_STEP_TIMEOUT_MS = 25_000
 const sessionLocks = new Map<string, Promise<void>>()
 const retryAttempt = new Map<string, number>()
 const retryAfter = new Map<string, number>()
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function clearSessionRetry(sessionId: string) {
+  const timer = retryTimers.get(sessionId)
+  if (timer) clearTimeout(timer)
+  retryTimers.delete(sessionId)
+  retryAttempt.delete(sessionId)
+  retryAfter.delete(sessionId)
+}
+
+/** Keep trying a failed upload without a tap. Backs off, then flushes again. */
+function scheduleSessionRetry(sessionId: string, delayMs: number) {
+  const existing = retryTimers.get(sessionId)
+  if (existing) clearTimeout(existing)
+  registerSessionBackgroundSync()
+  const timer = setTimeout(() => {
+    retryTimers.delete(sessionId)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      registerSessionBackgroundSync()
+      scheduleSessionRetry(sessionId, Math.min(delayMs * 2, 2 * 60_000))
+      return
+    }
+    void flushOfflineQueue().catch(() => undefined)
+  }, delayMs)
+  retryTimers.set(sessionId, timer)
+}
 
 function fingerprint(session: LocalSession) {
   const logs = session.logs.map((log) => log.id).sort().join(',')
@@ -60,18 +88,10 @@ function sessionTotals(session: LocalSession) {
       continue
     }
     totalSetsCompleted += 1
-    if ((log.durationSeconds ?? 0) > 0) continue
+    if ((log.durationSeconds ?? 0) > 0 || log.bodyweight) continue
     totalVolume += (Number(log.weight) || 0) * (Number(log.reps) || 0)
   }
   return { totalVolume, totalSetsCompleted, totalSetsSkipped }
-}
-
-function isTransientSyncError(err: unknown): boolean {
-  if (isNetworkFailure(err)) return true
-  const message = err instanceof Error ? err.message : String(err ?? '')
-  return /timed out|jwt|not signed in|invalid token|session expired|queued until|will retry|401|403|409|42501|22P02|23503|failed to fetch|jwt expired|lift type|not on the server/i.test(
-    message,
-  )
 }
 
 function toSlug(value: string) {
@@ -189,6 +209,7 @@ async function upsertLogs(session: LocalSession, userId: string) {
     // placeholders or the whole batch upsert fails and finish never sticks.
     const rawWeight = Number(log.weight) || 0
     const rawReps = Number(log.reps) || 0
+    const bodyweight = Boolean(log.bodyweight) && !isCardio && !log.isSkipped
     const needsPlaceholder =
       isCardio || log.isSkipped || !(rawWeight > 0) || !(rawReps > 0)
     return {
@@ -203,6 +224,7 @@ async function upsertLogs(session: LocalSession, userId: string) {
       is_skipped: log.isSkipped,
       weight_unit: 'kg',
       logged_at: log.loggedAt,
+      ...(bodyweight ? { notes: BODYWEIGHT_LOG_NOTE } : {}),
     }
   })
   await upsertRows('lift_logs', rows)
@@ -480,6 +502,7 @@ export async function syncLocalSession(
       )
       retryAttempt.delete(sessionId)
       retryAfter.delete(sessionId)
+      clearSessionRetry(sessionId)
       offlineLog('sync.result', { sessionId, ok: true, userId: uid, status: 'cancelled' })
       return
     }
@@ -510,6 +533,7 @@ export async function syncLocalSession(
     }
     retryAttempt.delete(sessionId)
     retryAfter.delete(sessionId)
+    clearSessionRetry(sessionId)
     await markSessionSync(normalized.id, 'synced')
     offlineLog('sync.result', {
       sessionId,
@@ -542,6 +566,7 @@ export async function syncLocalSession(
         }
         retryAttempt.delete(sessionId)
         retryAfter.delete(sessionId)
+        clearSessionRetry(sessionId)
         await markSessionSync(sessionId, 'synced')
         offlineLog('sync.result', { sessionId, ok: true, reason: 'already-exists' })
         return
@@ -559,11 +584,11 @@ export async function syncLocalSession(
     const message = err instanceof Error ? err.message : 'Sync failed'
     const attempt = (retryAttempt.get(sessionId) ?? 0) + 1
     retryAttempt.set(sessionId, attempt)
-    const delay = Math.min(8_000 * 2 ** Math.min(attempt - 1, 5), 5 * 60_000)
+    const delay = Math.min(4_000 * 2 ** Math.min(attempt - 1, 5), 2 * 60_000)
     retryAfter.set(sessionId, Date.now() + delay)
-    const status = isTransientSyncError(err) ? 'pending' : 'error'
-    await markSessionSync(sessionId, status, message)
-    offlineWarn('sync.result', { sessionId, ok: false, status, message, attempt })
+    await markSessionSync(sessionId, 'pending', message)
+    scheduleSessionRetry(sessionId, delay)
+    offlineWarn('sync.result', { sessionId, ok: false, status: 'pending', message, attempt })
     throw err
   }
 }
@@ -588,6 +613,7 @@ let flushPromise: Promise<FlushResult> | null = null
 async function flushOfflineQueueInner(): Promise<FlushResult> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     offlineLog('sync.flush.skip', { reason: 'offline' })
+    registerSessionBackgroundSync()
     return { synced: 0, failed: 0, errors: [] }
   }
 
@@ -671,7 +697,9 @@ export function queueSplitSync() {
 
 /** Fire-and-forget: sync one session if online, otherwise leave queued. */
 export function queueSessionSync(session: LocalSession) {
+  registerSessionBackgroundSync()
   void awaitSessionSync(session).catch((err) => {
+    registerSessionBackgroundSync()
     offlineWarn('sync.trigger.failed', {
       id: session.id,
       message: err instanceof Error ? err.message : String(err),
@@ -690,7 +718,10 @@ export async function awaitSessionSync(session: LocalSession): Promise<void> {
     syncStatus: session.syncStatus,
     logs: session.logs.length,
   })
-  if (!online) return
+  if (!online) {
+    registerSessionBackgroundSync()
+    return
+  }
   retryAfter.delete(session.id)
   await enqueueSessionSync(session.id)
 }

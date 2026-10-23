@@ -45,6 +45,13 @@ export function isCardioCategory(category: string | null | undefined): boolean {
   return category?.trim().toLowerCase() === 'cardio'
 }
 
+/** Stored on lift_logs.notes so a bodyweight set can satisfy weight > 0 without showing a load. */
+export const BODYWEIGHT_LOG_NOTE = 'bodyweight'
+
+export function isBodyweightLogNote(notes: string | null | undefined): boolean {
+  return notes?.trim().toLowerCase() === BODYWEIGHT_LOG_NOTE
+}
+
 /** Format lift_log duration_seconds for display (e.g. "32 min"). */
 export function formatDurationSeconds(
   seconds: number | null | undefined,
@@ -63,6 +70,7 @@ export function formatLiftSetDisplay(input: {
   durationSeconds?: number | null
   weightUnit?: WeightUnit
   isCardio?: boolean
+  repsOnly?: boolean
 }): string {
   if (
     input.isCardio ||
@@ -70,6 +78,7 @@ export function formatLiftSetDisplay(input: {
   ) {
     return formatDurationSeconds(input.durationSeconds)
   }
+  if (input.repsOnly) return `${input.reps ?? 0} reps`
   return `${formatWeightKg(input.weightKg, input.weightUnit ?? 'kg')} × ${input.reps ?? 0}`
 }
 
@@ -79,11 +88,13 @@ export function formatLiftLabel(
   reps: number | null | undefined,
   unit: WeightUnit = 'kg',
   durationSeconds?: number | null,
+  repsOnly?: boolean,
 ): string | null {
   if (!name) return null
   if (durationSeconds != null && durationSeconds > 0) {
     return `${name} — ${formatDurationSeconds(durationSeconds)}`
   }
+  if (repsOnly) return `${name} — ${reps ?? 0} reps`
   if (weightKg == null) return null
   return `${name} — ${formatWeightKg(weightKg, unit)} × ${reps ?? 0}`
 }

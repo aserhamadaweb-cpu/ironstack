@@ -22,7 +22,7 @@ import {
 import { refreshPinnedSplits } from '@/lib/offline/offline-splits'
 import { ensureExerciseLibraryCached } from '@/lib/exercise-library.client'
 import {
-  hasRecentNavigationIntent,
+  OFFLINE_SETTLE_MS,
   markNavigationIntent,
 } from '@/lib/navigation-intent'
 import { safeRouterRefresh } from '@/lib/safe-router-refresh'
@@ -105,9 +105,13 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     async (reason: 'online' | 'poll' | 'manual' | 'reconnect' = 'manual') => {
-      if (!isDocumentVisible() && reason === 'poll') return
-
-      await refreshCounts()
+      const hidden = !isDocumentVisible()
+      if (hidden && reason === 'poll') {
+        await refreshCounts()
+        if (pendingCountRef.current === 0) return
+      } else {
+        await refreshCounts()
+      }
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setOrphanNotice(await getOrphanPurgeNotice().catch(() => null))
         return
@@ -195,11 +199,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
             /\/dashboard\/splits\/[^/]+\/session\/?$/.test(path)
           const onOfflineShell = path === '/offline' || path.startsWith('/offline/')
           if (!onSessionRoute && !onOfflineShell) {
-            if (hasRecentNavigationIntent()) {
-              safeRouterRefresh(router, { delayMs: 1_500 })
-            } else {
-              router.refresh()
-            }
+            safeRouterRefresh(router, { delayMs: 400 })
           }
         }
       } catch (err) {
@@ -234,14 +234,21 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       }, reason === 'poll' ? 0 : FOCUS_DEBOUNCE_MS)
     }
 
+    let offlineTimer: number | null = null
     const onOnline = () => {
+      if (offlineTimer) window.clearTimeout(offlineTimer)
+      offlineTimer = null
       void refresh('reconnect').finally(() => {
         setOnline(typeof navigator === 'undefined' ? true : navigator.onLine)
       })
     }
     const onOffline = () => {
       wasOffline.current = true
-      setOnline(false)
+      if (offlineTimer) window.clearTimeout(offlineTimer)
+      offlineTimer = window.setTimeout(() => {
+        offlineTimer = null
+        if (!navigator.onLine) setOnline(false)
+      }, OFFLINE_SETTLE_MS)
     }
     const onChanged = () => {
       void refreshCounts()
@@ -283,7 +290,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         if (!next) {
           setOnline(false)
           void refreshCounts()
-        } else if (isDocumentVisible()) {
+        } else {
           void refresh(wasOffline.current ? 'reconnect' : 'poll').finally(() => {
             setOnline(navigator.onLine)
           })
@@ -301,6 +308,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('visibilitychange', onVisible)
       if (focusTimer.current) window.clearTimeout(focusTimer.current)
+      if (offlineTimer) window.clearTimeout(offlineTimer)
       if (pollTimer) window.clearTimeout(pollTimer)
     }
   }, [refresh, refreshCounts])

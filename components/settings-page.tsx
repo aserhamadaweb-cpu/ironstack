@@ -1,17 +1,27 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
+  Bell,
+  BellRing,
+  ChevronLeft,
+  ChevronRight,
   CloudOff,
+  Dumbbell,
   FileText,
+  Languages,
   Loader2,
   LogOut,
   Monitor,
   Moon,
+  RotateCcw,
+  Ruler,
+  Scale,
   Shield,
   Sun,
+  UserRound,
 } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { signOut } from '@/app/login/actions'
@@ -108,6 +118,76 @@ function Segmented<T extends string>({
   )
 }
 
+type SettingsPane =
+  | 'appearance'
+  | 'language'
+  | 'units'
+  | 'body'
+  | 'fitness'
+  | 'notifications'
+  | 'push'
+  | 'privacy'
+  | 'account'
+  | 'offline'
+  | 'tour'
+  | 'legal'
+
+function SettingsGroup({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <section className="space-y-2">
+      <h2 className="px-1 text-[10px] font-semibold tracking-[0.22em] text-muted-foreground">
+        {title}
+      </h2>
+      <div className="is-panel divide-y divide-silver/10 overflow-hidden">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function SettingsRow({
+  icon: Icon,
+  label,
+  hint,
+  onClick,
+  tour,
+}: {
+  icon: typeof Moon
+  label: string
+  hint: string
+  onClick: () => void
+  tour?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-tour={tour}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-start transition hover:bg-foreground/[0.03]"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-silver/15 bg-background/70 text-gold">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{label}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+          {hint}
+        </span>
+      </span>
+      <ChevronRight
+        className="size-4 shrink-0 text-muted-foreground rtl-flip"
+        aria-hidden="true"
+      />
+    </button>
+  )
+}
+
 function applyLocaleToDocument(locale: AppLocale) {
   const root = document.documentElement
   root.lang = locale
@@ -177,6 +257,11 @@ export function SettingsPageClient({
   const [signOutMsg, setSignOutMsg] = useState<string | null>(null)
   const [langMsg, setLangMsg] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [active, setActive] = useState<SettingsPane | null>(null)
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [active])
 
   useEffect(() => {
     setUnfinishedAlertsEnabled(prefs.unfinished_session)
@@ -268,15 +353,136 @@ export function SettingsPageClient({
       className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:px-6 sm:py-8"
     >
       <BackToTrainLink />
-      <header>
-        <p className="section-kicker">{t('kicker')}</p>
-        <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">
-          {t('title')}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
-      </header>
+      {active == null ? (
+        <>
+          <header>
+            <p className="section-kicker">{t('kicker')}</p>
+            <h1 className="font-heading mt-1 text-2xl font-bold text-headline sm:text-3xl">
+              {t('title')}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
+          </header>
 
-      <section className="space-y-3" aria-labelledby="appearance-heading" data-tour="settings-appearance">
+          <div className="space-y-6">
+            <SettingsGroup title={t('groupPreferences')}>
+              <SettingsRow
+                icon={Moon}
+                label={t('appearance')}
+                hint={t('rowAppearanceHint')}
+                onClick={() => setActive('appearance')}
+                tour="settings-appearance"
+              />
+              {!isGuest ? (
+                <SettingsRow
+                  icon={Languages}
+                  label={t('language')}
+                  hint={t('rowLanguageHint')}
+                  onClick={() => setActive('language')}
+                />
+              ) : null}
+              {!isGuest ? (
+                <SettingsRow
+                  icon={Scale}
+                  label={t('units')}
+                  hint={t('rowUnitsHint')}
+                  onClick={() => setActive('units')}
+                />
+              ) : null}
+            </SettingsGroup>
+
+            {!isGuest ? (
+              <SettingsGroup title={t('groupBody')}>
+                <SettingsRow
+                  icon={Dumbbell}
+                  label={t('fitnessProfile')}
+                  hint={t('rowFitnessHint')}
+                  onClick={() => setActive('fitness')}
+                />
+                <SettingsRow
+                  icon={Ruler}
+                  label={t('bodyStats')}
+                  hint={t('rowBodyHint')}
+                  onClick={() => setActive('body')}
+                />
+              </SettingsGroup>
+            ) : null}
+
+            {!isGuest ? (
+              <SettingsGroup title={t('groupAlerts')}>
+                <SettingsRow
+                  icon={Bell}
+                  label={t('notifPrefs')}
+                  hint={t('rowNotifHint')}
+                  onClick={() => setActive('notifications')}
+                />
+                <SettingsRow
+                  icon={BellRing}
+                  label={t('push')}
+                  hint={t('rowPushHint')}
+                  onClick={() => setActive('push')}
+                />
+              </SettingsGroup>
+            ) : null}
+
+            {!isGuest ? (
+              <SettingsGroup title={t('privacy')}>
+                <SettingsRow
+                  icon={Shield}
+                  label={t('privacy')}
+                  hint={t('rowPrivacyHint')}
+                  onClick={() => setActive('privacy')}
+                />
+              </SettingsGroup>
+            ) : null}
+
+            <SettingsGroup title={t('account')}>
+              <SettingsRow
+                icon={UserRound}
+                label={isGuest ? t('upgradeAccountHeading') : t('account')}
+                hint={isGuest ? t('rowUpgradeHint') : t('rowAccountHint')}
+                onClick={() => setActive('account')}
+              />
+            </SettingsGroup>
+
+            <SettingsGroup title={t('groupApp')}>
+              <SettingsRow
+                icon={CloudOff}
+                label={t('offlineSync')}
+                hint={t('rowOfflineHint')}
+                onClick={() => setActive('offline')}
+                tour="settings-offline"
+              />
+              {!isGuest ? (
+                <SettingsRow
+                  icon={RotateCcw}
+                  label={t('appTour')}
+                  hint={t('rowTourHint')}
+                  onClick={() => setActive('tour')}
+                  tour="settings-restart-tour"
+                />
+              ) : null}
+              <SettingsRow
+                icon={FileText}
+                label={t('legal')}
+                hint={t('rowLegalHint')}
+                onClick={() => setActive('legal')}
+              />
+            </SettingsGroup>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setActive(null)}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition hover:text-gold"
+        >
+          <ChevronLeft className="size-4 rtl-flip" aria-hidden="true" />
+          {t('backToSettings')}
+        </button>
+      )}
+
+      {active === 'appearance' ? (
+      <section className="space-y-3" aria-labelledby="appearance-heading">
         <h2
           id="appearance-heading"
           className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
@@ -340,8 +546,9 @@ export function SettingsPageClient({
           </div>
         </div>
       </section>
+      ) : null}
 
-      {!isGuest ? (
+      {active === 'fitness' && !isGuest ? (
         <section className="space-y-3" aria-labelledby="fitness-profile-heading">
           <h2
             id="fitness-profile-heading"
@@ -364,8 +571,8 @@ export function SettingsPageClient({
         </section>
       ) : null}
 
-      {!isGuest ? (
-        <section className="space-y-3" aria-labelledby="app-tour-heading" data-tour="settings-restart-tour">
+      {active === 'tour' && !isGuest ? (
+        <section className="space-y-3" aria-labelledby="app-tour-heading">
           <h2
             id="app-tour-heading"
             className="text-[10px] font-semibold tracking-[0.22em] text-muted-foreground"
@@ -393,10 +600,10 @@ export function SettingsPageClient({
         </section>
       ) : null}
 
+      {active === 'offline' ? (
       <section
         className="space-y-3"
         aria-labelledby="offline-sync-heading"
-        data-tour="settings-offline"
       >
         <h2
           id="offline-sync-heading"
@@ -438,9 +645,9 @@ export function SettingsPageClient({
           </div>
         </div>
       </section>
+      ) : null}
 
-      {!isGuest ? (
-      <>
+      {active === 'language' && !isGuest ? (
       <section className="space-y-3" aria-labelledby="language-heading">
         <h2
           id="language-heading"
@@ -503,7 +710,9 @@ export function SettingsPageClient({
           )}
         </div>
       </section>
+      ) : null}
 
+      {active === 'units' && !isGuest ? (
       <section className="space-y-3" aria-labelledby="units-heading">
         <h2
           id="units-heading"
@@ -542,7 +751,9 @@ export function SettingsPageClient({
           )}
         </div>
       </section>
+      ) : null}
 
+      {active === 'body' && !isGuest ? (
       <BodyStatsSettings
         preferredUnit={unit}
         heightCm={heightCm}
@@ -551,7 +762,9 @@ export function SettingsPageClient({
         currentWeightKg={currentWeightKg}
         weightLogs={weightLogs}
       />
+      ) : null}
 
+      {active === 'notifications' && !isGuest ? (
       <section className="space-y-3" aria-labelledby="notif-prefs-heading">
         <h2
           id="notif-prefs-heading"
@@ -596,7 +809,9 @@ export function SettingsPageClient({
           </p>
         )}
       </section>
+      ) : null}
 
+      {active === 'privacy' && !isGuest ? (
       <section className="space-y-3" aria-labelledby="privacy-heading">
         <h2
           id="privacy-heading"
@@ -643,7 +858,9 @@ export function SettingsPageClient({
           )}
         </div>
       </section>
+      ) : null}
 
+      {active === 'push' && !isGuest ? (
       <section className="space-y-3" aria-labelledby="push-heading">
         <h2
           id="push-heading"
@@ -653,9 +870,9 @@ export function SettingsPageClient({
         </h2>
         <NotificationSettings embedded />
       </section>
-      </>
       ) : null}
 
+      {active === 'account' ? (
       <section className="space-y-3" aria-labelledby="account-heading">
         <h2
           id="account-heading"
@@ -833,7 +1050,9 @@ export function SettingsPageClient({
         </div>
         )}
       </section>
+      ) : null}
 
+      {active === 'legal' ? (
       <section className="space-y-3" aria-labelledby="legal-heading">
         <h2
           id="legal-heading"
@@ -861,7 +1080,9 @@ export function SettingsPageClient({
           </div>
         </div>
       </section>
+      ) : null}
 
+      {active == null ? (
       <section className="space-y-3" aria-labelledby="session-heading">
         <h2
           id="session-heading"
@@ -933,6 +1154,7 @@ export function SettingsPageClient({
           )}
         </div>
       </section>
+      ) : null}
     </div>
   )
 }

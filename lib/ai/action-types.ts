@@ -13,6 +13,7 @@ export type SplitProposalExercise = {
   sets: number
   reps: string
   homeSuitable: boolean
+  image?: string | null
 }
 
 export type SplitProposalDay = {

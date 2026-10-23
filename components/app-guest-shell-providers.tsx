@@ -6,8 +6,6 @@ import { GuestGateProvider } from '@/components/guest-gate-provider'
 import { ActiveWorkoutProvider } from '@/lib/active-workout-provider'
 import { OfflineProvider } from '@/lib/offline/provider'
 import { EmbeddedSessionProvider } from '@/lib/offline/embedded-session'
-import { NavigationProgress } from '@/components/navigation-progress'
-
 /**
  * Shell providers for routes that render DashboardNav or call useGuestGate()
  * outside app/dashboard/layout.tsx.
@@ -15,7 +13,6 @@ import { NavigationProgress } from '@/components/navigation-progress'
 export function AppGuestShellProviders({ children }: { children: ReactNode }) {
   return (
     <OfflineProvider>
-      <NavigationProgress />
       <ActiveWorkoutProvider>
         <EmbeddedSessionProvider>
           <Suspense fallback={null}>

@@ -4,7 +4,15 @@ import {
   formatSessionDate,
   formatVolume,
 } from '@/lib/session-store'
-import { formatDurationSeconds, isCardioCategory } from '@/lib/units'
+import { formatDurationSeconds, isBodyweightLogNote, isCardioCategory } from '@/lib/units'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
+
+export type StandoutLift = {
+  name: string
+  label: string
+  image?: string | null
+  muscle?: string | null
+}
 
 export type SessionSummaryData = {
   badge: string
@@ -14,7 +22,7 @@ export type SessionSummaryData = {
   duration: string
   volume: string
   sets: string
-  standouts: string[]
+  standouts: StandoutLift[]
 }
 
 function oneRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -46,7 +54,7 @@ export async function buildSessionSummary(
   const { data: logs, error: logsError } = await supabase
     .from('lift_logs')
     .select(
-      'lift_type_id, weight, reps, duration_seconds, is_skipped, lift_types(id, name, category)',
+      'lift_type_id, weight, reps, duration_seconds, is_skipped, notes, lift_types(id, name, category)',
     )
     .eq('session_id', sessionId)
     .order('set_number', { ascending: true })
@@ -61,6 +69,7 @@ export async function buildSessionSummary(
     reps: number
     duration_seconds: number | null
     is_skipped: boolean | null
+    notes: string | null
     lift_types:
       | { id: string; name: string; category?: string }
       | { id: string; name: string; category?: string }[]
@@ -75,6 +84,7 @@ export async function buildSessionSummary(
       reps: number
       durationSeconds?: number | null
       isCardio: boolean
+      repsOnly?: boolean
     }
   >()
   for (const log of (logs ?? []) as LogRow[]) {
@@ -104,11 +114,24 @@ export async function buildSessionSummary(
     }
 
     const weight = Number(log.weight) || 0
+    const reps = Number(log.reps) || 0
+    if (isBodyweightLogNote(log.notes)) {
+      if (!current || reps > current.reps) {
+        byLift.set(log.lift_type_id, {
+          name,
+          weight: 0,
+          reps,
+          isCardio: false,
+          repsOnly: true,
+        })
+      }
+      continue
+    }
     if (!current || weight > current.weight) {
       byLift.set(log.lift_type_id, {
         name,
         weight,
-        reps: Number(log.reps) || 0,
+        reps,
         isCardio: false,
       })
     }
@@ -124,11 +147,20 @@ export async function buildSessionSummary(
       return b.weight - a.weight
     })
     .slice(0, 8)
-    .map((b) =>
-      b.isCardio
+    .map((b) => {
+      const catalog = resolveLibraryExercise(b.name)
+      const label = b.isCardio
         ? `${b.name} — ${formatDurationSeconds(b.durationSeconds)}`
-        : `${b.name} — ${b.weight}kg × ${b.reps}`,
-    )
+        : b.repsOnly
+          ? `${b.name} — ${b.reps} reps`
+          : `${b.name} — ${b.weight}kg × ${b.reps}`
+      return {
+        name: b.name,
+        label,
+        image: catalog?.image ?? null,
+        muscle: catalog?.muscles[0] ?? null,
+      }
+    })
 
   const durationSec = session.duration_seconds ?? 0
   const minutes = Math.max(0, Math.round(durationSec / 60))

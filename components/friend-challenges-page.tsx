@@ -8,6 +8,7 @@ import { Swords, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
 import { ExercisePicker } from '@/components/exercise-picker'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { CTA_PRIMARY } from '@/lib/accent'
 import {
   acceptChallengeAction,
@@ -155,9 +156,17 @@ export function FriendChallengesPage({
                 </span>
               )}
             </div>
-            <h3 className="font-heading mt-2 text-lg font-bold text-foreground">
-              {liftName}
-            </h3>
+            <div className="mt-2 flex items-center gap-3">
+              <ExerciseThumb
+                muscle={challenge.lift_types?.muscle_group || 'Core'}
+                image={challenge.lift_types?.image_url}
+                name={liftName}
+                className="size-12"
+              />
+              <h3 className="min-w-0 font-heading text-lg font-bold text-foreground">
+                {liftName}
+              </h3>
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {t('targetLine', {
                 weight: formatWeightKg(challenge.target_weight, unit),

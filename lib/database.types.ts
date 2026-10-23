@@ -12,6 +12,11 @@ export type NotificationPreferences = {
   pr_achievement: boolean
   split_saved: boolean
   unfinished_session: boolean
+  streak_reminder: boolean
+  inactivity_reminder: boolean
+  train_today: boolean
+  weekly_recap: boolean
+  challenge_reminder: boolean
 }
 
 export type PrivacyFollow = 'everyone' | 'nobody'
@@ -27,6 +32,11 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   pr_achievement: true,
   split_saved: true,
   unfinished_session: false,
+  streak_reminder: true,
+  inactivity_reminder: true,
+  train_today: true,
+  weekly_recap: true,
+  challenge_reminder: true,
 }
 
 export type ProfileGender = 'male' | 'female'
@@ -296,7 +306,10 @@ export type Challenge = {
 }
 
 export type ChallengeWithRelations = Challenge & {
-  lift_types: Pick<LiftType, 'id' | 'name' | 'slug' | 'muscle_group'> | null
+  lift_types: Pick<
+    LiftType,
+    'id' | 'name' | 'slug' | 'muscle_group' | 'image_url'
+  > | null
   creator: Pick<
     PublicProfile,
     'id' | 'username' | 'display_name' | 'avatar_url'

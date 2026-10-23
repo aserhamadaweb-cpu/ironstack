@@ -171,6 +171,6 @@ export function coachMarkScrollReservePx() {
   return TOOLTIP_EST_HEIGHT + TOOLTIP_GAP + 24
 }
 
-/** Poll every 100ms; ~6s total before target-missed fallback. */
-export const TOUR_TARGET_POLL_INTERVAL_MS = 100
+/** Fast poll while the route paints; ~3s total before target-missed fallback. */
+export const TOUR_TARGET_POLL_INTERVAL_MS = 50
 export const TOUR_TARGET_POLL_MAX_ATTEMPTS = 60

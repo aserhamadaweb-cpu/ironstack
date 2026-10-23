@@ -37,6 +37,11 @@ const NOTIFICATION_LABELS: Record<keyof NotificationPreferences, string> = {
   pr_achievement: 'personal record alerts',
   split_saved: 'saved split confirmations',
   unfinished_session: 'unfinished workout reminders',
+  streak_reminder: 'streak ending reminders',
+  inactivity_reminder: 'reminders after several days without training',
+  train_today: 'reminders to train today',
+  weekly_recap: 'weekly training recaps',
+  challenge_reminder: 'friend challenge reminders',
 }
 
 const setUnit = defineAgentAction<{ unit: 'kg' | 'lb'; previous: 'kg' | 'lb' }>({

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { CTA_PRIMARY } from '@/lib/accent'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import { useGuestGate } from '@/components/guest-gate-provider'
 import { deleteCustomSplit, saveCustomSplit } from '@/lib/data/save-split'
 import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
@@ -398,13 +399,19 @@ export function HomeProgramBoard({
                               <button
                                 type="button"
                                 onClick={() => onOpenExercise(entry.exercise)}
-                                className="flex w-full min-h-11 items-center justify-between gap-3 rounded-xl border border-silver/10 bg-background/50 px-3 text-start hover:border-gold/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
+                                className="flex w-full items-center gap-3 rounded-2xl border border-silver/10 bg-background/50 px-3 py-3 text-start hover:border-gold/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40"
                               >
+                                <ExerciseThumb
+                                  muscle={entry.exercise.muscles[0] ?? 'Core'}
+                                  image={entry.exercise.image}
+                                  name={entry.exercise.name}
+                                  className="size-16"
+                                />
                                 <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold text-foreground">
+                                  <span className="block text-base font-semibold leading-snug text-foreground">
                                     {entry.exercise.name}
                                   </span>
-                                  <span className="text-[11px] text-muted-foreground">
+                                  <span className="mt-1 block text-sm text-muted-foreground">
                                     {entry.exercise.equipment} · {entry.sets} × {entry.reps}
                                   </span>
                                 </span>

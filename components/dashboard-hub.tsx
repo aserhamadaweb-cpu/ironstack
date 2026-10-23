@@ -20,7 +20,6 @@ import {
   useReducedMotion,
   type Variants,
 } from 'framer-motion'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { EASE } from '@/components/reveal'
 import { HubPreloader } from '@/components/hub-preloader'
 import {
@@ -225,10 +224,7 @@ export function DashboardHub({ displayName, email }: DashboardHubProps) {
       <AnimatePresence>{showIntro && <HubPreloader />}</AnimatePresence>
 
       <motion.div {...rise(0)}>
-        <DashboardNav
-          userName={displayName}
-          initials={initialsFrom(displayName)}
-        />
+
       </motion.div>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:py-12">

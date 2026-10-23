@@ -25,6 +25,7 @@ export type AppTourStepId =
   | 'sessionStart'
   | 'sessionCoach'
   | 'history'
+  | 'navCoach'
   | 'coach'
   | 'coachAiActions'
   | 'settingsAppearance'
@@ -156,10 +157,18 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
     target: '[data-tour="history-list"]',
   },
   {
+    id: 'navCoach',
+    phase: 'track',
+    href: '/dashboard/home',
+    target: '[data-tour="nav-coach"]',
+    openSidebar: true,
+  },
+  {
     id: 'coach',
     phase: 'track',
     href: '/dashboard/ai-coach',
-    target: '[data-tour="coach-chat"]',
+    target:
+      '[data-tour="coach-chat"], [data-tour="page-coach"], [data-tour="guest-blocked"]',
   },
   {
     id: 'coachAiActions',
@@ -236,13 +245,14 @@ export const APP_TOUR_STEPS_ALL: AppTourStepDef[] = [
 ]
 
 /**
- * Active first-time tour — get to a real session fast, plus AI + offline (8 steps).
+ * Active first-time tour — get to a real session fast, plus AI + offline.
  * Broader feature steps stay in APP_TOUR_STEPS_ALL as dormant for Settings later.
  */
 export const APP_TOUR_ACTIVE_IDS: AppTourStepId[] = [
   'homeHero',
   'homeTrainCta',
   'workoutCreate',
+  'navCoach',
   'coach',
   'offlineMode',
   'sessionStart',

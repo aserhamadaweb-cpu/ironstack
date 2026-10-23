@@ -20,6 +20,7 @@ type ProfileAvatarPickerProps = {
   username: string
   initialAvatarUrl?: string | null
   disabled?: boolean
+  compact?: boolean
   onChange: (value: ProfileAvatarPickerValue) => void
   onError?: (message: string) => void
 }
@@ -31,6 +32,7 @@ export function ProfileAvatarPicker({
   username,
   initialAvatarUrl = null,
   disabled = false,
+  compact = false,
   onChange,
   onError,
 }: ProfileAvatarPickerProps) {
@@ -132,21 +134,21 @@ export function ProfileAvatarPicker({
   }
 
   return (
-    <div ref={rootRef} className="flex flex-col items-center gap-4">
+    <div ref={rootRef} className={`flex flex-col items-center ${compact ? 'gap-2' : 'gap-4'}`}>
       <div>
         <p className="mb-2 text-center text-sm font-medium text-muted-foreground">
           {t('profilePhoto')}{' '}
           <span className="text-xs font-normal">({t('profilePhotoOptional')})</span>
         </p>
         <div className="relative mx-auto">
-          <div className="relative size-28 overflow-hidden rounded-full border border-silver/20 bg-card">
+          <div className={`relative overflow-hidden rounded-full border border-silver/20 bg-card ${compact ? 'size-20' : 'size-28'}`}>
             {preview ? (
               <Image
                 src={preview}
                 alt=""
                 fill
                 className="object-cover"
-                sizes="112px"
+                sizes={compact ? '80px' : '112px'}
               />
             ) : (
               <div className="flex size-full items-center justify-center text-2xl font-bold text-gold">
@@ -273,7 +275,7 @@ export function ProfileAvatarPicker({
         <p className="text-[11px] text-muted-foreground">
           {(file.size / 1024).toFixed(0)} KB · 512×512
         </p>
-      ) : chooser === 'closed' ? (
+      ) : chooser === 'closed' && !compact ? (
         <p className="text-center text-xs text-muted-foreground">
           {t('profilePhotoHint')}
         </p>

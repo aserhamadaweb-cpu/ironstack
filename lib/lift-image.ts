@@ -1,10 +1,7 @@
-const FREE_EXERCISE_IMAGE_BASE =
-  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/'
-
 /**
  * Normalize lift/exercise image URLs from the DB or library.
- * Rejects bare filenames like "0.jpg" (common bad seed) that resolve to
- * localhost and 404 in a loop of tiny requests.
+ * Only local Gym visual assets (`/exercises/...`) and absolute https URLs
+ * that are already complete. The retired free-exercise-db remote is not used.
  */
 export function resolveLiftImageUrl(
   image: string | null | undefined,
@@ -13,6 +10,8 @@ export function resolveLiftImageUrl(
   if (!raw) return null
 
   if (raw.startsWith('https://') || raw.startsWith('http://')) {
+    // Drop retired free-exercise-db remotes so UI falls back to catalog lookup
+    if (raw.includes('yuhonas/free-exercise-db')) return null
     return raw
   }
 
@@ -25,11 +24,16 @@ export function resolveLiftImageUrl(
     return raw
   }
 
-  // Relative free-exercise-db path: "Barbell_Curl/0.jpg"
-  if (raw.includes('/') && !raw.startsWith('/')) {
-    return `${FREE_EXERCISE_IMAGE_BASE}${raw.replace(/^\.?\//, '')}`
+  // Relative "images/NNNN-….jpg" from the Gym visual dataset
+  if (raw.startsWith('images/')) {
+    return `/exercises/${raw}`
   }
 
-  // Bare "0.jpg" / "/0.jpg" — not a usable asset
+  // Bare filename that looks like a Gym visual asset
+  if (/^\d{4}-.+\.(jpg|jpeg|png|webp|gif)$/i.test(raw)) {
+    return `/exercises/images/${raw}`
+  }
+
+  // Bare "0.jpg" / legacy relative paths — not usable without the old remote
   return null
 }

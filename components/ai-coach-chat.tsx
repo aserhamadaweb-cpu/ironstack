@@ -22,7 +22,6 @@ import {
   CoachMemoryPanel,
   type MemoryItem,
 } from '@/components/coach-memory-panel'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { BackToTrainLink } from '@/components/back-to-train-link'
 import { LtrIsolate } from '@/components/ltr-isolate'
 import { EASE } from '@/components/reveal'
@@ -59,6 +58,7 @@ type AiCoachChatProps = {
   initialMemories: MemoryItem[]
   profileMissingCount?: number
   profileMissingLabels?: string[]
+  hasTrained?: boolean
 }
 
 type StatHint = { kind: 'lift' | 'streak'; count?: number; value: string }
@@ -107,6 +107,7 @@ export function AiCoachChat({
   initialConversations,
   initialMemories,
   profileMissingCount = 0,
+  hasTrained = false,
   profileMissingLabels = [],
 }: AiCoachChatProps) {
   const t = useTranslations('coach')
@@ -145,7 +146,7 @@ export function AiCoachChat({
   }, [messages, pending, reduce])
 
   const showEmpty = messages.length === 0
-  const showChips = messages.length <= 2
+  const showChips = showEmpty && input.trim().length === 0 && !pending
   const drawerX = locale === 'ar' ? 280 : -280
   const activeTitle =
     conversations.find((c) => c.id === conversationId)?.title || t('newChat')
@@ -174,6 +175,7 @@ export function AiCoachChat({
         }
         setConversationId(data.conversationId)
         setMessages([])
+        setInput('')
         syncConversations(data.conversations)
         setHistoryOpen(false)
       } catch {
@@ -398,12 +400,7 @@ export function AiCoachChat({
   if (isGuest) {
     return (
       <div className="relative flex min-h-svh flex-col">
-        <DashboardNav
-          userName={displayName}
-          initials={initials}
-          avatarUrl={avatarUrl}
-          isGuest={isGuest}
-        />
+
         <GuestBlockedScreen
           reason="aiCoach"
           returnPath="/dashboard/ai-coach/chat"
@@ -420,48 +417,38 @@ export function AiCoachChat({
         <div className="absolute bottom-[15%] start-[-5rem] h-72 w-72 rounded-full bg-blue/[0.04] blur-3xl" />
       </div>
 
-      <DashboardNav
-        userName={displayName}
-        initials={initials}
-        avatarUrl={avatarUrl}
-        isGuest={isGuest}
-      />
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col overflow-hidden px-2 pt-1 app-chat-viewport-height sm:px-4 sm:pt-3">
-        <BackToTrainLink className="mb-1 shrink-0 sm:mb-2" />
-        <ProfileCompletenessBanner
-          missingCount={profileMissingCount}
-          missingLabels={profileMissingLabels}
-          className="mb-2 shrink-0 sm:mb-3"
-        />
-        <header className="mb-1 flex shrink-0 flex-wrap items-end justify-between gap-2 sm:mb-3 sm:gap-3">
-          <div>
-            <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
-              {t('kicker')}
-            </p>
-            <h1 className="font-heading mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+      <div className="flex w-full min-w-0 flex-col overflow-hidden app-chat-viewport-height">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-silver/10 px-4 py-2 sm:px-5">
+          <div className="min-w-0">
+            <BackToTrainLink />
+            <h1 className="font-heading truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
               {t('brandTitle')}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-silver/15 bg-card/70 px-3 text-xs font-semibold text-muted-foreground transition active:border-gold/40 active:text-gold lg:hidden"
-            >
-              {historyOpen ? (
-                <PanelLeftClose className="size-4" />
-              ) : (
-                <History className="size-4" />
-              )}
-              {t('historyMobile')}
-            </button>
-          </div>
-        </header>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-silver/15 bg-card/70 px-3 text-xs font-semibold text-muted-foreground transition active:border-gold/40 active:text-gold lg:hidden"
+          >
+            {historyOpen ? (
+              <PanelLeftClose className="size-4" />
+            ) : (
+              <History className="size-4" />
+            )}
+            {t('historyMobile')}
+          </button>
+        </div>
+        <ProfileCompletenessBanner
+          missingCount={profileMissingCount}
+          missingLabels={profileMissingLabels}
+          hasTrained={hasTrained}
+          className="mx-4 mt-2 shrink-0 sm:mx-5"
+        />
 
-        <div className="flex min-h-0 flex-1 gap-3 sm:gap-4">
+        <div className="flex min-h-0 flex-1">
           {/* Desktop history sidebar */}
-          <aside className="hidden w-56 shrink-0 overflow-hidden rounded-2xl border border-silver/10 bg-background/50 lg:flex lg:flex-col xl:w-64">
+          <aside className="hidden w-64 shrink-0 overflow-hidden border-e border-silver/10 bg-background/40 lg:flex lg:flex-col xl:w-72">
             {historyPanel}
           </aside>
 
@@ -506,7 +493,7 @@ export function AiCoachChat({
             )}
           </AnimatePresence>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-y border-silver/10 bg-background/60 sm:rounded-2xl sm:border">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background/40">
             <div className="flex items-center gap-2 border-b border-silver/10 px-3 py-2 sm:px-4">
               <PanelLeft className="size-3.5 text-muted-foreground" aria-hidden="true" />
               <p className="truncate text-xs text-muted-foreground">{activeTitle}</p>
@@ -552,7 +539,7 @@ export function AiCoachChat({
                         </div>
                       )}
                       <div
-                        className={`max-w-[min(100%,42rem)] sm:max-w-[min(100%,85%)] ${
+                        className={`max-w-[min(100%,56rem)] ${
                           isUser ? 'items-end' : 'items-start'
                         } flex flex-col gap-2`}
                       >

@@ -1,11 +1,9 @@
 import { redirect } from 'next/navigation'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { EditProfileForm } from '@/components/edit-profile-form'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { PageError } from '@/components/page-states'
 import { getProfile } from '@/lib/data/queries'
-import { initialsFrom } from '@/lib/dashboard-utils'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata = {
@@ -36,11 +34,7 @@ export default async function EditProfilePage() {
 
   return (
     <div className="min-h-svh">
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profile?.avatar_url}
-      />
+
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
         <GuestPageGate reason="editProfile" returnPath="/dashboard/profile/edit">
         <BackToTrainLink />

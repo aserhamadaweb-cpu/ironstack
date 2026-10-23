@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, Search, Trophy } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { EmptyState } from '@/components/page-states'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import type { PersonalRecordWithLift } from '@/lib/database.types'
 import { formatLiftDate } from '@/lib/mock-pr-data'
 import { formatWeightKg, type WeightUnit } from '@/lib/units'
@@ -188,13 +189,21 @@ export function PersonalRecordsPageClient({
                             aria-expanded={liftOpen}
                             className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-start transition hover:bg-foreground/[0.03]"
                           >
-                            <div className="min-w-0">
-                              <p className="font-heading text-sm font-semibold text-foreground">
-                                {name}
-                              </p>
-                              <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                                {formatLiftDate(pr.logged_at)}
-                              </p>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <ExerciseThumb
+                                muscle={pr.lift_types?.muscle_group || 'Core'}
+                                image={pr.lift_types?.image_url}
+                                name={name}
+                                className="size-11"
+                              />
+                              <div className="min-w-0">
+                                <p className="font-heading text-sm font-semibold text-foreground">
+                                  {name}
+                                </p>
+                                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                                  {formatLiftDate(pr.logged_at)}
+                                </p>
+                              </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-3">
                               <div className="text-end">

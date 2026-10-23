@@ -144,19 +144,46 @@ async function persistOnboarding(
     return { ok: false, error: 'Guest accounts cannot complete onboarding.' }
   }
 
-  const displayName = data.displayName.trim().replace(/\s+/g, ' ')
-  if (displayName.length < DISPLAY_NAME_MIN || displayName.length > DISPLAY_NAME_MAX) {
-    return {
-      ok: false,
-      error: `Display name must be ${DISPLAY_NAME_MIN}–${DISPLAY_NAME_MAX} characters.`,
-    }
+  let displayName = data.displayName.trim().replace(/\s+/g, ' ')
+  if (displayName.length < DISPLAY_NAME_MIN) {
+    const fromEmail = user.email?.split('@')[0]?.trim() ?? ''
+    displayName = fromEmail.slice(0, DISPLAY_NAME_MAX) || 'Athlete'
+    if (displayName.length < DISPLAY_NAME_MIN) displayName = 'Athlete'
+  }
+  if (displayName.length > DISPLAY_NAME_MAX) {
+    displayName = displayName.slice(0, DISPLAY_NAME_MAX)
   }
 
-  const username = data.username.trim().toLowerCase()
+  let username = data.username.trim().toLowerCase()
   if (!username) {
-    return { ok: false, error: 'Username is required.' }
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .maybeSingle()
+    username = (existing?.username ?? '').trim().toLowerCase()
   }
-  const unavailable = await assertUsernameAvailable(supabase, username, user.id)
+  if (!username) {
+    const fromEmail =
+      user.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9_]/g, '') ?? ''
+    username =
+      fromEmail.length >= 3
+        ? fromEmail.slice(0, 30)
+        : `athlete_${user.id.replace(/-/g, '').slice(0, 8)}`
+  }
+  if (!USERNAME_RE.test(username)) {
+    username = `athlete_${user.id.replace(/-/g, '').slice(0, 8)}`
+  }
+  let unavailable = await assertUsernameAvailable(supabase, username, user.id)
+  if (unavailable === 'That username is already taken.') {
+    const stem = username.slice(0, 24)
+    for (let i = 0; i < 8 && unavailable; i++) {
+      const candidate = `${stem}_${user.id.replace(/-/g, '').slice(i, i + 5)}`
+      if (!USERNAME_RE.test(candidate)) continue
+      unavailable = await assertUsernameAvailable(supabase, candidate, user.id)
+      if (!unavailable) username = candidate
+    }
+  }
   if (unavailable) return { ok: false, error: unavailable }
 
   if (data.heightCm != null && !isValidHeightCm(data.heightCm)) {
@@ -164,22 +191,6 @@ async function persistOnboarding(
   }
   if (data.weightKg != null && !isValidWeightKg(data.weightKg)) {
     return { ok: false, error: 'Enter a weight between 30 and 300 kg (or equivalent).' }
-  }
-
-  if (completed && !data.primaryGoal) {
-    return { ok: false, error: 'Choose a primary fitness goal to finish setup.' }
-  }
-  if (completed && !data.fitnessLevel) {
-    return { ok: false, error: 'Choose your fitness level to finish setup.' }
-  }
-  if (completed && (data.daysPerWeek == null || data.daysPerWeek < 1 || data.daysPerWeek > 7)) {
-    return { ok: false, error: 'Choose how many days you can train each week.' }
-  }
-  if (completed && !data.workoutDuration) {
-    return { ok: false, error: 'Choose a preferred workout duration.' }
-  }
-  if (completed && !data.trainingLocation) {
-    return { ok: false, error: 'Choose where you usually train.' }
   }
 
   const appearance: AppearanceMode = isAppearanceMode(data.appearance)

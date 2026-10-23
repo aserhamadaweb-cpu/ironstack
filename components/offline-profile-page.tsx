@@ -17,7 +17,11 @@ import {
 } from '@/lib/offline/cache'
 import { useOfflineStatus } from '@/lib/offline/provider'
 
-export function OfflineProfilePage() {
+export function OfflineProfilePage({
+  includeNav = true,
+}: {
+  includeNav?: boolean
+}) {
   const t = useTranslations('offline')
   const tProfile = useTranslations('profile')
   const { hydrated } = useOfflineStatus()
@@ -55,6 +59,7 @@ export function OfflineProfilePage() {
             id: row.id,
             liftName: lift?.name ?? 'Lift',
             muscleGroup: lift?.muscle_group ?? '',
+            image: lift?.image_url ?? null,
             weight: Number(row.weight),
             reps: Number(row.reps),
             loggedAt: row.logged_at,
@@ -69,13 +74,15 @@ export function OfflineProfilePage() {
 
   return (
     <div className="min-h-svh">
-      <DashboardNav
-        userName={name}
-        initials={initialsFrom(name)}
-        avatarUrl={avatarUrl}
-        profileHref="/dashboard/profile"
-        isGuest={isGuest}
-      />
+      {includeNav ? (
+        <DashboardNav
+          userName={name}
+          initials={initialsFrom(name)}
+          avatarUrl={avatarUrl}
+          profileHref="/dashboard/profile"
+          isGuest={isGuest}
+        />
+      ) : null}
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
         <BackToTrainLink />
         <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">

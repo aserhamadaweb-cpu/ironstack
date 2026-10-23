@@ -11,10 +11,7 @@ import {
 } from '@/lib/data/queries'
 import { getPrimarySplitSummary } from '@/lib/data/split-recommendations-server'
 import { ltrEmbed } from '@/lib/bidi'
-import {
-  computeWeeklyVolumeTrend,
-  formatLoadChangePct,
-} from '@/lib/volume-trend'
+import { computeWeeklyVolumeTrend } from '@/lib/volume-trend'
 import {
   formatRelativeFinishedAt,
   formatSessionDate,
@@ -22,7 +19,8 @@ import {
 } from '@/lib/session-store'
 import { getAuthIdentity } from '@/lib/supabase/server'
 import { profileHref } from '@/lib/profile-path'
-import { formatLiftLabel, isCardioCategory } from '@/lib/units'
+import { formatLiftLabel, isBodyweightLogNote, isCardioCategory } from '@/lib/units'
+import { resolveLibraryExercise } from '@/lib/exercise-library.server'
 import {
   formatSplitSavedDate,
   sortSplitsByRecentSaved,
@@ -38,14 +36,6 @@ export default async function WorkoutPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const profileProbe = await getProfile(userId)
-  const unreachable = Boolean(
-    profileProbe.error &&
-      /reach the server|fetch failed|failed to fetch|session expired|jwt|sign in|not authenticated/i.test(
-        profileProbe.error,
-      ),
-  )
-
   const [
     profileResult,
     splitsResult,
@@ -53,23 +43,24 @@ export default async function WorkoutPage() {
     volumeResult,
     celebrations,
     primarySplit,
-  ] = unreachable
-    ? [
-        profileProbe,
-        { data: [] as never[], error: null },
-        { data: [] as never[], error: null },
-        { data: 0, error: null },
-        [] as never[],
-        { id: null, name: null },
-      ]
-    : await Promise.all([
-        Promise.resolve(profileProbe),
-        getSplitsForUser(userId),
-        getCompletedSessions(userId, 100),
-        getTotalVolume(userId),
-        getUnshownBannerCelebrations(userId).catch(() => []),
-        getPrimarySplitSummary(userId),
-      ])
+  ] = await Promise.all([
+    getProfile(userId),
+    getSplitsForUser(userId).catch(() => ({ data: [] as never[], error: null })),
+    getCompletedSessions(userId, 100).catch(() => ({
+      data: [] as never[],
+      error: null,
+    })),
+    getTotalVolume(userId).catch(() => ({ data: 0, error: null })),
+    getUnshownBannerCelebrations(userId).catch(() => []),
+    getPrimarySplitSummary(userId).catch(() => ({ id: null, name: null })),
+  ])
+
+  const unreachable = Boolean(
+    profileResult.error &&
+      /reach the server|fetch failed|failed to fetch|session expired|jwt|sign in|not authenticated/i.test(
+        profileResult.error,
+      ),
+  )
 
   const sessions = sessionsResult.data ?? []
   const latest = sessions[0] ?? null
@@ -129,6 +120,7 @@ export default async function WorkoutPage() {
         reps: number
         durationSeconds?: number | null
         isCardio: boolean
+        repsOnly?: boolean
       }
     >()
     for (const log of logs) {
@@ -153,6 +145,19 @@ export default async function WorkoutPage() {
         }
         continue
       }
+      const repsOnly = isBodyweightLogNote(log.notes)
+      if (repsOnly) {
+        if (!current || log.reps > current.reps) {
+          byLift.set(log.lift_type_id, {
+            name,
+            weight: 0,
+            reps: Number(log.reps),
+            isCardio: false,
+            repsOnly: true,
+          })
+        }
+        continue
+      }
       if (!current || Number(log.weight) > current.weight) {
         byLift.set(log.lift_type_id, {
           name,
@@ -172,17 +177,26 @@ export default async function WorkoutPage() {
         return b.weight - a.weight
       })
       .slice(0, 3)
-      .map(
-        (b) =>
-          formatLiftLabel(
-            b.name,
-            b.weight,
-            b.reps,
-            unit,
-            b.durationSeconds,
-          ) ?? '',
-      )
-      .filter(Boolean)
+      .map((b) => {
+        const label = formatLiftLabel(
+          b.name,
+          b.weight,
+          b.reps,
+          unit,
+          b.durationSeconds,
+          b.repsOnly,
+        )
+        const catalog = resolveLibraryExercise(b.name)
+        return label
+          ? {
+              name: b.name,
+              label,
+              image: catalog?.image ?? null,
+              muscle: catalog?.muscles[0] ?? null,
+            }
+          : null
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null)
 
     const durationSec = latest.duration_seconds ?? 0
     const minutes = Math.max(0, Math.round(durationSec / 60))

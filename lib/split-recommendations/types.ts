@@ -22,6 +22,10 @@ export type SplitTemplateId =
   | 'hybrid_metcon'
   | 'home_minimal'
   | 'custom_ai'
+  | 'arnold'
+  | 'fbeod'
+  | 'pro_split'
+  | 'anterior_posterior'
 
 export type RecommendationInput = {
   primaryGoal: FitnessGoal

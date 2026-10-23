@@ -12,14 +12,12 @@ export function OfflineStatusBadges() {
     syncing,
     hydrated,
     lastError,
-    refresh,
     orphanNotice,
     dismissOrphanNotice,
   } = useOfflineStatus()
 
   const showOffline = hydrated && !online
   const showSync = hydrated && pendingCount > 0
-  const canRetry = hydrated && online && pendingCount > 0 && !syncing
 
   return (
     <div className="flex max-w-[14rem] shrink-0 flex-col items-end gap-0.5 sm:max-w-none">
@@ -45,14 +43,9 @@ export function OfflineStatusBadges() {
         </span>
       ) : null}
       {showSync ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (canRetry) void refresh()
-          }}
-          disabled={!canRetry}
+        <span
           title={lastError || undefined}
-          className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-gold disabled:cursor-default"
+          className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-gold"
         >
           <RefreshCw
             className={`size-3 ${syncing ? 'animate-spin' : ''}`}
@@ -61,21 +54,7 @@ export function OfflineStatusBadges() {
           {syncing
             ? t('syncing', { count: pendingCount })
             : t('queued', { count: pendingCount })}
-        </button>
-      ) : null}
-      {canRetry ? (
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          title={lastError || undefined}
-          className="max-w-full truncate text-end text-[10px] font-semibold text-gold underline-offset-2 hover:underline"
-        >
-          {t('retrySync')}
-        </button>
-      ) : lastError && pendingCount > 0 ? (
-        <p className="max-w-full truncate text-end text-[10px] font-semibold text-destructive">
-          {lastError}
-        </p>
+        </span>
       ) : null}
     </div>
   )

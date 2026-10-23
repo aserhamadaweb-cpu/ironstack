@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { MessageSquare, ScrollText } from 'lucide-react'
 import { BackToTrainLink } from '@/components/back-to-train-link'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { GuestPageGate } from '@/components/guest-page-gate'
 import { OfflineConnectionGate } from '@/components/offline-connection-gate'
 import { EmptyState } from '@/components/page-states'
@@ -11,15 +10,13 @@ import { LtrIsolate } from '@/components/ltr-isolate'
 import { listAiInsights } from '@/lib/ai/insights'
 import { getOrCreateLatestConversation } from '@/lib/ai/conversations'
 import { CTA_PRIMARY } from '@/lib/accent'
-import { getProfile } from '@/lib/data/queries'
+import { countCompletedSessions, getProfile } from '@/lib/data/queries'
 import { onboardingDataFromUser } from '@/lib/data/onboarding-read'
 import {
   completenessFromOnboarding,
   getMissingProfileFields,
 } from '@/lib/profile-completeness'
 import { ProfileCompletenessBanner } from '@/components/profile-completeness-banner'
-import { initialsFrom } from '@/lib/dashboard-utils'
-import { profileHref } from '@/lib/profile-path'
 import { formatSessionDate } from '@/lib/session-store'
 import { createClient, getAuthIdentity } from '@/lib/supabase/server'
 
@@ -34,9 +31,10 @@ export default async function AiCoachPage() {
   const { userId, email } = await getAuthIdentity()
   if (!userId) redirect('/login')
 
-  const [profileResult, insights] = await Promise.all([
+  const [profileResult, insights, trainedResult] = await Promise.all([
     getProfile(userId),
     listAiInsights(userId, 40),
+    countCompletedSessions(userId),
     getOrCreateLatestConversation(userId).catch((err) => {
       console.error('[ai-coach] ensure conversation', err)
       return null
@@ -78,13 +76,7 @@ export default async function AiCoachPage() {
 
   return (
     <>
-      <DashboardNav
-        userName={displayName}
-        initials={initialsFrom(displayName)}
-        avatarUrl={profileResult.data?.avatar_url}
-        profileHref={profileHref(profileResult.data?.username, userId)}
-        isGuest={profileResult.data?.is_guest === true}
-      />
+
       <OfflineConnectionGate feature="coach">
       <GuestPageGate reason="aiCoach" returnPath="/dashboard/ai-coach">
       <main
@@ -95,6 +87,7 @@ export default async function AiCoachPage() {
         <ProfileCompletenessBanner
           missingCount={profileMissingCount}
           missingLabels={profileMissingLabels}
+          hasTrained={(trainedResult.data ?? 0) > 0}
         />
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>

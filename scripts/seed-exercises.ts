@@ -1,5 +1,6 @@
 /**
- * One-time (safe to re-run) seed of free-exercise-db into public.lift_types.
+ * Seed / refresh public.lift_types from the Gym visual GIF catalog
+ * (data/exercises-dataset/exercises.json). Uses local /exercises/images/… URLs.
  *
  * Usage: npx tsx scripts/seed-exercises.ts
  */
@@ -10,9 +11,6 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
-
-const IMAGE_BASE =
-  'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises'
 
 /** Matches rebuild-system-split-exercises.mjs / live uppercase tags. */
 const MUSCLE_MAP: Record<string, string> = {
@@ -42,7 +40,6 @@ type RawExercise = {
   target?: string
   muscle_group?: string
   image?: string
-  /** Legacy free-exercise-db shape */
   primaryMuscles?: string[]
   images?: string[]
 }
@@ -124,12 +121,22 @@ function categoryOf(exercise: RawExercise): string {
 }
 
 function imageUrlOf(exercise: RawExercise): string | null {
-  if (exercise.image?.startsWith('/')) return exercise.image
-  if (exercise.image?.startsWith('images/')) {
+  if (!exercise.image) {
+    const first = exercise.images?.[0]
+    if (!first) return null
+    if (first.startsWith('/')) return first
+    if (first.startsWith('images/')) return `/exercises/${first}`
+    if (/^\d{4}-/.test(first)) return `/exercises/images/${first}`
+    return null
+  }
+  if (exercise.image.startsWith('/')) return exercise.image
+  if (exercise.image.startsWith('images/')) {
     return `/exercises/${exercise.image}`
   }
-  const path = exercise.images?.[0]
-  return path ? `${IMAGE_BASE}/${path}` : null
+  if (/^\d{4}-/.test(exercise.image)) {
+    return `/exercises/images/${exercise.image}`
+  }
+  return null
 }
 
 function toRow(exercise: RawExercise, index: number): LiftRow {

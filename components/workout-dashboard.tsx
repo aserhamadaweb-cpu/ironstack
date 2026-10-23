@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
   Clock3,
-  Dumbbell,
   House,
   Layers,
   Minus,
@@ -22,10 +21,11 @@ import {
   CelebrationBanner,
   type CelebrationBannerItem,
 } from '@/components/celebration-banner'
-import { DashboardNav } from '@/components/dashboard-nav'
 import { LtrIsolate, isLatinFragment } from '@/components/ltr-isolate'
 import { ltrEmbed } from '@/lib/bidi'
 import { EmptyState } from '@/components/page-states'
+import { ExerciseThumb } from '@/components/exercise-thumb'
+import type { StandoutLift } from '@/lib/data/session-summary'
 import {
   WorkoutSplitCard,
   type WorkoutSplitCardData,
@@ -55,11 +55,13 @@ import { profileHref as buildProfileHref } from '@/lib/profile-path'
 import { ActiveWorkoutBanner } from '@/components/active-workout-banner'
 import { ActiveWorkoutConflict } from '@/components/active-workout-conflict'
 import { useActiveWorkout } from '@/lib/use-active-workout'
-import { MAX_CUSTOM_SPLITS } from '@/lib/data/split-limits'
 import { safeRouterRefresh } from '@/lib/safe-router-refresh'
-import { createSplitChoiceHref } from '@/lib/split-create-paths'
+import {
+  createSplitChoiceHref,
+  RECOMMENDED_SPLITS_PATH,
+} from '@/lib/split-create-paths'
 import { useGuestGate } from '@/components/guest-gate-provider'
-import { CTA_PRIMARY } from '@/lib/accent'
+import { CTA_PRIMARY, CTA_SECONDARY } from '@/lib/accent'
 import { formatVolumeKg, type WeightUnit } from '@/lib/units'
 import {
   formatLoadChangePct,
@@ -78,7 +80,7 @@ type WorkoutDashboardProps = {
     duration: string
     volume: string
     sets: string
-    standouts: string[]
+    standouts: StandoutLift[]
   } | null
   historySessions: Array<{
     id: string
@@ -121,7 +123,6 @@ function pickFeaturedSplit(
 export function WorkoutDashboard({
   displayName,
   featuredSplit: initialFeaturedSplit,
-  totalCustomSplits: initialTotalCustomSplits,
   primarySplitId,
   lastSession,
   historySessions,
@@ -142,7 +143,6 @@ export function WorkoutDashboard({
   const { online, hydrated, refresh, lastError, syncing } = useOfflineStatus()
   const embeddedSession = useEmbeddedSessionActive()
   const [featuredSplit, setFeaturedSplit] = useState(initialFeaturedSplit)
-  const [splitCount, setSplitCount] = useState(initialTotalCustomSplits)
   const [snapshot, setSnapshot] = useState<Awaited<
     ReturnType<typeof getHomeSnapshot>
   >>(null)
@@ -268,8 +268,7 @@ export function WorkoutDashboard({
 
   useEffect(() => {
     setFeaturedSplit(initialFeaturedSplit)
-    setSplitCount(initialTotalCustomSplits)
-  }, [initialFeaturedSplit, initialTotalCustomSplits])
+  }, [initialFeaturedSplit])
 
   useEffect(() => {
     const mergeCards = (
@@ -313,7 +312,6 @@ export function WorkoutDashboard({
 
         const serverList = initialFeaturedSplit ? [initialFeaturedSplit] : []
         const merged = mergeCards(serverList, yoursFromCache)
-        setSplitCount(Math.max(initialTotalCustomSplits, merged.length))
         setFeaturedSplit(pickFeaturedSplit(merged, primarySplitId))
 
         const knownIds = new Set(historySessions.map((row) => row.id))
@@ -397,7 +395,6 @@ export function WorkoutDashboard({
     }
   }, [
     initialFeaturedSplit,
-    initialTotalCustomSplits,
     historySessions,
     lastSession,
     primarySplitId,
@@ -419,7 +416,6 @@ export function WorkoutDashboard({
   const shownVolume =
     journeyVolume > 0 ? journeyVolume : localVolume ?? journeyVolume
   const firstName = resolvedName.trim().split(/\s+/)[0] || resolvedName
-  const atSplitLimit = splitCount >= MAX_CUSTOM_SPLITS
   const hasPrimary =
     Boolean(primarySplitId) &&
     Boolean(
@@ -484,7 +480,11 @@ export function WorkoutDashboard({
   }
 
   const goCreateSplit = () => {
-    requireAccount('createSplit', () => router.push(createSplitChoiceHref()))
+    if (resolvedGuest) {
+      router.push(RECOMMENDED_SPLITS_PATH)
+      return
+    }
+    router.push(createSplitChoiceHref())
   }
 
   if (hydrated && (!online || embeddedSession)) {
@@ -494,6 +494,7 @@ export function WorkoutDashboard({
         avatarUrl={resolvedAvatar}
         profileHref={resolvedHref}
         isGuest={resolvedGuest}
+        includeNav={false}
       />
     )
   }
@@ -533,8 +534,6 @@ export function WorkoutDashboard({
         ? Minus
         : TrendingUp
 
-  const recentHistory = history.slice(0, 2)
-
   return (
     <div className="relative min-h-svh">
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
@@ -547,18 +546,9 @@ export function WorkoutDashboard({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/55 to-background" />
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_50%_-5%,rgba(198,40,40,0.12),transparent_60%)]" />
-        <div className="absolute top-[35%] -end-40 h-96 w-96 rounded-full bg-gold/[0.06] blur-3xl" />
-        <div className="absolute bottom-[20%] start-[-6rem] h-80 w-80 rounded-full bg-gold/[0.09] blur-3xl" />
+        <div className="absolute inset-0 gold-radial-wash opacity-40" />
       </div>
 
-      <DashboardNav
-        userName={resolvedName}
-        initials={initialsFrom(resolvedName)}
-        avatarUrl={resolvedAvatar}
-        profileHref={resolvedHref}
-        isGuest={resolvedGuest}
-      />
 
       {startBlocked && activeWorkout ? (
         <ActiveWorkoutConflict
@@ -599,31 +589,49 @@ export function WorkoutDashboard({
             )}
             <ActiveWorkoutBanner />
 
-            <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[10px] font-semibold tracking-[0.35em] text-gold">
-                  {t('kicker')}
-                </p>
-                <h1 className="font-heading mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
-                  {t('ready', { name: firstName })}
-                </h1>
-                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  {t('subtitle')}
-                </p>
+            <div className="mb-8 max-w-xl">
+              <p className="section-kicker">{t('kicker')}</p>
+              <h1 className="font-heading mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
+                {t('ready', { name: firstName })}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">{t('subtitle')}</p>
+              <div
+                className={`mt-5 grid gap-2 ${featuredSplit ? 'grid-cols-2' : 'grid-cols-1'}`}
+              >
+                {featuredSplit ? (
+                  <button
+                    type="button"
+                    data-tour="workout-start-cta"
+                    onClick={() => startSplit(featuredSplit.slug)}
+                    className={`inline-flex min-h-12 w-full items-center justify-center gap-2 px-3 text-center ${CTA_PRIMARY}`}
+                  >
+                    {t('startSession')}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  data-tour="workout-create-cta"
+                  onClick={goCreateSplit}
+                  className={`inline-flex min-h-12 w-full items-center justify-center gap-2 px-3 text-center ${
+                    featuredSplit ? CTA_SECONDARY : CTA_PRIMARY
+                  }`}
+                >
+                  <Plus className="size-4 shrink-0" aria-hidden="true" />
+                  {t('createSplit')}
+                </button>
               </div>
+              {recap === null ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {t('firstSessionTip')}
+                </p>
+              ) : null}
             </div>
 
             {/* Total Volume + Progress — first section */}
-            <section className="relative mb-8 overflow-hidden rounded-3xl border border-border bg-card p-5 sm:mb-10 sm:p-8">
-              <div
-                className="pointer-events-none absolute -top-20 -end-16 h-52 w-52 rounded-full bg-gold/10 blur-3xl"
-                aria-hidden="true"
-              />
-              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <section className="is-panel mb-8 p-5 sm:mb-10 sm:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                    {t('yourJourney')}
-                  </p>
+                  <p className="section-kicker">{t('yourJourney')}</p>
                   <LtrIsolate
                     as="p"
                     className="font-heading mt-3 text-4xl font-bold tracking-tight text-foreground tabular-nums sm:text-5xl"
@@ -709,9 +717,7 @@ export function WorkoutDashboard({
             <section className="mb-10 min-w-0" data-tour="workout-splits">
               <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                    {t('yourSplitsKicker')}
-                  </p>
+                  <p className="section-kicker">{t('yourSplitsKicker')}</p>
                   <h2 className="font-heading mt-1 text-2xl font-bold text-foreground md:text-3xl">
                     {t('activeProgram')}
                   </h2>
@@ -724,8 +730,9 @@ export function WorkoutDashboard({
                 <Link
                   href="/dashboard/splits"
                   data-tour="workout-my-splits-link"
-                  className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2.5 rounded-full border border-silver/25 px-6 text-sm font-semibold tracking-[0.12em] text-muted-foreground transition hover:border-gold/35 hover:text-foreground sm:w-auto sm:min-w-[12rem]"
+                  className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-semibold text-background sm:w-auto"
                 >
+                  <Layers className="size-4" aria-hidden="true" />
                   {t('manageYourSplits')}
                   <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
                 </Link>
@@ -736,9 +743,7 @@ export function WorkoutDashboard({
                   icon={Layers}
                   title={t('noSplits')}
                   body={t('noSplitsBody')}
-                  actionLabel={t('createSplit')}
-                  onAction={goCreateSplit}
-                  tone="gold"
+                  tone="silver"
                 />
               ) : (
                 <div className="max-w-xl" data-tour="workout-featured-split">
@@ -785,23 +790,6 @@ export function WorkoutDashboard({
                   <p className="mt-2 max-w-md text-sm text-muted-foreground">
                     {t('noSessionsRecapBody')}
                   </p>
-                  {featuredSplit ? (
-                    <button
-                      type="button"
-                      onClick={() => startSplit(featuredSplit.slug)}
-                      className={`cta-pulse mt-5 px-6 ${CTA_PRIMARY}`}
-                    >
-                      {t('startSession')}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={goCreateSplit}
-                      className={`cta-pulse mt-5 px-6 ${CTA_PRIMARY}`}
-                    >
-                      {t('createSplit')}
-                    </button>
-                  )}
                 </div>
               ) : (
                 <article className="glass-card rounded-2xl border border-border bg-card p-5 sm:p-7">
@@ -868,14 +856,16 @@ export function WorkoutDashboard({
                         )}
                         {recap.standouts.map((lift) => (
                           <div
-                            key={lift}
+                            key={lift.label}
                             className="flex min-h-11 items-center gap-3 rounded-xl border border-silver/10 bg-background/40 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-gold/30 hover:bg-gold/5"
                           >
-                            <Dumbbell
-                              className="size-4 shrink-0 text-gold"
-                              aria-hidden="true"
+                            <ExerciseThumb
+                              muscle={lift.muscle || 'Core'}
+                              image={lift.image}
+                              name={lift.name}
+                              className="size-10"
                             />
-                            <LtrIsolate>{lift}</LtrIsolate>
+                            <LtrIsolate>{lift.label}</LtrIsolate>
                           </div>
                         ))}
                       </div>
@@ -910,54 +900,6 @@ export function WorkoutDashboard({
               )}
             </section>
 
-            {/* Create Your Own Split */}
-            <section className="mb-10" data-tour="workout-create">
-              <div className="mb-5">
-                <p className="text-[10px] font-semibold tracking-[0.3em] text-muted-foreground">
-                  {t('custom')}
-                </p>
-                <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
-                  {t('customTitle')}
-                </h2>
-              </div>
-
-              {atSplitLimit ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-silver/25 bg-card/30 px-6 py-12 text-center">
-                  <span className="flex size-14 items-center justify-center rounded-full border border-silver/25 bg-background/60 text-silver">
-                    <Layers className="size-7" aria-hidden="true" />
-                  </span>
-                  <p className="font-heading mt-4 text-xl font-bold text-foreground">
-                    {t('limitReached')}
-                  </p>
-                  <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                    {t('limitBody', { max: MAX_CUSTOM_SPLITS })}
-                  </p>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  data-tour="workout-create-cta"
-                  onClick={goCreateSplit}
-                  className="group flex min-h-14 w-full flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-gold/35 bg-card/30 px-6 py-12 text-center transition-all duration-200 active:border-gold/60 active:bg-gold/5 sm:py-14"
-                >
-                  <span className="flex size-14 items-center justify-center rounded-full border border-gold/40 bg-gold/10 text-gold transition-transform duration-200 group-hover:scale-110">
-                    <Plus className="size-7" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="font-heading text-xl font-bold text-foreground">
-                      {t('createCustom')}
-                    </p>
-                    <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                      {t('createCustomBody', {
-                        used: splitCount,
-                        max: MAX_CUSTOM_SPLITS,
-                      })}
-                    </p>
-                  </div>
-                </button>
-              )}
-            </section>
-
             <section className="mb-8 sm:mb-10">
               <Link
                 href="/dashboard/home-workouts"
@@ -983,103 +925,31 @@ export function WorkoutDashboard({
               </Link>
             </section>
 
-            {/* Workout Sessions — last 2 */}
+            {/* Exercise progress */}
             <section className="mb-6">
-              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
-                    {t('historyKicker')}
-                  </p>
-                  <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
-                    {t('history')}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {t('historyHint')}
-                  </p>
+              <div className="is-panel overflow-hidden p-5 sm:p-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold tracking-[0.3em] text-gold">
+                      {t('progressKicker')}
+                    </p>
+                    <h2 className="font-heading mt-1 text-2xl font-bold text-foreground">
+                      {t('progressTitle')}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t('progressBody')}
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard/progress"
+                    className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full border border-gold/35 bg-gold/10 px-5 text-xs font-bold tracking-[0.12em] text-gold transition hover:bg-gold/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:w-auto"
+                  >
+                    <TrendingUp className="size-4" aria-hidden="true" />
+                    {t('openProgress')}
+                    <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
+                  </Link>
                 </div>
-                <Link
-                  href="/dashboard/history"
-                  className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full border border-gold/35 px-4 text-xs font-semibold tracking-[0.12em] text-gold transition hover:bg-gold/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40 sm:w-auto"
-                >
-                  {t('viewFullHistory')}
-                  <ArrowRight className="size-4 rtl-flip" aria-hidden="true" />
-                </Link>
               </div>
-
-              {recentHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-silver/20 bg-card/35 px-6 py-12 text-center">
-                  <p className="font-heading text-lg font-semibold text-foreground">
-                    {t('noHistory')}
-                  </p>
-                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                    {t('noHistoryBody')}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentHistory.map((session) => (
-                    <Link
-                      key={session.id}
-                      href={`/dashboard/sessions/${session.id}`}
-                      className="flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-silver/10 bg-card/50 px-4 py-4 text-start transition-all duration-200 hover:-translate-y-0.5 hover:border-gold/30 hover:bg-gold/[0.04] sm:px-5"
-                    >
-                      <div className="flex min-w-0 items-center gap-4">
-                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 text-gold">
-                          <Dumbbell className="size-5" aria-hidden="true" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-heading text-base font-semibold text-foreground">
-                            {session.name}
-                          </p>
-                          <LtrIsolate as="p" className="mt-0.5 text-xs text-muted-foreground">
-                            {session.date}
-                          </LtrIsolate>
-                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs sm:hidden">
-                            <LtrIsolate
-                              when={isLatinFragment(session.duration)}
-                              className="tabular-nums text-muted-foreground"
-                            >
-                              <span className="font-semibold text-foreground">
-                                {session.duration}
-                              </span>{' '}
-                              {t('duration')}
-                            </LtrIsolate>
-                            <LtrIsolate className="tabular-nums text-gold">
-                              <span className="font-semibold">{session.volume}</span>{' '}
-                              {t('volume')}
-                            </LtrIsolate>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="hidden shrink-0 items-center gap-6 text-right sm:flex">
-                        <div>
-                          <p className="text-[10px] tracking-[0.15em] text-muted-foreground">
-                            {t('duration')}
-                          </p>
-                          <LtrIsolate
-                            as="p"
-                            when={isLatinFragment(session.duration)}
-                            className="mt-0.5 text-sm font-semibold tabular-nums text-foreground"
-                          >
-                            {session.duration}
-                          </LtrIsolate>
-                        </div>
-                        <div>
-                          <p className="text-[10px] tracking-[0.15em] text-muted-foreground">
-                            {t('volume')}
-                          </p>
-                          <LtrIsolate
-                            as="p"
-                            className="mt-0.5 text-sm font-semibold tabular-nums text-gold"
-                          >
-                            {session.volume}
-                          </LtrIsolate>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
             </section>
           </main>
     </div>

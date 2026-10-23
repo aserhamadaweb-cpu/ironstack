@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock3, Dumbbell, Layers, Weight } from 'lucide-react'
+import { Clock3, Layers, Weight } from 'lucide-react'
+import { ExerciseThumb } from '@/components/exercise-thumb'
 import type { SessionSummaryData } from '@/lib/data/session-summary'
 
 export type { SessionSummaryData }
@@ -63,14 +64,16 @@ export function SessionSummaryCard({
           ) : (
             data.standouts.map((lift) => (
               <div
-                key={lift}
+                key={lift.label}
                 className="flex min-h-11 items-center gap-3 rounded-xl border border-silver/10 bg-background/40 px-4 py-3 text-sm text-muted-foreground"
               >
-                <Dumbbell
-                  className="size-4 shrink-0 text-gold"
-                  aria-hidden="true"
+                <ExerciseThumb
+                  muscle={lift.muscle || 'Core'}
+                  image={lift.image}
+                  name={lift.name}
+                  className="size-10"
                 />
-                {lift}
+                {lift.label}
               </div>
             ))
           )}

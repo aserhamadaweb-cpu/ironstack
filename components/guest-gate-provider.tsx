@@ -33,7 +33,7 @@ export function GuestGateProvider({ children }: { children: ReactNode }) {
 
   const requireAccount = useCallback(
     (reason: GuestBlockedReason, action?: () => void) => {
-      if (isGuest) {
+      if (isGuest && reason !== 'startSession') {
         openUpgrade(reason)
         return false
       }
