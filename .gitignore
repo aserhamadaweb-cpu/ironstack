@@ -33,10 +33,19 @@ public/fallback-*.js
 # Local env files (keep .env.example tracked for Vercel onboarding)
 .env
 .env.local
+.env.development
+.env.production
+.env.test
 .env.development.local
 .env.test.local
 .env.production.local
 !.env.example
+
+# Local editor, CLI temp, and build cache
+.cursor/
+supabase/.temp/
+scripts/*-output.txt
+tsconfig.tsbuildinfo
 
 # User-data reset audit dumps (may contain auth IDs)
 scripts/_reset-audit-*.json

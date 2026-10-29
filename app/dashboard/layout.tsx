@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const displayName = profile?.display_name || email?.split('@')[0] || 'Athlete'
 
   return (
-    <DashboardShell>
+    <DashboardShell createdAt={profile?.created_at ?? null}>
       <DashboardNav
         userName={displayName}
         initials={initialsFrom(displayName)}

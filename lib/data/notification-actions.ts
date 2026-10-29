@@ -81,9 +81,6 @@ export async function savePushSubscriptionAction(input: {
   p256dh: string
   authKey: string
 }): Promise<{ ok: boolean; error?: string }> {
-  const guest = await rejectIfGuest()
-  if (guest) return { ok: false, error: guest }
-
   const supabase = await createClient()
   const {
     data: { user },
@@ -129,9 +126,6 @@ export async function savePushSubscriptionAction(input: {
 export async function removePushSubscriptionAction(
   endpoint?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const guest = await rejectIfGuest()
-  if (guest) return { ok: false, error: guest }
-
   const supabase = await createClient()
   const {
     data: { user },

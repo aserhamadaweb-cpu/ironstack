@@ -30,7 +30,6 @@ function chunk<T>(items: T[], size: number) {
 type ProfileRow = {
   id: string
   language: string | null
-  is_guest: boolean | null
   notification_preferences: Partial<NotificationPreferences> | null
 }
 
@@ -63,7 +62,7 @@ export async function GET(request: Request) {
 
   const { data: profiles, error: profileError } = await admin
     .from('profiles')
-    .select('id, language, is_guest, notification_preferences')
+    .select('id, language, notification_preferences')
     .in('id', userIds)
 
   if (profileError) {
@@ -246,7 +245,7 @@ export async function GET(request: Request) {
 
   for (const userId of userIds) {
     const profile = profileById.get(userId)
-    if (!profile || profile.is_guest) continue
+    if (!profile) continue
     const streak = streakByUser.get(userId) ?? { streakDays: 0, hoursLeft: null }
     const language = profile.language === 'ar' ? 'ar' : 'en'
     const kinds = chooseTrainingReminders({

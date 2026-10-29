@@ -1484,6 +1484,14 @@
     "messages": "Open Messages",
     "aiCoach": "Open AI Coach"
   },
+  "pushPrompt": {
+    "title": "Enable notifications",
+    "body": "Turn them on once so IronStack can remind you when a streak is about to end, or when you have not trained for a while.",
+    "enable": "Enable",
+    "notNow": "Not now",
+    "denied": "Notifications are blocked in the browser. You can turn them on later in Settings.",
+    "failed": "Could not enable notifications."
+  },
   "notifPrefs": {
     "friend_request": "Friend requests",
     "friend_accepted": "Friend accepted",
